@@ -61,6 +61,7 @@ app.innerHTML=`
 <section class="panel"><h2>预览专用</h2>
 <label class="setting" for="opt-appeal"><span>TotalAppeal</span><input id="opt-appeal" type="number" min="1000" max="2000000" step="1000" value="350000"><small>卡组 Appeal；默认 350000。</small></label>
 <label class="setting" for="opt-mastery"><span>熟练度等级</span><input id="opt-mastery" type="number" min="0" max="50" step="1" value="0"><small>MusicMasteryLevel；halfwayScore = Appeal×(1+等级×0.01)/音符数。</small></label>
+<label class="setting" for="opt-hit-effect"><span>击中特效</span><select id="opt-hit-effect"><option value="current" selected>当前近似</option><option value="off">关闭</option></select></label>
 <label class="setting" for="rank-preview"><span>段位预览</span><select id="rank-preview"><option value="none" selected>未激活</option><option value="D">D</option><option value="C">C</option><option value="B">B</option><option value="A">A</option><option value="S">S</option></select></label>
 </section></section>
 </aside>
@@ -100,6 +101,7 @@ function readSettings():PreviewSettings{
   rankPreview:(()=>{const v=el<HTMLSelectElement>('rank-preview').value;return v==='D'||v==='C'||v==='B'||v==='A'||v==='S'?v:'none';})(),
   techScore:(()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);return (v===1||v===2?v:0) as 0|1|2;})(),
   rate:Number(el<HTMLSelectElement>('rate').value),
+  hitEffect:(()=>{const v=el<HTMLSelectElement>('opt-hit-effect').value;return v==='off'?'off':'current';})(),
  };
 }
 function persistSettings(){savePreviewSettings(readSettings());}
@@ -132,6 +134,7 @@ function applySettingsToForm(s:PreviewSettings){
  el<HTMLSelectElement>('rank-preview').value=s.rankPreview;
  el<HTMLSelectElement>('tech-score').value=String(s.techScore);
  el<HTMLSelectElement>('rate').value=String(s.rate);
+ el<HTMLSelectElement>('opt-hit-effect').value=s.hitEffect;
 }
 applySettingsToForm(loadPreviewSettings());
 
@@ -183,6 +186,14 @@ input('opt-mv').onchange=()=>persistSettings();
 input('opt-skill-view').onchange=()=>persistSettings();
 input('opt-skill-cutin').onchange=()=>persistSettings();
 applyHudOptions();
+
+const applyHitEffect=()=>{
+ const v=el<HTMLSelectElement>('opt-hit-effect').value;
+ renderer?.setHitEffectMode(v==='off'?'off':'current');
+ persistSettings();
+};
+el<HTMLSelectElement>('opt-hit-effect').onchange=applyHitEffect;
+applyHitEffect();
 
 const applyVisualOptions=()=>{
  const noteStartZ=Number(input('opt-start-z').value);

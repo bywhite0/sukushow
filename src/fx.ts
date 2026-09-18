@@ -174,6 +174,7 @@ class FxBatch {
 /** GPU quads for the six note-effect prefabs. Not a full ParticleSystem. */
 export class HitFx {
   readonly group = new THREE.Group();
+  private mode: 'off' | 'current' = 'current';
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
@@ -380,7 +381,14 @@ export class HitFx {
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
     }
   }
+  /** Preview hit-effect style. `off` clears live FX; `current` = existing approx. */
+  setMode(mode: 'off' | 'current') {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    if (mode === 'off') this.clear();
+  }
   spawn(id: string, x: number, width: number, loop = false, uid = -1) {
+    if (this.mode === 'off') return null;
     const src = this.specs.get(id);
     if (!src?.length || this.live.length > 64) return null;
     const specs = src.map(s => ({ ...s, burstI: 0, rateAcc: 0, cycle: 0 }));
@@ -401,6 +409,11 @@ export class HitFx {
     if (!Number.isFinite(this.last)) { this.last = time; return; }
     const dt = time - this.last;
     if (dt < -1e-4 || dt > SEEK) { this.clear(); this.last = time; return; }
+    if (this.mode === 'off') {
+      if (this.live.length) this.clear();
+      this.last = time;
+      return;
+    }
     if (dt > 0) this.step(dt);
     for (const root of chart.roots) {
       if (this.last < root.time && time >= root.time) {

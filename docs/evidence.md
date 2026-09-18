@@ -16,6 +16,9 @@
 
 ## 预览皮肤 / FX
 
+- 预览侧栏「击中特效」`hitEffect`（非原版 RhythmGameOption）：`current`=既有 `HitFx` GPU-quad 近似（默认），`off`=关闭生成；后续可扩展更多风格项，技能相关粒子不做。
+
+
 - 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。
 - 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（节点 TRS / SetWidth / bursts、Local·billboard、NoColorSpace 纹理；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
 - 无资源时：程序化色块回退，页面仍可打开与播放。
