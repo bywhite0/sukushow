@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Chart, Note } from './chart';
-import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX } from './geometry';
+import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
+import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';
 import { loadRgLibrary, whiteTexture, type RgLibrary } from './rgAssets';
 import { planeMaterial, spriteMaterial } from './shaders';
@@ -95,6 +96,13 @@ export class PreviewRenderer {
   private sheets = new Map<string, TexBatch>();
   private white = whiteTexture();
   private lib: RgLibrary | null = null;
+  private planeMesh: THREE.Mesh | null = null;
+  private planeMat: THREE.ShaderMaterial | null = null;
+  private laneLines = new THREE.Group();
+  private noteStartZ = 0;
+  private laneWidthOpt = 100;
+  private gridCountOpt = 0;
+  private laneDarknessOpt = 80;
   private fx: HitFx | null = null;
   private phase = new Map<number, number>();
   private observer: ResizeObserver;
@@ -116,7 +124,12 @@ export class PreviewRenderer {
     this.ribbon = new TexBatch(600000, sprite, 1);
     this.notes.add(this.ribbon.mesh);
     this.notes.add(this.lines.mesh);
-    this.field.add(this.plane());
+    const plane = this.plane();
+    this.field.add(plane);
+    // LaneLine shares Plane transform (level56); WorldScaler X = LaneWidth/100
+    plane.add(this.laneLines);
+    this.applyLaneWidthScale();
+    this.rebuildLaneLines();
     this.buildUi(lib);
     if (lib.fx) {
       this.fx = new HitFx(lib.fx, lib.fxTex);
@@ -130,10 +143,76 @@ export class PreviewRenderer {
     geo.setAttribute('position', new THREE.Float32BufferAttribute([-5, y, near, 5, y, near, 5, y, far, -5, y, far], 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2));
     geo.setIndex([0, 1, 2, 0, 2, 3]);
-    const mesh = new THREE.Mesh(geo, planeMaterial());
-    mesh.frustumCulled = false; mesh.renderOrder = 0;
+    const mat = planeMaterial() as THREE.ShaderMaterial;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    // PLAN §52: Plane under notes (sortingOrder −1); α = 0.8 × LaneDarkness/100
+    mesh.renderOrder = -1;
+    this.planeMesh = mesh;
+    this.planeMat = mat;
+    this.applyPlaneDarkness();
     return mesh;
   }
+
+  /** RhythmGameWorldScaler.SetScaleX(LaneWidth/100) — Plane + LaneLines on X. */
+  private applyLaneWidthScale(): void {
+    const s = this.laneWidthOpt / 100;
+    if (this.planeMesh) this.planeMesh.scale.set(s, 1, 1);
+  }
+
+  /** ChangePlaneAlpha: _Color = (0,0,0, 0.8 × LaneDarkness/100). */
+  private applyPlaneDarkness(): void {
+    if (!this.planeMat) return;
+    const v = Math.max(0, Math.min(1.3, this.laneDarknessOpt / 100));
+    this.planeMat.uniforms.color.value.set(0, 0, 0, 0.8 * v);
+  }
+
+  /**
+   * DividedLaneView + LaneLine prefab: white lines α0.3 on the plane.
+   * GridCount Two..Six → 2..6 sections; lines coplanar with Plane (range=5).
+   */
+  private rebuildLaneLines(): void {
+    const oldMat = (this.laneLines.children[0] as THREE.Mesh | undefined)?.material;
+    while (this.laneLines.children.length) {
+      const c = this.laneLines.children.pop() as THREE.Mesh;
+      c.geometry.dispose();
+    }
+    if (oldMat && !Array.isArray(oldMat)) oldMat.dispose();
+    const sections = gridLaneCount(this.gridCountOpt as 0 | 1 | 2 | 3 | 4 | 5);
+    if (sections <= 1) return;
+    // DividedLaneView.range = 5 — same half-width as Plane local X (±5)
+    const range = 5;
+    const y = 3.96, near = 7.6, far = -82.4;
+    // DividedLaneView.Width = 0.003; LaneLineFade α 0.3
+    const halfW = 0.003 / 2;
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.3,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    // sections parts → sections-1 dividers, coplanar with Plane (constant local X, Z along edges)
+    for (let i = 1; i < sections; i++) {
+      const x = -range + (2 * range * i) / sections;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(
+          [x - halfW, y, near, x + halfW, y, near, x + halfW, y, far, x - halfW, y, far],
+          3,
+        ),
+      );
+      geo.setIndex([0, 1, 2, 0, 2, 3]);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false;
+      mesh.renderOrder = -1;
+      this.laneLines.add(mesh);
+    }
+  }
+
+
   private buildUi(lib: RgLibrary) {
     const line = lib.sprites.sc2_ingame_tap_line;
     const meta = lib.meta.sc2_ingame_tap_line;
@@ -175,26 +254,65 @@ export class PreviewRenderer {
     outline.frustumCulled = false;
     this.uiRoot.add(outline);
   }
-  private resize() {
-    const w = this.canvas.clientWidth, h = this.canvas.clientHeight; if (!w || !h) return;
-    this.gl.setSize(w, h, false); this.camera.aspect = w / h;
-    this.camera.fov = this.camera.aspect < 16 / 9 ? 2 * Math.atan(Math.tan(Math.PI / 6) * (16 / 9) / this.camera.aspect) * 180 / Math.PI : 60;
-    this.camera.updateProjectionMatrix();
-    this.uiCam.left = -w / 2; this.uiCam.right = w / 2; this.uiCam.top = h / 2; this.uiCam.bottom = -h / 2;
-    this.uiCam.updateProjectionMatrix();
-    const s = Math.min(w / 1920, h / 1080);
-    this.uiRoot.scale.set(s, s, 1);
+
+  /** Lane / darkness / grid / startZ from RhythmGameOptionValue (excl. judgement). */
+  setVisualOptions(o: {
+    noteStartZ?: number;
+    laneWidth?: number;
+    gridCount?: number;
+    laneDarkness?: number;
+  }): void {
+    let linesDirty = false;
+    if (o.noteStartZ !== undefined) this.noteStartZ = o.noteStartZ;
+    if (o.laneWidth !== undefined) {
+      this.laneWidthOpt = o.laneWidth;
+      this.applyLaneWidthScale();
+      linesDirty = true;
+    }
+    if (o.gridCount !== undefined) {
+      this.gridCountOpt = o.gridCount;
+      linesDirty = true;
+    }
+    if (o.laneDarkness !== undefined) {
+      this.laneDarknessOpt = o.laneDarkness;
+      this.applyPlaneDarkness();
+    }
+    if (linesDirty) this.rebuildLaneLines();
   }
+
+
+  private drawTrack(slopeSpawn: number): void {
+    const pitch = lanePitch(this.laneWidthOpt);
+    const half = pitch * 30;
+    const spanZ = slopeSpawn - BORDER;
+    const midZ = (slopeSpawn + BORDER) / 2;
+    // LaneDarkness drives Plane Fade (applyPlaneDarkness), not this OldBatch fill.
+    this.track.quad(0, Y, midZ, half * 2, spanZ, [.06, .11, .20], .86, false);
+    const grids = gridLaneCount(this.gridCountOpt as 0 | 1 | 2 | 3 | 4 | 5);
+    // Always draw outer rails; optional inner dividers from GridCount.
+    this.track.quad(-half, Y, midZ, .025, spanZ, [.93, .37, .67], 0.8, false);
+    this.track.quad(half, Y, midZ, .025, spanZ, [.93, .37, .67], 0.8, false);
+    if (grids > 0) {
+      for (let i = 1; i < grids; i++) {
+        const x = -half + (2 * half * i) / grids;
+        this.track.quad(x, Y, midZ, .009, spanZ, [.93, .37, .67], 0.2, false);
+      }
+    } else {
+      for (let i = 1; i < 10; i++) {
+        this.track.quad(-half + i * (2 * half) / 10, Y, midZ, .009, spanZ, [.93, .37, .67], 0.12, false);
+      }
+    }
+    this.track.quad(0, Y, BORDER, half * 2 + pitch, .075, [1, .52, .76], 1, false);
+  }
+
   render(chart: Chart, time: number, speed: number, mirror: boolean, simultaneous: boolean) {
     if (!this.lib) { this.renderOld(chart, time, speed, mirror, simultaneous); return; }
     this.renderField(chart, time, speed, mirror, simultaneous);
   }
   private renderOld(chart: Chart, time: number, speed: number, mirror: boolean, simultaneous: boolean) {
-    const slope = createSlope(speed);
+    const slope = createSlope(speed, this.noteStartZ);
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.reset();
-    this.track.quad(0, Y, (SPAWN + BORDER) / 2, 9, SPAWN - BORDER, [.06, .11, .20], .86, false);
-    for (let i = 0; i <= 10; i++) this.track.quad(-4.5 + i * .9, Y, (SPAWN + BORDER) / 2, i === 0 || i === 10 ? .025 : .009, SPAWN - BORDER, [.93, .37, .67], i === 0 || i === 10 ? .8 : .12, false);
-    this.track.quad(0, Y, BORDER, 11.3, .075, [1, .52, .76], 1, false);
+    this.drawTrack(slope.spawn);
     let visible = 0;
     for (const root of chart.roots) {
       if (root.type !== 1) { visible += this.drawOld(root, time, slope, mirror); continue; }
@@ -202,7 +320,7 @@ export class PreviewRenderer {
       if (time < root.time - slope.duration || time >= tail.end) continue;
       const segments: number[][] = [];
       let segment: Note | undefined = root;
-      while (segment) { const v = holdSegment(segment, time, slope, mirror); if (v.length) segments.push(v); segment = segment.next; }
+      while (segment) { const v = holdSegment(segment, time, slope, mirror, this.laneWidthOpt); if (v.length) segments.push(v); segment = segment.next; }
       if (segments.length > 1) for (const i of [0, 6, 12]) segments[0].splice(i + 3, 3, ...segments[1].slice(i, i + 3));
       for (const v of segments) this.holds.ribbon(v, time >= root.time);
       let head = root; while (head.next && time >= head.end) head = head.next;
@@ -212,7 +330,7 @@ export class PreviewRenderer {
     }
     if (simultaneous) for (const line of chart.lines) {
       const z = slope.zAt(line.time - time); if (line.time < time || line.time - time > slope.duration) continue;
-      const xs = line.points.map(p => { const [l, r] = edges(p.note, p.tail ? 1 : 0, mirror); return worldX((l + r) / 2); });
+      const xs = line.points.map(p => { const [l, r] = edges(p.note, p.tail ? 1 : 0, mirror); return worldX((l + r) / 2, this.laneWidthOpt); });
       const min = Math.min(...xs), max = Math.max(...xs); this.lines.quad((min + max) / 2, Y, z, max - min, .035, [.85, .94, 1], .6);
     }
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.flush();
@@ -225,11 +343,11 @@ export class PreviewRenderer {
     if (remaining < -.18 || remaining > slope.duration) return 0;
     const [l, r] = edges(n, 0, mirror);
     if (remaining >= 0) this.symbolOld((l + r) / 2, slope.zAt(remaining), r - l + 1, n.type);
-    else this.oldNotes.quad(worldX((l + r) / 2), Y, BORDER, ((r - l + 1) * .15) * (1 - remaining * 4), .12 - remaining, COLORS[n.type], 1 + remaining / .18);
+    else this.oldNotes.quad(worldX((l + r) / 2, this.laneWidthOpt), Y, BORDER, ((r - l + 1) * lanePitch(this.laneWidthOpt)) * (1 - remaining * 4), .12 - remaining, COLORS[n.type], 1 + remaining / .18);
     return 1;
   }
   private symbolOld(lane: number, z: number, width: number, type: number) {
-    const x = worldX(lane), w = ((width - 6) * .2 + 1.15) * .75, h = type === 3 ? .22 : .34, color = COLORS[type];
+    const x = worldX(lane, this.laneWidthOpt), w = ((width - 6) * .2 + 1.15) * .75, h = type === 3 ? .22 : .34, color = COLORS[type];
     this.oldNotes.quad(x, Y, z, w, h, color, .98);
     this.oldNotes.quad(x, Y + .035, z, w * .94, h * .18, [1, 1, 1], .9);
     if (type === 2) { this.oldNotes.quad(x - .12, Y + .40, z, .06, .24, [1, .8, .92]); this.oldNotes.quad(x + .12, Y + .40, z, .06, .24, [1, .8, .92]); }
@@ -237,9 +355,10 @@ export class PreviewRenderer {
   }
   private renderField(chart: Chart, time: number, speed: number, mirror: boolean, simultaneous: boolean) {
     const lib = this.lib!;
-    const slope = createSlope(speed);
+    const slope = createSlope(speed, this.noteStartZ);
     this.ribbon.reset();
     for (const batch of this.sheets.values()) batch.reset();
+    this.drawTrack(slope.spawn);
     this.lines.reset();
     this.fx?.sync(chart, time, mirror);
     let visible = 0;
@@ -253,24 +372,24 @@ export class PreviewRenderer {
       this.phase.set(root.uid, alpha.phase);
       const segments: number[][] = [];
       let segment: Note | undefined = root;
-      while (segment) { const v = holdSegment(segment, time, slope, mirror); if (v.length) segments.push(v); segment = segment.next; }
+      while (segment) { const v = holdSegment(segment, time, slope, mirror, this.laneWidthOpt); if (v.length) segments.push(v); segment = segment.next; }
       if (segments.length > 1) for (const i of [0, 6, 12]) segments[0].splice(i + 3, 3, ...segments[1].slice(i, i + 3));
       for (const v of segments) this.ribbon.n = this.pushRibbon(v, alpha.center, alpha.side);
       let head = root; while (head.next && time >= head.end) head = head.next;
       const progress = Math.max(0, Math.min(1, (time - head.time) / (head.end - head.time)));
       const [l, r] = edges(head, progress, mirror);
-      const hx = worldX((l + r) / 2);
+      const hx = worldX((l + r) / 2, this.laneWidthOpt);
       this.noteSprite(hx, Math.max(slope.zAt(head.time - time), BORDER), r - l + 1, 1, lib, time);
       this.fx?.setLoop(root.uid, hx);
       visible++;
       if (tail.end - time <= slope.duration && tail.end - time >= 0) {
         const [tl, tr] = edges(tail, 1, mirror);
-        this.noteSprite(worldX((tl + tr) / 2), slope.zAt(tail.end - time), tr - tl + 1, 1, lib, time);
+        this.noteSprite(worldX((tl + tr) / 2, this.laneWidthOpt), slope.zAt(tail.end - time), tr - tl + 1, 1, lib, time);
       }
     }
     if (simultaneous) for (const line of chart.lines) {
       const z = slope.zAt(line.time - time); if (line.time < time || line.time - time > slope.duration) continue;
-      const xs = line.points.map(p => { const [l, r] = edges(p.note, p.tail ? 1 : 0, mirror); return worldX((l + r) / 2); });
+      const xs = line.points.map(p => { const [l, r] = edges(p.note, p.tail ? 1 : 0, mirror); return worldX((l + r) / 2, this.laneWidthOpt); });
       const min = Math.min(...xs), max = Math.max(...xs);
       this.lines.quad((min + max) / 2, Y, z, max - min, .035, [.85, .94, 1], .6);
     }
@@ -309,7 +428,7 @@ export class PreviewRenderer {
     if (remaining < -.18 || remaining > slope.duration) return 0;
     if (remaining >= 0) {
       const [l, r] = edges(n, 0, mirror);
-      this.noteSprite(worldX((l + r) / 2), slope.zAt(remaining), r - l + 1, n.type, lib, time);
+      this.noteSprite(worldX((l + r) / 2, this.laneWidthOpt), slope.zAt(remaining), r - l + 1, n.type, lib, time);
     }
     return 1;
   }
@@ -354,6 +473,17 @@ export class PreviewRenderer {
       sign.n = pushBillboard(sign.pos, sign.uv, sign.col, sign.n, sign.cap, x, Y + Math.cos(PITCH) * bob, z + Math.sin(PITCH) * bob, gm.rect[2] / gm.ppu * 0.8, gm.rect[3] / gm.ppu * 0.8, [1, 1, 1, 1]);
     }
   }
+  private resize() {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight; if (!w || !h) return;
+    this.gl.setSize(w, h, false); this.camera.aspect = w / h;
+    this.camera.fov = this.camera.aspect < 16 / 9 ? 2 * Math.atan(Math.tan(Math.PI / 6) * (16 / 9) / this.camera.aspect) * 180 / Math.PI : 60;
+    this.camera.updateProjectionMatrix();
+    this.uiCam.left = -w / 2; this.uiCam.right = w / 2; this.uiCam.top = h / 2; this.uiCam.bottom = -h / 2;
+    this.uiCam.updateProjectionMatrix();
+    const s = Math.min(w / 1920, h / 1080);
+    this.uiRoot.scale.set(s, s, 1);
+  }
+
   dispose() {
     this.disposed = true;
     this.observer.disconnect();

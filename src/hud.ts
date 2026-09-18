@@ -10,6 +10,7 @@ import {
 import {
   RG_OPTION_DEFAULTS,
   autoPlayJudgementType,
+  judgementLayoutY,
   judgementSprite,
   shouldShowJudgement,
   type FastSlowOption,
@@ -211,6 +212,10 @@ export class LiveHud {
   private apRate = 0;
   private judgeAt = -1;
   private enablePerfectPlus: boolean = RG_OPTION_DEFAULTS.enablePerfectPlus;
+  private judgementYOpt = RG_OPTION_DEFAULTS.judgementY;
+  private fastSlowYOpt = RG_OPTION_DEFAULTS.fastSlowY;
+  private enableFeverDisplay: boolean = RG_OPTION_DEFAULTS.enableFeverDisplay;
+  private judgePop: HTMLElement | null = null;
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
   private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
   private lastJudgeType: NoteJudgementType = 4;
@@ -669,6 +674,34 @@ export class LiveHud {
     this.fastSlowThreshold = opt;
   }
 
+  setJudgementY(opt: number): void {
+    this.judgementYOpt = opt;
+    this.repositionJudge();
+  }
+
+  setFastSlowY(opt: number): void {
+    this.fastSlowYOpt = opt;
+    // Condition chrome TBD — store for when FAST/SLOW nodes exist.
+  }
+
+  setEnableFeverDisplay(on: boolean): void {
+    this.enableFeverDisplay = on;
+    // Fever live HUD not yet mounted; flag reserved for Voltage/Fever chrome.
+  }
+
+  private repositionJudge(): void {
+    const y = judgementLayoutY(this.judgementYOpt, -270);
+    if (this.judge) {
+      const w = this.judge.style.width ? parseFloat(this.judge.style.width) : 340;
+      place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, Number.isFinite(w) ? w : 340, 80);
+    }
+    if (this.judgePop) {
+      place(this.judgePop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 340, 80);
+    }
+  }
+
+
+
   getFastSlowThreshold(): FastSlowOption {
     return this.fastSlowThreshold;
   }
@@ -679,7 +712,7 @@ export class LiveHud {
     while (this.judge.firstChild) this.judge.removeChild(this.judge.firstChild);
     const w = name.includes('perfect_plus') ? 386 : 340;
     this.judge.style.width = `${w}px`;
-    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, -270, w, 80);
+    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt, -270), w, 80);
     mountSprite(this.judge, name, fallback);
   }
 
@@ -706,7 +739,8 @@ export class LiveHud {
     const pop = document.createElement('div');
     pop.className = 'hud-perfect';
     // Anchored at dump (0, -270). Sprite size: perfect 340x80 / perfect_plus 386x80.
-    place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, -270, 340, 80);
+    this.judgePop = pop;
+    place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt, -270), 340, 80);
     mountSprite(pop, 'ui_sc2_ingame_hantei_perfect', 'PERFECT');
     pop.style.visibility = 'hidden';
     root.append(pop);

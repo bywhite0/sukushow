@@ -10,7 +10,7 @@ import {
 describe('sanitizePreviewSettings', () => {
   it('fills defaults for junk', () => {
     expect(sanitizePreviewSettings(null)).toEqual(DEFAULT_PREVIEW_SETTINGS);
-    expect(sanitizePreviewSettings({ speed: 99, musicMasteryLevel: -3, rankPreview: 'Z' }).speed).toBe(15);
+    expect(sanitizePreviewSettings({ speed: 99, musicMasteryLevel: -3, rankPreview: 'Z' }).speed).toBe(20);
     expect(sanitizePreviewSettings({ musicMasteryLevel: 99 }).musicMasteryLevel).toBe(50);
     expect(sanitizePreviewSettings({ rankPreview: 'Z' }).rankPreview).toBe('none');
   });
@@ -29,6 +29,27 @@ describe('sanitizePreviewSettings', () => {
     expect(s.rankPreview).toBe('S');
     expect(s.techScore).toBe(2);
     expect(s.rate).toBe(1.5);
+  });
+
+  it('sanitizes new option fields', () => {
+    const s = sanitizePreviewSettings({
+      noteStartZ: 40,
+      laneWidth: 110,
+      laneDarkness: 100,
+      backgroundDarkness: 20,
+      gridCount: 3,
+      targetFPS: 1,
+      judgementY: 7,
+      enableFeverDisplay: false,
+      volumeNoteTap: 0.5,
+    });
+    expect(s.noteStartZ).toBe(40);
+    expect(s.laneWidth).toBe(110);
+    expect(s.gridCount).toBe(3);
+    expect(s.targetFPS).toBe(1);
+    expect(s.enableFeverDisplay).toBe(false);
+    expect(s.volumeNoteTap).toBe(0.5);
+    expect(DEFAULT_PREVIEW_SETTINGS.speed).toBe(5);
   });
 });
 
