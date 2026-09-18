@@ -63,4 +63,4 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
 - **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。
-- **AP / Voltage 实况**：ApResolver（StandardValue 600000 / AllNoteSize，Good=半额、Great+全额，×(1+apRate×0.1)）驱动 AP 整数与径向环；Voltage 点仅技能产，预览无卡组恒 0；Fever 翻倍 VL 已接线，谱面段落窗未接（IsFever 恒 false）；EnableFeverDisplay 门控两侧大特效（预览不做）。
+- **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）；Fever 窗由 `Sections` + `FeverSectionNo`（默认 3；无 Sections 时用曲长 45%–70% 回退）驱动 `IsFever`（VL 翻倍）与边线 LineBase 彩虹叠层；`EnableFeverDisplay` 门控边线与两侧 `feverLeft`/`feverRight` 粒子（含 Trail）；未做 LineMove 行进条 / +0x34 精确 end。

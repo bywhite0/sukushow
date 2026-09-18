@@ -38,6 +38,8 @@ export type PreviewSettings = {
   rate: number;
   /** Preview hit FX: current=直冲天上(+rotol/拖尾); limited=限速; full=限速+rotol+拖尾. */
   hitEffect: 'off' | 'current' | 'limited' | 'full';
+  /** MusicsRecord.FeverSectionNo (1-based); preview default 3. */
+  feverSectionNo: number;
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -71,6 +73,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   techScore: RG_OPTION_DEFAULTS.technicalScoreDisplay,
   rate: 1,
   hitEffect: 'current',
+  feverSectionNo: 3,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -130,6 +133,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
       ? num('rate', d.rate)
       : d.rate,
     hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' || o.hitEffect === 'limited' || o.hitEffect === 'full' ? o.hitEffect : d.hitEffect,
+    feverSectionNo: clamp(Math.trunc(num('feverSectionNo', d.feverSectionNo)), 1, 8),
   };
 }
 

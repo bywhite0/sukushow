@@ -1,4 +1,5 @@
 import type { Chart, Note } from './chart';
+import { isFeverAt, resolveFeverWindow } from './fever';
 import { noteJudgementTimes } from './chart';
 import {
   DEFAULT_SCORE_CONFIG,
@@ -244,6 +245,8 @@ export class LiveHud {
   private judgementYOpt = RG_OPTION_DEFAULTS.judgementY;
   private fastSlowYOpt = RG_OPTION_DEFAULTS.fastSlowY;
   private enableFeverDisplay: boolean = RG_OPTION_DEFAULTS.enableFeverDisplay;
+  private feverSectionNo = 3;
+  private feverStart = 0;
   private judgePop: HTMLElement | null = null;
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
   private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
@@ -287,10 +290,16 @@ export class LiveHud {
     if (chart !== this.chart) {
       this.chart = chart;
       this.resetLive(time);
+      const win = resolveFeverWindow(chart.sections, this.feverSectionNo, chart.duration);
+      this.feverStart = win.start;
+      this.scoreEngine.setFever(this.enableFeverDisplay && isFeverAt(time, win));
       return;
     }
     const previousTime = this.previousTime;
     this.previousTime = time;
+    const win = resolveFeverWindow(chart.sections, this.feverSectionNo, chart.duration);
+    this.feverStart = win.start;
+    this.scoreEngine.setFever(this.enableFeverDisplay && isFeverAt(time, win));
     if (time < previousTime) {
       this.resetLive(time);
       return;
@@ -724,11 +733,20 @@ export class LiveHud {
 
   setEnableFeverDisplay(on: boolean): void {
     this.enableFeverDisplay = on;
-    // EnableFeverDisplay gates side fever FX (out of preview scope). Score uses
-    // IsFever only when a fever window is active; without chart section times,
-    // preview keeps IsFever false. Flag reserved for future section wiring.
-    this.scoreEngine.setFever(false);
+    if (!on) this.scoreEngine.setFever(false);
     this.paintApVoltage();
+  }
+
+  setFeverSectionNo(n: number): void {
+    this.feverSectionNo = Math.max(1, Math.min(8, Math.trunc(n)));
+  }
+
+  get feverActive(): boolean {
+    return this.scoreEngine.feverActive;
+  }
+
+  get feverWindowStart(): number {
+    return this.feverStart;
   }
 
   private repositionJudge(): void {

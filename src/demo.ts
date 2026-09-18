@@ -8,5 +8,5 @@ export function demoChart(){
     add(t+1.5,1,4,14,t+2,20,30);add(t+2,1,20,30,t+3,42,52);
     add(t+2.5,0,4,12);add(t+3,3,22,30);add(t+3.5,2,10,20);
   }
-  return parseChart({Notes,Bpms:[{Time:0,Bpm:120}]});
+  return parseChart({Notes,Bpms:[{Time:0,Bpm:120}],Sections:[{Time:8},{Time:16},{Time:24},{Time:32}]});
 }

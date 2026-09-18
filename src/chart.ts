@@ -1,7 +1,7 @@
 import { Inflate } from 'fflate';
 export interface Note { uid:number; time:number; end:number; holds:number[]; type:number; l:number; r:number; l2:number; r2:number; next?:Note; prev?:Note }
 export interface Line { time:number; points:{note:Note; tail:boolean}[] }
-export interface Chart { notes:Note[]; roots:Note[]; lines:Line[]; bpms:{time:number;bpm:number}[]; duration:number }
+export interface Chart { notes:Note[]; roots:Note[]; lines:Line[]; bpms:{time:number;bpm:number}[]; sections:number[]; duration:number }
 const MAX_BYTES=16*1024*1024;
 function object(value:unknown):Record<string,unknown> {
   if (!value || typeof value!=='object' || Array.isArray(value)) throw new Error('谱面字段必须是对象');
@@ -97,7 +97,19 @@ export function parseChart(input:unknown):Chart {
   const add=(note:Note,tail:boolean,time:number)=>{let g=groups.find(g=>Math.abs(g.time-time)<0.004);if(!g){g={time,points:[]};groups.push(g);}g.points.push({note,tail});};
   for(const root of roots){add(root,false,root.time);if(root.type!==1)continue;let tail=root;while(tail.next)tail=tail.next;add(tail,true,tail.end);}
   const lines=groups.filter(g=>g.points.length>1&&g.points.every(p=>p.note.uid!==0));
-  return {notes,roots,lines,bpms,duration:Math.max(1,...notes.map(n=>n.end+2))};
+  const sections:number[]=[];
+  if (Array.isArray(data.Sections)) {
+    for (const raw of data.Sections as unknown[]) {
+      if (typeof raw === 'number' && Number.isFinite(raw)) { sections.push(raw); continue; }
+      if (raw && typeof raw === 'object') {
+        const o = raw as Record<string, unknown>;
+        const tv = o.Time ?? o.time ?? o.t;
+        if (tv !== undefined) sections.push(number(tv, 'Section.Time'));
+      }
+    }
+    sections.sort((a, b) => a - b);
+  }
+  return {notes,roots,lines,bpms,sections,duration:Math.max(1,...notes.map(n=>n.end+2))};
 }
 export function decodeChart(bytes:Uint8Array):Chart {
   if(bytes.byteLength>MAX_BYTES)throw new Error('谱面文件超过 16 MiB');

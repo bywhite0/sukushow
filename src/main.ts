@@ -47,6 +47,7 @@ app.innerHTML=`
 <label class="setting" for="opt-fast-slow"><span>FAST/SLOW 显示</span><select id="opt-fast-slow"><option value="0" selected>关闭</option><option value="1">Great 以下</option><option value="2">Perfect 以下</option></select></label>
 <label class="setting" for="tech-score"><span>技术分显示</span><select id="tech-score"><option value="0" selected>关闭</option><option value="1">实时</option><option value="2">预估全 PP</option></select></label>
 <label class="check"><input id="opt-fever" type="checkbox" checked>Fever 显示</label>
+<label class="setting" for="opt-fever-section"><span>FeverSectionNo</span><input id="opt-fever-section" type="number" min="1" max="8" step="1" value="3"><small>主数据段号；演示谱 Sections 在 8/16/24/32。</small></label>
 <label class="check"><input id="opt-skill-view" type="checkbox" checked>技能轨道显示</label>
 <label class="check"><input id="opt-skill-cutin" type="checkbox" checked>技能 Cut-in</label>
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
@@ -102,6 +103,7 @@ function readSettings():PreviewSettings{
   techScore:(()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);return (v===1||v===2?v:0) as 0|1|2;})(),
   rate:Number(el<HTMLSelectElement>('rate').value),
   hitEffect:(()=>{const v=el<HTMLSelectElement>('opt-hit-effect').value;return v==='off'||v==='limited'||v==='full'?v:'current';})(),
+  feverSectionNo:Number(input('opt-fever-section').value)||3,
  };
 }
 function persistSettings(){savePreviewSettings(readSettings());}
@@ -135,6 +137,7 @@ function applySettingsToForm(s:PreviewSettings){
  el<HTMLSelectElement>('tech-score').value=String(s.techScore);
  el<HTMLSelectElement>('rate').value=String(s.rate);
  el<HTMLSelectElement>('opt-hit-effect').value=s.hitEffect;
+ input('opt-fever-section').value=String(s.feverSectionNo);
 }
 applySettingsToForm(loadPreviewSettings());
 
@@ -173,8 +176,10 @@ const applyHudOptions=()=>{
  hud.setJudgementY(Number(input('opt-judge-y').value));
  hud.setFastSlowY(Number(input('opt-fs-y').value));
  hud.setEnableFeverDisplay(input('opt-fever').checked);
+ hud.setFeverSectionNo(Number(input('opt-fever-section').value)||3);
  persistSettings();
 };
+input('opt-fever-section').onchange=applyHudOptions;
 el<HTMLInputElement>('opt-perfect-plus').onchange=applyHudOptions;
 el<HTMLSelectElement>('opt-judgement-output').onchange=applyHudOptions;
 el<HTMLSelectElement>('opt-fast-slow').onchange=applyHudOptions;
@@ -240,7 +245,7 @@ applyScoreCfg();
 
 let frame=0;
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();renderer.render(chart,t,speed,mirror,lines);hud.sync(chart,t);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverActive,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();hud.dispose();},{once:true});

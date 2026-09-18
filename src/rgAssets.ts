@@ -37,7 +37,7 @@ export interface FxPrefab {
   pArr?: number[]; pArr2?: number[]; impact: number; p00: number;
 }
 export interface FxMat { id: string; name: string; shader: string; tex: string; additive: boolean; tintR: number; tintG: number; tintB: number; tintA: number }
-export interface FxFile { prefabs: FxPrefab[]; mats: FxMat[] }
+export interface FxFile { prefabs: FxPrefab[]; fever?: FxPrefab[]; mats: FxMat[] }
 
 export interface RgLibrary {
   meta: Record<string, SpriteMeta>;
@@ -91,6 +91,14 @@ export async function loadRgLibrary(): Promise<RgLibrary | null> {
     const res = await fetch('/rg/fx/fx.json');
     if (res.ok) {
       fx = await res.json() as FxFile;
+      if (fx.fever) {
+        fx.fever = fx.fever.map(f => ({
+          ...f,
+          impact: f.impact ?? -1,
+          p00: f.p00 ?? -1,
+          root: f.root ?? 0,
+        }));
+      }
       const names = [...new Set((fx.mats || []).map(m => m.tex).filter(Boolean))];
       await Promise.all(names.map(async name => {
         const tex = await optionalTexture(`/rg/fx/tex/${name}.png`);

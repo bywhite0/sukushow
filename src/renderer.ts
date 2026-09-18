@@ -3,6 +3,7 @@ import type { Chart, Note } from './chart';
 import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';
+import { feverLineRgba } from './fever';
 import { loadRgLibrary, whiteTexture, type RgLibrary } from './rgAssets';
 import { planeMaterial, spriteMaterial } from './shaders';
 import {
@@ -107,6 +108,10 @@ export class PreviewRenderer {
   private laneDarknessOpt = 80;
   private fx: HitFx | null = null;
   private hitEffectMode: 'off' | 'current' | 'limited' | 'full' = 'current';
+  private feverOn = false;
+  private feverStart = 0;
+  private feverOutline: THREE.Mesh | null = null;
+  private feverOutlineCol: THREE.BufferAttribute | null = null;
   private phase = new Map<number, number>();
   private observer: ResizeObserver;
   private disposed = false;
@@ -237,6 +242,20 @@ export class PreviewRenderer {
     outline.frustumCulled = false;
     outline.renderOrder = 0;
     this.laneUi.add(outline);
+
+    // LineBase fever rainbow overlay (same outline geometry; tint updated each frame).
+    const fcol = new Float32Array(12 * 4);
+    const fog = og.clone();
+    fog.setAttribute('tint', new THREE.BufferAttribute(fcol, 4));
+    const feverMat = spriteMaterial(this.white);
+    feverMat.depthWrite = false;
+    const feverOutline = new THREE.Mesh(fog, feverMat);
+    feverOutline.frustumCulled = false;
+    feverOutline.renderOrder = 0.5;
+    feverOutline.visible = false;
+    this.laneUi.add(feverOutline);
+    this.feverOutline = feverOutline;
+    this.feverOutlineCol = fog.getAttribute('tint') as THREE.BufferAttribute;
 
     const line = lib.sprites.sc2_ingame_tap_line;
     const meta = lib.meta.sc2_ingame_tap_line;
@@ -371,6 +390,8 @@ export class PreviewRenderer {
     for (const batch of this.sheets.values()) batch.reset();
     this.drawTrack(slope.spawn);
     this.lines.reset();
+    this.fx?.setFever(this.feverOn);
+    this.paintFeverOutline(time);
     this.fx?.sync(chart, time, mirror);
     let visible = 0;
     for (const root of chart.roots) {
@@ -493,6 +514,26 @@ export class PreviewRenderer {
     this.uiCam.updateProjectionMatrix();
     const s = Math.min(w / 1920, h / 1080);
     this.uiRoot.scale.set(s, s, 1);
+  }
+
+  setFeverState(on: boolean, feverStart: number) {
+    this.feverOn = on;
+    this.feverStart = feverStart;
+    if (!on) this.fx?.setFever(false);
+  }
+
+  private paintFeverOutline(time: number) {
+    const mesh = this.feverOutline;
+    const col = this.feverOutlineCol;
+    if (!mesh || !col) return;
+    mesh.visible = this.feverOn;
+    if (!this.feverOn) return;
+    const rgba = feverLineRgba(time, this.feverStart);
+    const arr = col.array as Float32Array;
+    for (let i = 0; i < arr.length; i += 4) {
+      arr[i] = rgba[0]; arr[i + 1] = rgba[1]; arr[i + 2] = rgba[2]; arr[i + 3] = rgba[3];
+    }
+    col.needsUpdate = true;
   }
 
   setHitEffectMode(mode: 'off' | 'current' | 'limited' | 'full') {
