@@ -912,16 +912,19 @@ export class LiveHud {
       place(node, 400, 80, 0.5, 0.5, 0.5, 0.5, x, 16, w, 40);
       root.append(node);
     };
-    // Scene sample text is MENTAL / 9999 / 9999. Preview placeholder keeps the numbers at 0.
+    // MentalResolver ctor: value = maxValue = TotalMental (full HP). Preview is forever-alive
+    // (no Bad/Miss drain); preview default TotalMental 1000 as the chrome figure.
+    const full = 1000;
     text('MENTAL', 'hud-mental-label', -108, 120);
-    text('0', 'hud-mental-now', -16, 88);
+    text(String(full), 'hud-mental-now', -16, 88);
     text('/', 'hud-mental-sep', 41, 32);
-    text('0', 'hud-mental-max', 80, 80);
+    text(String(full), 'hud-mental-max', 80, 80);
     const track = document.createElement('div');
     track.className = 'hud-mental-track';
     place(track, 400, 80, 0.5, 0.5, 0, 0.5, -160, -16, 280, 16);
     const fill = document.createElement('div');
     fill.className = 'hud-mental-fill';
+    fill.style.width = '100%';
     track.append(fill);
     root.append(track);
     safe.append(root);
