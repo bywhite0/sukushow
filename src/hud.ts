@@ -1,4 +1,5 @@
 import type { Chart, Note } from './chart';
+import { noteJudgementTimes } from './chart';
 import {
   DEFAULT_SCORE_CONFIG,
   ScoreEngine,
@@ -28,6 +29,8 @@ const SEEK_GAP = 0.5;
 const JUDGE_LIFE = 0.7;
 const JUDGE_TWEEN = 0.1;
 const COMBO_TWEEN = 0.1;
+/** level56 SpriteRoot: Sprite0..Sprite3; [0]=units (rightmost). */
+const COMBO_DIGIT_SLOTS = 4;
 
 // Sprite0 is the units place, right to left. Commas sit between groups of three.
 const SCORE_DIGIT_X = [139, 115.5, 92, 57, 33.5, 10, -26, -49.5, -73, -108, -131.5, -155];
@@ -144,15 +147,15 @@ function setSprite(host: HTMLElement, name: string, fallback: string): void {
   if (img.complete && img.naturalWidth > 0) onLoad();
 }
 
-function countHeads(notes: readonly Note[], previousTime: number, time: number): number {
-  // Each chart note counts once, at `time` (the head). Hold is type 1.
-  // Do not also count `end` / `holds`. A chained successor is its own Note
-  // whose `time` equals the previous `end`, so it is counted when playback
-  // crosses that note — not a second time for the tail.
+function countHeads(chart: Chart, previousTime: number, time: number): number {
+  // Prepare Pass2: root Just + Holds samples (GetHolds on multi-segment heads). Not notes.length.
   let hits = 0;
-  for (let i = 0; i < notes.length; i++) {
-    const t = notes[i].time;
-    if (previousTime < t && time >= t) hits++;
+  for (let i = 0; i < chart.notes.length; i++) {
+    const times = noteJudgementTimes(chart.notes[i], chart.bpms);
+    for (let j = 0; j < times.length; j++) {
+      const t = times[j];
+      if (previousTime < t && time >= t) hits++;
+    }
   }
   return hits;
 }
@@ -186,6 +189,7 @@ export class LiveHud {
   private readonly root: HTMLElement;
   private readonly logic: HTMLElement;
   private readonly comboRow: HTMLElement;
+  private readonly comboDigits: HTMLElement[] = [];
   private readonly comboLabel: HTMLElement;
   private readonly apRateBadge: HTMLElement;
   private readonly apRateValue: HTMLElement;
@@ -205,7 +209,6 @@ export class LiveHud {
   private previousTime = 0;
   private combo = 0;
   private apRate = 0;
-  private comboKey = '';
   private judgeAt = -1;
   private enablePerfectPlus: boolean = RG_OPTION_DEFAULTS.enablePerfectPlus;
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
@@ -258,7 +261,7 @@ export class LiveHud {
       return;
     }
     if (time - previousTime < SEEK_GAP) {
-      const hits = countHeads(chart.notes, previousTime, time);
+      const hits = countHeads(chart, previousTime, time);
       if (hits > 0) {
         const jType = autoPlayJudgementType(this.enablePerfectPlus);
         this.scoreEngine.addMany(jType, hits);
@@ -358,22 +361,19 @@ export class LiveHud {
   }
 
   private paintCombo(): void {
-    // UpdateCombo: combo < 10 ⇒ treat as 0 (no digits). Sprite0 = units (rightmost).
-    const shown = this.combo < 10 ? 0 : this.combo;
-    const text = shown > 0 ? String(shown) : '';
-    const key = `${text}|${this.apRate}`;
-    if (text === (this.comboKey.split('|')[0] ?? '') && this.comboRow.childElementCount === text.length) {
-      this.comboKey = key;
-      return;
-    }
-    this.comboKey = key;
-    this.comboRow.replaceChildren();
-    for (const ch of text) {
-      const slot = document.createElement('div');
-      // Prefab slot sizeDelta is always 90×120; HorizontalLayoutGroup spacing −13. No .is-one shrink.
-      slot.className = 'hud-cdigit';
-      mountSprite(slot, `ui_sc2_ingame_num_combo_${ch}`, ch);
-      this.comboRow.append(slot);
+    // UpdateCombo(SpriteRenderer[], int) @0x49A426C — Unity keeps 4 fixed slots.
+    // combo < 10 ⇒ treat as 0 (all inactive). [0]=units; inactive children do not layout.
+    let n = this.combo < 10 ? 0 : this.combo;
+    for (let i = 0; i < this.comboDigits.length; i++) {
+      const slot = this.comboDigits[i];
+      if (n > 0) {
+        const d = n % 10;
+        slot.hidden = false;
+        setSprite(slot, `ui_sc2_ingame_num_combo_${d}`, String(d));
+        n = Math.trunc(n * 0.1);
+      } else {
+        slot.hidden = true;
+      }
     }
   }
 
@@ -724,7 +724,17 @@ export class LiveHud {
     root.className = 'hud-combo';
     const row = document.createElement('div');
     row.className = 'hud-combo-digits';
-    place(row, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
+    place(row, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, 54, 360, 120);
+    this.comboDigits.length = 0;
+    for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
+      const slot = document.createElement('div');
+      // Prefab sizeDelta 90×120; HLG spacing −13. Slot [0]=units (row-reverse ⇒ rightmost).
+      slot.className = 'hud-cdigit';
+      slot.hidden = true;
+      mountSprite(slot, 'ui_sc2_ingame_num_combo_0', '0');
+      this.comboDigits.push(slot);
+      row.append(slot);
+    }
     const label = document.createElement('div');
     label.className = 'hud-combo-label';
     place(label, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -30, 244, 65);

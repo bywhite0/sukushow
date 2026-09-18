@@ -30,9 +30,9 @@
 .hud-perfect{transform-origin:center center}
 .hud-perfect .hud-fb{font-size:42px;letter-spacing:2px;color:#ffe14a}
 .hud-combo{position:absolute;right:0;top:50%;width:400px;height:320px;transform:translateY(calc(-50% - 160px));overflow:visible}
-.hud-combo-digits{display:flex;align-items:center;justify-content:center;overflow:visible;transform-origin:center center}
-.hud-cdigit{width:90px;height:120px;flex:0 0 auto;margin-left:-13px}
-.hud-cdigit:first-child{margin-left:0}
+.hud-combo-digits{display:flex;flex-direction:row-reverse;align-items:center;justify-content:center;overflow:visible;transform-origin:center center}
+.hud-cdigit{width:90px;height:120px;flex:0 0 auto;margin:0}.hud-cdigit+.hud-cdigit{margin-right:-13px}
+
 .hud-cdigit .hud-fb{font-size:72px;font-variant-numeric:tabular-nums}
 .hud-combo-label .hud-fb{font-size:28px;letter-spacing:3px}
 .hud-aprate{border-radius:20px;background:rgb(255,58,153);box-shadow:0 0 10px rgba(255,58,153,.55);display:flex;align-items:center;justify-content:center;overflow:hidden}

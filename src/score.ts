@@ -7,11 +7,11 @@
  * Gauge fill: piecewise (0,0)/(C,.409)/(B,.587)/(A,.773)/(S,.912)/(1.5S,1)
  * Technical: weights Bad20..PP101; push = raw/N*10000 (mode 2 assumes remain=PP)
  *
- * Preview AllNoteSize = chart.notes.length (line-cross ticks = combo heads), so
- * full-combo score matches the same denominator as LiveHud countHeads.
+ * AllNoteSize = Σ_roots (Holds.length+1) after Pass2 GetHolds; same ticks as LiveHud countHeads.
  */
 
 import type { Chart } from './chart';
+import { chartAllNoteSize } from './chart';
 import type { NoteJudgementType } from './rgOptions';
 
 export type ScoreRankId = 0 | 1 | 2 | 3 | 4; // None C B A S
@@ -39,9 +39,6 @@ export const DEFAULT_TOTAL_APPEAL = 350_000;
 /** 曲目熟练度等级（マスタリー / MusicMasteryLevel）；公式里按 ×0.01 加成。 */
 export const DEFAULT_MUSIC_MASTERY_LEVEL = 0;
 
-export function chartAllNoteSize(chart: Chart): number {
-  return Math.max(1, chart.notes.length);
-}
 
 export function halfwayScore(
   totalAppeal: number,
