@@ -36,6 +36,8 @@ export type PreviewSettings = {
   rankPreview: 'none' | 'D' | 'C' | 'B' | 'A' | 'S';
   techScore: 0 | 1 | 2;
   rate: number;
+  /** Preview-only hit FX style. `current` = existing HitFx GPU-quad approx. */
+  hitEffect: 'off' | 'current';
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -68,6 +70,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   rankPreview: 'none',
   techScore: RG_OPTION_DEFAULTS.technicalScoreDisplay,
   rate: 1,
+  hitEffect: 'current',
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -126,6 +129,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     rate: [0.5, 0.75, 1, 1.25, 1.5, 2].includes(num('rate', d.rate))
       ? num('rate', d.rate)
       : d.rate,
+    hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' ? o.hitEffect : d.hitEffect,
   };
 }
 

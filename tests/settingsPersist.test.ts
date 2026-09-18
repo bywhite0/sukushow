@@ -42,6 +42,7 @@ describe('sanitizePreviewSettings', () => {
       judgementY: 7,
       enableFeverDisplay: false,
       volumeNoteTap: 0.5,
+      hitEffect: 'off',
     });
     expect(s.noteStartZ).toBe(40);
     expect(s.laneWidth).toBe(110);
@@ -49,7 +50,10 @@ describe('sanitizePreviewSettings', () => {
     expect(s.targetFPS).toBe(1);
     expect(s.enableFeverDisplay).toBe(false);
     expect(s.volumeNoteTap).toBe(0.5);
+    expect(s.hitEffect).toBe('off');
     expect(DEFAULT_PREVIEW_SETTINGS.speed).toBe(5);
+    expect(DEFAULT_PREVIEW_SETTINGS.hitEffect).toBe('current');
+    expect(sanitizePreviewSettings({ hitEffect: 'nope' }).hitEffect).toBe('current');
   });
 });
 

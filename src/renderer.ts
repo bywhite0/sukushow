@@ -106,6 +106,7 @@ export class PreviewRenderer {
   private gridCountOpt = 0;
   private laneDarknessOpt = 80;
   private fx: HitFx | null = null;
+  private hitEffectMode: 'off' | 'current' = 'current';
   private phase = new Map<number, number>();
   private observer: ResizeObserver;
   private disposed = false;
@@ -136,6 +137,7 @@ export class PreviewRenderer {
     this.applyLaneWidthScale();
     if (lib.fx) {
       this.fx = new HitFx(lib.fx, lib.fxTex);
+      this.fx.setMode(this.hitEffectMode);
       this.notes.add(this.fx.group);
     }
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.mesh.visible = false;
@@ -491,6 +493,11 @@ export class PreviewRenderer {
     this.uiCam.updateProjectionMatrix();
     const s = Math.min(w / 1920, h / 1080);
     this.uiRoot.scale.set(s, s, 1);
+  }
+
+  setHitEffectMode(mode: 'off' | 'current') {
+    this.hitEffectMode = mode;
+    this.fx?.setMode(mode);
   }
 
   dispose() {
