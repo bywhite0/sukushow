@@ -91,3 +91,36 @@
 .hud-tech-value{margin-left:auto;color:#fff;font-weight:700;text-align:right;white-space:nowrap}
 .hud-tech-value .is-big{font-size:36px;font-weight:800}
 .hud-tech-value .is-small{font-size:24px}
+
+
+
+
+/* Canvas-Bg (PLAN §51): only behind the 3D stage — Bg + tiled Dot + Dim(BackgroundDarkness/100). Not transport/load-bar/aside.
+   Non-MV Bg = in_game_difficulty_bg_{InGameBgImageId:D3}; masterdata DifficultyBgImages: all difficulties → 101.
+   Bg Image 1920×1920 Simple (square, centered on 1920×1080); Dot 1920×1080 Tiled 10×10. */
+.stage{position:relative;isolation:isolate;background:#1a1d24;overflow:hidden}
+.stage .live-bg{
+  position:absolute;inset:0;z-index:0;pointer-events:none;
+  background-color:#ffffff;
+}
+.stage .live-bg-image{
+  position:absolute;left:50%;top:50%;
+  width:100%;aspect-ratio:1/1;
+  transform:translate(-50%,-50%);
+  background-image:url('/in_game_difficulty_bg_101.png');
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:100% 100%;
+}
+.stage .live-bg-dot{
+  position:absolute;inset:0;
+  background-image:url('/sc2_ingame_bg_pattern_dot.png');
+  background-repeat:repeat;
+  background-size:10px 10px;
+}
+.stage .live-bg-dim{
+  position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:#000;opacity:0;
+}
+.stage canvas{position:relative;z-index:1;background:transparent}
+.stage .hud-stage,.stage .hud-root{position:relative;z-index:2}

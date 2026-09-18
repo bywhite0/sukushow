@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   RG_OPTION_DEFAULTS,
+  RG_OPTION_RANGES,
   autoPlayJudgementType,
+  darknessAlpha,
+  gridLaneCount,
+  judgementLayoutY,
   judgementSprite,
+  noteSpeedToFallSpeed,
   shouldShowFastSlow,
   shouldShowJudgement,
+  targetFpsHz,
 } from '../src/rgOptions';
 
 describe('rgOptions defaults (4.12.0 OptionRange.First)', () => {
@@ -13,6 +19,25 @@ describe('rgOptions defaults (4.12.0 OptionRange.First)', () => {
     expect(RG_OPTION_DEFAULTS.fastSlowThreshold).toBe(0);
     expect(RG_OPTION_DEFAULTS.judgementOutput).toBe(0);
     expect(RG_OPTION_DEFAULTS.technicalScoreDisplay).toBe(0);
+    expect(RG_OPTION_DEFAULTS.speed).toBe(5);
+    expect(RG_OPTION_DEFAULTS.noteStartZ).toBe(0);
+    expect(RG_OPTION_DEFAULTS.laneWidth).toBe(100);
+    expect(RG_OPTION_DEFAULTS.laneDarkness).toBe(80);
+    expect(RG_OPTION_DEFAULTS.gridCount).toBe(0);
+    expect(RG_OPTION_DEFAULTS.targetFPS).toBe(0);
+    expect(RG_OPTION_DEFAULTS.judgementY).toBe(5);
+    expect(RG_OPTION_DEFAULTS.fastSlowY).toBe(5);
+    expect(RG_OPTION_DEFAULTS.enableApContinue).toBe(true);
+    expect(RG_OPTION_DEFAULTS.enableFeverDisplay).toBe(true);
+    expect(RG_OPTION_RANGES.noteSpeed).toEqual({ min: 10, max: 200, first: 50 });
+    expect(noteSpeedToFallSpeed(50)).toBe(5);
+    expect(targetFpsHz(0)).toBe(60);
+    expect(targetFpsHz(1)).toBe(120);
+    expect(gridLaneCount(0)).toBe(0);
+    expect(gridLaneCount(3)).toBe(4);
+    expect(darknessAlpha(80, 130)).toBeCloseTo(80 / 130);
+    expect(judgementLayoutY(5, -270)).toBe(-270);
+    expect(judgementLayoutY(6, -270)).toBe(-240);
   });
 
   it('gates judgement output with type < 6 - opt', () => {
