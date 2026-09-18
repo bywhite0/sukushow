@@ -36,7 +36,7 @@ export type PreviewSettings = {
   rankPreview: 'none' | 'D' | 'C' | 'B' | 'A' | 'S';
   techScore: 0 | 1 | 2;
   rate: number;
-  /** Preview hit FX: current=直冲天上; limited=限速; full=加深(限速+rotol+trail). */
+  /** Preview hit FX: current=直冲天上(+rotol/拖尾); limited=限速; full=限速+rotol+拖尾. */
   hitEffect: 'off' | 'current' | 'limited' | 'full';
 };
 

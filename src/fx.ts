@@ -382,7 +382,7 @@ export class HitFx {
         grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
         omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
-        trailEn: spec.trailEn || (this.mode === 'full' && spec.limitEn),
+        trailEn: spec.trailEn || ((this.mode === 'full' || this.mode === 'current') && spec.limitEn),
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
         trailWidth: spec.trailEn ? spec.trailWidth : 0.35,
@@ -414,7 +414,7 @@ export class HitFx {
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
     }
   }
-  /** `off` | `current` (no LimitVelocity / 冲天) | `limited` (apply ps.limit). */
+  /** `off` | `current` 直冲天上(+rotol/拖尾) | `limited` 限速 | `full` 限速+rotol+拖尾. */
   setMode(mode: 'off' | 'current' | 'limited' | 'full') {
     if (mode === this.mode) return;
     this.mode = mode;
@@ -492,9 +492,9 @@ export class HitFx {
             s.vx *= scale; s.vy *= scale; s.vz *= scale;
           }
         }
-        if (this.mode === 'full' && s.omega) s.spin += s.omega * dt;
+        if ((this.mode === 'full' || this.mode === 'current') && s.omega) s.spin += s.omega * dt;
         s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
-        if (this.mode === 'full' && s.trailEn) {
+        if ((this.mode === 'full' || this.mode === 'current') && s.trailEn) {
           const last = s.trail[s.trail.length - 1];
           const dist = last ? Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) : 1e9;
           if (dist >= s.trailMinDist) s.trail.push({ x: s.x, y: s.y, z: s.z, t: s.age });
@@ -541,10 +541,10 @@ export class HitFx {
       const slice = s.slice ? s.sliceSize * mulX : 0;
       for (let i = before; i < batch.n; i++) batch.slice[i] = slice;
     }
-    if (this.mode === 'full') this.drawTrails();
+    if (this.mode === 'full' || this.mode === 'current') this.drawTrails();
     for (const batch of this.batches.values()) batch.flush();
   }
-  /** Ribbon approx: authoring trail.en, or soft streak in `full` for limit-enabled sprays. */
+  /** Ribbon approx: authoring trail.en, or soft streak in current/full for limit-enabled sprays. */
   private drawTrails() {
     for (const live of this.live) for (const s of live.sparks) {
       if (!s.trailEn || s.trail.length < 2) continue;
