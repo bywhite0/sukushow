@@ -1,0 +1,770 @@
+{
+  "ui_sc2_ingame_notes_tap": {
+    "name": "ui_sc2_ingame_notes_tap",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_hold": {
+    "name": "ui_sc2_ingame_notes_hold",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_flick": {
+    "name": "ui_sc2_ingame_notes_flick",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_trace": {
+    "name": "ui_sc2_ingame_notes_trace",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      48
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_texture_arrow": {
+    "name": "ui_sc2_ingame_notes_texture_arrow",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      52,
+      50
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_icon_flick": {
+    "name": "ui_sc2_ingame_notes_icon_flick",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      120,
+      90
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_flick_sign": {
+    "name": "ui_sc2_ingame_flick_sign",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      323,
+      250
+    ],
+    "ppu": 100
+  },
+  "sc2_ingame_tap_line": {
+    "name": "sc2_ingame_tap_line",
+    "border": [
+      81,
+      0,
+      81,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      168,
+      54
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_combo": {
+    "name": "ui_sc2_ingame_combo",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      244,
+      65
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_0": {
+    "name": "ui_sc2_ingame_num_combo_0",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_1": {
+    "name": "ui_sc2_ingame_num_combo_1",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      90,
+      0,
+      70,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_2": {
+    "name": "ui_sc2_ingame_num_combo_2",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      160,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_3": {
+    "name": "ui_sc2_ingame_num_combo_3",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      250,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_4": {
+    "name": "ui_sc2_ingame_num_combo_4",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      340,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_5": {
+    "name": "ui_sc2_ingame_num_combo_5",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      430,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_6": {
+    "name": "ui_sc2_ingame_num_combo_6",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      520,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_7": {
+    "name": "ui_sc2_ingame_num_combo_7",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      610,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_8": {
+    "name": "ui_sc2_ingame_num_combo_8",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      700,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_combo_9": {
+    "name": "ui_sc2_ingame_num_combo_9",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      790,
+      0,
+      90,
+      120
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_perfect": {
+    "name": "ui_sc2_ingame_hantei_perfect",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      340,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_perfect_plus": {
+    "name": "ui_sc2_ingame_hantei_perfect_plus",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      386,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_great": {
+    "name": "ui_sc2_ingame_hantei_great",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      260,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_good": {
+    "name": "ui_sc2_ingame_hantei_good",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      230,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_bad": {
+    "name": "ui_sc2_ingame_hantei_bad",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      170,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_miss": {
+    "name": "ui_sc2_ingame_hantei_miss",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      200,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_auto": {
+    "name": "ui_sc2_ingame_hantei_auto",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      260,
+      80
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_fast": {
+    "name": "ui_sc2_ingame_hantei_fast",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      130,
+      64
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_slow": {
+    "name": "ui_sc2_ingame_hantei_slow",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      130,
+      64
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_hantei_flick": {
+    "name": "ui_sc2_ingame_hantei_flick",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      180,
+      64
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_0": {
+    "name": "ui_sc2_ingame_num_score_0",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_1": {
+    "name": "ui_sc2_ingame_num_score_1",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      32,
+      0,
+      24,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_2": {
+    "name": "ui_sc2_ingame_num_score_2",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      56,
+      0,
+      30,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_3": {
+    "name": "ui_sc2_ingame_num_score_3",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      86,
+      0,
+      30,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_4": {
+    "name": "ui_sc2_ingame_num_score_4",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      116,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_5": {
+    "name": "ui_sc2_ingame_num_score_5",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      148,
+      0,
+      30,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_6": {
+    "name": "ui_sc2_ingame_num_score_6",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      178,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_7": {
+    "name": "ui_sc2_ingame_num_score_7",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      210,
+      0,
+      30,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_8": {
+    "name": "ui_sc2_ingame_num_score_8",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      240,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_9": {
+    "name": "ui_sc2_ingame_num_score_9",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      272,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_10": {
+    "name": "ui_sc2_ingame_num_score_10",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      304,
+      0,
+      16,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_11": {
+    "name": "ui_sc2_ingame_num_score_11",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      320,
+      0,
+      32,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_num_score_12": {
+    "name": "ui_sc2_ingame_num_score_12",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      352,
+      0,
+      16,
+      40
+    ],
+    "ppu": 1
+  },
+  "ui_sc2_ingame_ap_base": {
+    "name": "ui_sc2_ingame_ap_base",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      138,
+      138
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_voltage_base": {
+    "name": "ui_sc2_ingame_voltage_base",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      138,
+      138
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_gage_ap": {
+    "name": "ui_sc2_ingame_gage_ap",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      90,
+      90
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_gage_voltage": {
+    "name": "ui_sc2_ingame_gage_voltage",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      90,
+      90
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_gage_base_02": {
+    "name": "ui_sc2_ingame_gage_base_02",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      94,
+      94
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_rank_base": {
+    "name": "ui_sc2_ingame_rank_base",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      110,
+      121
+    ],
+    "ppu": 100
+  }
+}
