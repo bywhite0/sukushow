@@ -56,6 +56,8 @@ describe('sanitizePreviewSettings', () => {
     expect(sanitizePreviewSettings({ hitEffect: 'nope' }).hitEffect).toBe('current');
     expect(sanitizePreviewSettings({ hitEffect: 'limited' }).hitEffect).toBe('limited');
     expect(sanitizePreviewSettings({ hitEffect: 'full' }).hitEffect).toBe('full');
+    expect(sanitizePreviewSettings({ feverSectionNo: 5 }).feverSectionNo).toBe(5);
+    expect(DEFAULT_PREVIEW_SETTINGS.feverSectionNo).toBe(3);
   });
 });
 

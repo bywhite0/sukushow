@@ -47,6 +47,7 @@ interface Spark {
   pitchLocal: boolean; spin: number;
   grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
+  fever?: boolean;
   omega: number;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
@@ -54,6 +55,7 @@ interface Spark {
 }
 interface Live {
   uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
+  abs?: boolean; fever?: boolean;
 }
 
 function lerpKeys(keys: { t: number; v: number }[] | undefined, t: number) {
@@ -184,6 +186,7 @@ class FxBatch {
 export class HitFx {
   readonly group = new THREE.Group();
   private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
+  private feverOn = false;
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
@@ -192,6 +195,7 @@ export class HitFx {
   constructor(private fx: FxFile, private tex: Record<string, THREE.Texture>) {
     const mats = new Map(fx.mats.map(m => [m.id, m]));
     for (const prefab of fx.prefabs) this.specs.set(prefab.id, this.compile(prefab, mats));
+    for (const prefab of fx.fever || []) this.specs.set(prefab.id, this.compile(prefab, mats));
   }
   private compile(prefab: FxPrefab, mats: Map<string, FxFile['mats'][number]>) {
     const cores = new Map((prefab.coreUnits || []).map(c => [c.node, c.baseSize]));
@@ -370,9 +374,9 @@ export class HitFx {
       const speed = sample(spec.speed, rnd);
       const grad = spec.gradTwo && spec.gradMin && Math.random() < 0.5 ? spec.gradMin : spec.grad;
       live.sparks.push({
-        x: live.x + spec.offset[0] + sh.ox,
-        y: Y + spec.offset[1] + sh.oy,
-        z: BORDER + spec.offset[2] + sh.oz,
+        x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
+        y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
+        z: (live.abs ? 0 : BORDER) + spec.offset[2] + sh.oz,
         vx: sh.dx * speed, vy: sh.dy * speed, vz: sh.dz * speed,
         age: 0, life: Math.max(0.016, sample(spec.life, rnd)),
         sx: sized.drawX, sy: sized.drawY, sliceSize: sized.sliceSize,
@@ -381,8 +385,10 @@ export class HitFx {
         pitchLocal, spin: sample(spec.rot, rnd),
         grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
+        fever: !!live.fever,
         omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
         trailEn: spec.trailEn || ((this.mode === 'full' || this.mode === 'current') && spec.limitEn),
+        // fever authoring trails always on when trail.en
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
         trailWidth: spec.trailEn ? spec.trailWidth : 0.35,
@@ -420,14 +426,25 @@ export class HitFx {
     this.mode = mode;
     if (mode === 'off') this.clear();
   }
-  spawn(id: string, x: number, width: number, loop = false, uid = -1) {
-    if (this.mode === 'off') return null;
+  /** Screen-side fever FX (feverLeft/Right). Independent of hitEffect off. */
+  setFever(on: boolean) {
+    if (on === this.feverOn) return;
+    this.feverOn = on;
+    if (!on) {
+      this.live = this.live.filter(fx => !fx.fever);
+      return;
+    }
+    this.spawn('feverLeft', 0, 1, true, -200, true, true);
+    this.spawn('feverRight', 0, 1, true, -201, true, true);
+  }
+  spawn(id: string, x: number, width: number, loop = false, uid = -1, abs = false, fever = false) {
+    if (this.mode === 'off' && !fever) return null;
     const src = this.specs.get(id);
     if (!src?.length || this.live.length > 64) return null;
     const specs = src.map(s => ({ ...s, burstI: 0, rateAcc: 0, cycle: 0 }));
     const live: Live = {
       uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 1),
-      loop, x, width, specs, sparks: [],
+      loop, x, width, specs, sparks: [], abs, fever,
     };
     // Fire bursts at t=0 immediately (most note FX bursts are at 0).
     for (const spec of specs) this.emitDue(live, spec, -1e-6, 0);
@@ -442,13 +459,16 @@ export class HitFx {
     if (!Number.isFinite(this.last)) { this.last = time; return; }
     const dt = time - this.last;
     if (dt < -1e-4 || dt > SEEK) { this.clear(); this.last = time; return; }
-    if (this.mode === 'off') {
+    if (this.mode === 'off' && !this.feverOn) {
       if (this.live.length) this.clear();
       this.last = time;
       return;
     }
+    if (this.mode === 'off') {
+      this.live = this.live.filter(fx => fx.fever);
+    }
     if (dt > 0) this.step(dt);
-    for (const root of chart.roots) {
+    if (this.mode !== 'off') for (const root of chart.roots) {
       if (this.last < root.time && time >= root.time) {
         const [l, r] = edges(root, 0, mirror);
         const x = worldX((l + r) / 2), w = r - l + 1;
@@ -482,11 +502,11 @@ export class HitFx {
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
-        if ((this.mode === 'full' || this.mode === 'current') && s.omega) s.spin += s.omega * dt;
+        if (s.omega) s.spin += s.omega * dt;
         // Integrate before LimitVelocity so the birth frame keeps startSpeed punch.
         s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
         // LimitVelocity: v(t)=lim+(v0−lim)e^(−κt), κ=−ln(1−dampen)×50 (BannerFxMath / PLAN).
-        if ((this.mode === 'limited' || this.mode === 'full') && s.limitEn) {
+        if ((this.mode === 'limited' || this.mode === 'full' || s.fever) && s.limitEn) {
           const sp = Math.hypot(s.vx, s.vy, s.vz);
           const lim = Math.max(0, s.limitSpeed);
           if (sp > lim && sp > 1e-8) {
@@ -497,7 +517,7 @@ export class HitFx {
             s.vx *= scale; s.vy *= scale; s.vz *= scale;
           }
         }
-        if ((this.mode === 'full' || this.mode === 'current') && s.trailEn) {
+        if (s.trailEn) {
           const last = s.trail[s.trail.length - 1];
           const dist = last ? Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) : 1e9;
           if (dist >= s.trailMinDist) s.trail.push({ x: s.x, y: s.y, z: s.z, t: s.age });
@@ -544,7 +564,7 @@ export class HitFx {
       const slice = s.slice ? s.sliceSize * mulX : 0;
       for (let i = before; i < batch.n; i++) batch.slice[i] = slice;
     }
-    if (this.mode === 'full' || this.mode === 'current') this.drawTrails();
+    this.drawTrails();
     for (const batch of this.batches.values()) batch.flush();
   }
   /** Ribbon approx: authoring trail.en, or soft streak in current/full for limit-enabled sprays. */
