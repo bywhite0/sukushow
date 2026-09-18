@@ -217,6 +217,10 @@ export class LiveHud {
   private readonly comboLabel: HTMLElement;
   private readonly apRateBadge: HTMLElement;
   private readonly apRateValue: HTMLElement;
+  private apValueEl: HTMLElement | null = null;
+  private voltageValueEl: HTMLElement | null = null;
+  private apGageEl: HTMLElement | null = null;
+  private voltageGageEl: HTMLElement | null = null;
   private readonly techRoot: HTMLElement;
   private readonly scoreDigits: HTMLElement[] = [];
   private readonly scoreCommas: HTMLElement[] = [];
@@ -275,6 +279,7 @@ export class LiveHud {
     this.observer.observe(stage);
     this.layout();
     this.paintApRate();
+    this.paintApVoltage();
   }
 
   sync(chart: Chart, time: number): void {
@@ -300,6 +305,7 @@ export class LiveHud {
         this.paintCombo();
         this.paintApRate();
         this.paintScore();
+        this.paintApVoltage();
         this.paintGauge();
         this.paintTechnicalFromEngine();
         if (!this.rankManual) {
@@ -718,7 +724,11 @@ export class LiveHud {
 
   setEnableFeverDisplay(on: boolean): void {
     this.enableFeverDisplay = on;
-    // Fever live HUD not yet mounted; flag reserved for Voltage/Fever chrome.
+    // EnableFeverDisplay gates side fever FX (out of preview scope). Score uses
+    // IsFever only when a fever window is active; without chart section times,
+    // preview keeps IsFever false. Flag reserved for future section wiring.
+    this.scoreEngine.setFever(false);
+    this.paintApVoltage();
   }
 
   private repositionJudge(): void {
@@ -866,7 +876,7 @@ export class LiveHud {
     const root = document.createElement('div');
     root.className = 'hud-ap';
     // Gauges are children of the 138 bases (pos 0,0), not siblings of APVoltageRoot.
-    const meter = (base: string, gage: string, x: number) => {
+    const meter = (base: string, gage: string, x: number): HTMLElement => {
       const slot = document.createElement('div');
       slot.className = 'hud-disc';
       place(slot, 320, 160, 0.5, 0.5, 0.5, 0.5, x, -8, 138, 138);
@@ -878,27 +888,45 @@ export class LiveHud {
       const fill = document.createElement('div');
       fill.className = 'hud-gage';
       place(fill, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 0, 90, 90);
-      // Scene Image is Filled / Radial360, fillOrigin Top, counterclockwise, fillAmount 1 (level56).
-      // No live AP, so the fill stays empty.
+      // level56: Filled Radial360, fillOrigin Top, fillClockwise=false; CSS conic from 0deg (=top).
       mountSprite(fill, gage, '');
+      fill.style.setProperty('--fill', '0');
       slot.append(ring, fill);
       root.append(slot);
+      return fill;
     };
-    meter('ui_sc2_ingame_ap_base', 'ui_sc2_ingame_gage_ap', -60);
-    meter('ui_sc2_ingame_voltage_base', 'ui_sc2_ingame_gage_voltage', 80);
+    this.apGageEl = meter('ui_sc2_ingame_ap_base', 'ui_sc2_ingame_gage_ap', -60);
+    this.voltageGageEl = meter('ui_sc2_ingame_voltage_base', 'ui_sc2_ingame_gage_voltage', 80);
     const label = (text: string, x: number, y: number, w: number, className: string) => {
       const node = document.createElement('div');
       node.className = className;
       mountOutlinedText(node, text);
       place(node, 320, 160, 0.5, 0.5, 0.5, 0.5, x, y, w, 40);
       root.append(node);
+      return node;
     };
     label('AP', -60, 53, 80, 'hud-ap-label is-ap');
     label('VOLTAGE', 80, 53, 120, 'hud-ap-label is-vo');
-    // Scene sample text is 7 / 99. Preview placeholder stays at 0.
-    label('0', -60, -8, 80, 'hud-ap-value is-ap');
-    label('0', 80, -8, 80, 'hud-ap-value is-vo');
+    this.apValueEl = label('0', -60, -8, 80, 'hud-ap-value is-ap');
+    this.voltageValueEl = label('0', 80, -8, 80, 'hud-ap-value is-vo');
     safe.append(root);
+  }
+
+  private paintApVoltage(): void {
+    const setOutlined = (host: HTMLElement | null, text: string) => {
+      if (!host) return;
+      const ol = host.querySelector('.hud-ol');
+      const face = host.querySelector('.hud-face');
+      if (ol) ol.textContent = text;
+      if (face) face.textContent = text;
+      if (!ol && !face) host.textContent = text;
+    };
+    setOutlined(this.apValueEl, String(this.scoreEngine.apDisplayValue));
+    setOutlined(this.voltageValueEl, String(this.scoreEngine.voltageLevel));
+    if (this.apGageEl) this.apGageEl.style.setProperty('--fill', String(this.scoreEngine.apGauge));
+    if (this.voltageGageEl) {
+      this.voltageGageEl.style.setProperty('--fill', String(this.scoreEngine.voltageGauge));
+    }
   }
 
   private buildMental(safe: HTMLElement): void {
