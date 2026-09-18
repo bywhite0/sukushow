@@ -7,4 +7,3 @@ local-assets/
 *.log
 .env*
 !.env.example
-public/rg/

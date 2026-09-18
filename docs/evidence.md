@@ -12,14 +12,14 @@
 ## 权威来源
 
 - 行为与布局以客户端二进制与场景序列化为准；与重建工程冲突时以二进制为准。
-- 不修改上游 Unity 工程；不把原版 PNG / FX 纹理提交进本仓库。
+- 不修改上游 Unity 工程。预览用贴图 / FX / 字体放在 public/rg/（权利见 README 免责声明），不作为对原权利人的授权声明。
 
-## 可选本地皮肤 / FX
+## 预览皮肤 / FX
 
-- `node scripts/copy-rg-assets.mjs` 可将本机游戏 UI / FX 资源复制到 gitignored 的 `public/rg/`（需 `--unity` / `--meta` 或环境变量）。
-- 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（dump 节点 TRS / SetWidth / bursts、Local·billboard、NoColorSpace 纹理；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
+- 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。
+- 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（节点 TRS / SetWidth / bursts、Local·billboard、NoColorSpace 纹理；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
 - 无资源时：程序化色块回退，页面仍可打开与播放。
-- HUD：直播 combo + PERFECT（过线 AutoPlay）；分数 / AP / Mental 为 chrome 占位，非计分引擎。
+- HUD：计分 / 段位 / combo / 判定等为预览实现，非完整对局客户端。
 
 ## 参考
 
