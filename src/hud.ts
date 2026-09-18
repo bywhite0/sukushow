@@ -1,4 +1,13 @@
 import type { Chart, Note } from './chart';
+import {
+  RG_OPTION_DEFAULTS,
+  autoPlayJudgementType,
+  judgementSprite,
+  shouldShowJudgement,
+  type FastSlowOption,
+  type JudgementOutputOption,
+  type NoteJudgementType,
+} from './rgOptions';
 
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
@@ -149,6 +158,10 @@ export class LiveHud {
   private apRate = 0;
   private comboKey = '';
   private judgeAt = -1;
+  private enablePerfectPlus: boolean = RG_OPTION_DEFAULTS.enablePerfectPlus;
+  private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
+  private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
+  private lastJudgeType: NoteJudgementType = 4;
   private comboBounceAt = -1;
 
   constructor(stage: HTMLElement) {
@@ -203,7 +216,11 @@ export class LiveHud {
         this.apRate = Math.min(Math.max(this.apRate, Math.trunc(this.combo * 0.1)), 5);
         this.paintCombo();
         this.paintApRate();
-        this.judgeAt = time;
+        const jType = autoPlayJudgementType(this.enablePerfectPlus);
+        if (shouldShowJudgement(jType, this.judgementOutput)) {
+          this.applyJudgeSprite(jType);
+          this.judgeAt = time;
+        }
         if (this.combo >= 10) this.comboBounceAt = time;
       }
     }
@@ -545,13 +562,41 @@ export class LiveHud {
     return root;
   }
 
+
+  setEnablePerfectPlus(on: boolean): void {
+    this.enablePerfectPlus = on;
+    this.applyJudgeSprite(autoPlayJudgementType(on));
+  }
+
+  setJudgementOutput(opt: JudgementOutputOption): void {
+    this.judgementOutput = opt;
+  }
+
+  /** ConfigResolver.FastSlowThreshold — gates Condition FAST/SLOW (chrome TBD). */
+  setFastSlowThreshold(opt: FastSlowOption): void {
+    this.fastSlowThreshold = opt;
+  }
+
+  getFastSlowThreshold(): FastSlowOption {
+    return this.fastSlowThreshold;
+  }
+
+  private applyJudgeSprite(type: NoteJudgementType): void {
+    this.lastJudgeType = type;
+    const { name, fallback } = judgementSprite(type, this.enablePerfectPlus);
+    while (this.judge.firstChild) this.judge.removeChild(this.judge.firstChild);
+    const w = name.includes('perfect_plus') ? 386 : 340;
+    this.judge.style.width = `${w}px`;
+    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, -270, w, 80);
+    mountSprite(this.judge, name, fallback);
+  }
+
   private buildJudge(safe: HTMLElement): HTMLElement {
     const root = document.createElement('div');
     root.className = 'hud-judge';
     const pop = document.createElement('div');
     pop.className = 'hud-perfect';
-    // Anchored at the dump (0, −270). sizeDelta is 100×100, but SpriteRenderer DrawMode Simple
-    // draws the sprite rect: hantei_perfect is 340×80. The scene sprite is hantei_good; hits show perfect.
+    // Anchored at dump (0, -270). Sprite size: perfect 340x80 / perfect_plus 386x80.
     place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, -270, 340, 80);
     mountSprite(pop, 'ui_sc2_ingame_hantei_perfect', 'PERFECT');
     pop.style.visibility = 'hidden';
