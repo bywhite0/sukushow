@@ -23,6 +23,60 @@ function parseNote(value:unknown):Note {
   if (holds.some((x,i)=>x< (i?holds[i-1]:time)||x>86400)|| (type===1&&!holds.length)) throw new Error('Hold 端点不得倒序或早于起点');
   return {uid,time,end:holds.at(-1)??time,holds,type,l,r,l2,r2};
 }
+
+/** BpmMath.Get: last segment with Time <= t; before first → first (preview-safe). */
+export function bpmAt(bpms: Chart['bpms'], time: number): number {
+  if (!bpms.length) return 120;
+  let cur = bpms[0].bpm;
+  for (let i = 0; i < bpms.length; i++) {
+    if (time >= bpms[i].time) cur = bpms[i].bpm;
+    else break;
+  }
+  return cur;
+}
+
+/**
+ * BpmMath.GetHolds @0x49A6164 — half-beat samples in (start, end], always ends with `end`.
+ * Does not include `start` (head Just is the separate +1 in AllNoteSize).
+ */
+export function getHolds(start: number, end: number, bpms: Chart['bpms']): number[] {
+  const out: number[] = [];
+  let t = start;
+  for (let guard = 0; guard < 100_000; guard++) {
+    t += (60 / bpmAt(bpms, t)) * 0.5;
+    if (t > end) break;
+    if (Math.abs(t - end) < 1e-4) break;
+    out.push(t);
+    if (t >= end) break;
+  }
+  // (long)(|end−last| * 10000) <= 1  ⇒  |Δ| < 2e-4
+  if (out.length && Math.abs(end - out[out.length - 1]) * 10_000 <= 1) out.pop();
+  out.push(end);
+  return out;
+}
+
+/**
+ * Judgement / combo ticks for one note (Prepare Pass2 semantics, non-mutating).
+ * Mid-chain units (Prev != null) contribute nothing; multi-segment heads use GetHolds(Just, tailEnd).
+ * Single-segment holds keep JSON Holds. Rendering still uses original note.holds / end.
+ */
+export function noteJudgementTimes(note: Note, bpms: Chart['bpms']): number[] {
+  if (note.prev) return [];
+  if (note.type !== 1) return [note.time];
+  let tail = note;
+  while (tail.next) tail = tail.next;
+  if (tail === note) return [note.time, ...note.holds];
+  const end = tail.holds.length ? tail.holds[tail.holds.length - 1] : tail.end;
+  return [note.time, ...getHolds(note.time, end, bpms)];
+}
+
+/** AllNoteSize after Prepare: Σ roots judgement ticks (== max combo). */
+export function chartAllNoteSize(chart: Chart): number {
+  let n = 0;
+  for (const note of chart.roots) n += noteJudgementTimes(note, chart.bpms).length;
+  return Math.max(1, n);
+}
+
 export function parseChart(input:unknown):Chart {
   const data=object(input);
   if (!Array.isArray(data.Notes)||!Array.isArray(data.Bpms)) throw new Error('需要 Notes 和 Bpms 数组');
@@ -54,5 +108,5 @@ export function decodeChart(bytes:Uint8Array):Chart {
     for(let i=0;i<bytes.length;i+=1024)stream.push(bytes.subarray(i,i+1024),i+1024>=bytes.length);
     const out=new Uint8Array(size);let offset=0;for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.length;}text=new TextDecoder('utf-8',{fatal:true}).decode(out);
   }
-  return parseChart(JSON.parse(text.replace(/^﻿/,'')));
+  return parseChart(JSON.parse(text.replace(/^\ufeff/,'')));
 }
