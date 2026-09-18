@@ -88,6 +88,8 @@ export class PreviewRenderer {
   private camera = new THREE.PerspectiveCamera(60, 16 / 9, .3, 1000);
   private uiCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
   private uiRoot = new THREE.Group();
+  /** Under uiRoot; X = LaneWidth/100 like RhythmGameWorldScaler (BorderLine + OutLine). */
+  private laneUi = new THREE.Group();
   private track = new OldBatch(1000, 0);
   private holds = new OldBatch(600000, 1);
   private lines = new OldBatch(300000, 2);
@@ -115,6 +117,7 @@ export class PreviewRenderer {
     this.camera.position.set(0, 9, 8.65); this.camera.rotation.x = -PITCH;
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) this.scene.add(batch.mesh);
     this.ui.add(this.uiRoot);
+    this.uiRoot.add(this.laneUi);
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(canvas); this.resize();
     void loadRgLibrary().then(lib => { if (!this.disposed && lib) this.useLibrary(lib); }).catch(() => undefined);
   }
@@ -128,9 +131,9 @@ export class PreviewRenderer {
     this.field.add(plane);
     // LaneLine shares Plane transform (level56); WorldScaler X = LaneWidth/100
     plane.add(this.laneLines);
-    this.applyLaneWidthScale();
     this.rebuildLaneLines();
     this.buildUi(lib);
+    this.applyLaneWidthScale();
     if (lib.fx) {
       this.fx = new HitFx(lib.fx, lib.fxTex);
       this.notes.add(this.fx.group);
@@ -154,10 +157,11 @@ export class PreviewRenderer {
     return mesh;
   }
 
-  /** RhythmGameWorldScaler.SetScaleX(LaneWidth/100) — Plane + LaneLines on X. */
+  /** RhythmGameWorldScaler.SetScaleX(LaneWidth/100) — Plane + LaneLines + Canvas BorderLine/OutLine on X. */
   private applyLaneWidthScale(): void {
     const s = this.laneWidthOpt / 100;
     if (this.planeMesh) this.planeMesh.scale.set(s, 1, 1);
+    this.laneUi.scale.set(s, 1, 1);
   }
 
   /** ChangePlaneAlpha: _Color = (0,0,0, 0.8 × LaneDarkness/100). */
@@ -214,6 +218,24 @@ export class PreviewRenderer {
 
 
   private buildUi(lib: RgLibrary) {
+    // level56 Canvas/WidthApply: OutLine under Mask, BorderLine sibling — BorderLine must draw above OutLine.
+    // Geometry at LaneWidth=100; laneUi.scale.x = LaneWidth/100 (WorldScaler).
+    const pink = spriteMaterial(this.white);
+    const opos = new Float32Array(12 * 3), ouv = new Float32Array(12 * 2), ocol = new Float32Array(12 * 4);
+    const leftRot = 2 * Math.atan2(-0.341118, 0.940021);
+    const rightRot = 2 * Math.atan2(0.341118, 0.940021);
+    let on = pushScreen(opos, ouv, ocol, 0, 12, -512.6168, -3.30142, 2, 1416, leftRot, LINE);
+    on = pushScreen(opos, ouv, ocol, on, 12, 512.6168, -3.30227, 2, 1416, rightRot, LINE);
+    const og = new THREE.BufferGeometry();
+    og.setAttribute('position', new THREE.BufferAttribute(opos, 3));
+    og.setAttribute('uv', new THREE.BufferAttribute(ouv, 2));
+    og.setAttribute('tint', new THREE.BufferAttribute(ocol, 4));
+    og.setDrawRange(0, on);
+    const outline = new THREE.Mesh(og, pink);
+    outline.frustumCulled = false;
+    outline.renderOrder = 0;
+    this.laneUi.add(outline);
+
     const line = lib.sprites.sc2_ingame_tap_line;
     const meta = lib.meta.sc2_ingame_tap_line;
     const mat = spriteMaterial(line);
@@ -238,21 +260,8 @@ export class PreviewRenderer {
     geo.setDrawRange(0, n);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
-    this.uiRoot.add(mesh);
-    const pink = spriteMaterial(this.white);
-    const opos = new Float32Array(12 * 3), ouv = new Float32Array(12 * 2), ocol = new Float32Array(12 * 4);
-    const leftRot = 2 * Math.atan2(-0.341118, 0.940021);
-    const rightRot = 2 * Math.atan2(0.341118, 0.940021);
-    let on = pushScreen(opos, ouv, ocol, 0, 12, -512.6168, -3.30142, 2, 1416, leftRot, LINE);
-    on = pushScreen(opos, ouv, ocol, on, 12, 512.6168, -3.30227, 2, 1416, rightRot, LINE);
-    const og = new THREE.BufferGeometry();
-    og.setAttribute('position', new THREE.BufferAttribute(opos, 3));
-    og.setAttribute('uv', new THREE.BufferAttribute(ouv, 2));
-    og.setAttribute('tint', new THREE.BufferAttribute(ocol, 4));
-    og.setDrawRange(0, on);
-    const outline = new THREE.Mesh(og, pink);
-    outline.frustumCulled = false;
-    this.uiRoot.add(outline);
+    mesh.renderOrder = 1;
+    this.laneUi.add(mesh);
   }
 
   /** Lane / darkness / grid / startZ from RhythmGameOptionValue (excl. judgement). */
