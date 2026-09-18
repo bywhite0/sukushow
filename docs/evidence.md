@@ -42,7 +42,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **暗色分数**：`UpdateScore` 用 `num_score_11` / `num_score_12` 换精灵，不是 opacity；开局 `Clear()` 时 12 位与逗号全暗。
 - **Combo 阈值 10**：`UpdateCombo` 在 combo < 10 时不显示数字；COMBO 标签与 APRate 徽章由 `UpdateApRate`（apRate >= 1）显隐。
 - **判定字**：寿命 0.7 s 硬切（无淡出）；缩放 `JudgementRectTween` 0.5->1 / 0.1 s；combo >= 10 时 `ComboRectTween` 0.8->1 / 0.1 s。
-- **AP/Voltage 环**：Scene Image 已证实为 Filled / Radial360 / fillOrigin Top / 逆时针；`ui_sc2_ingame_gage_base_02` 已补进复制清单。
+- **AP/Voltage 环**：level56 Image Filled / Radial360 / fillOrigin Top / fillClockwise=false；fillAmount=ApResolver 小数部（Voltage 为 CalcGauge）；CSS 对 gage img 做 from 0deg（正上方）逆时针 conic mask（度单位）。
 - **isAuto 死码**：4.12.0 `ScoreResolver.isAuto` 无置 true 写入，`autoSprite` 运行时不出现；AutoPlay 仍走常规判定精灵。
 - **P2 chrome**：GaugeRoot + RankLabels + RankRoot（开局 SetRankNotActive / D）；PauseButton（无 Pattern 花纹）；TechnicalScoreRoot 默认 `hidden`（TechnicalScoreDisplay 未提取）。
 - **TechnicalScoreDisplay**：侧栏「显示技术分」开关映射；默认关。
@@ -59,3 +59,4 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
 - **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。
+- **AP / Voltage 实况**：ApResolver（StandardValue 600000 / AllNoteSize，Good=半额、Great+全额，×(1+apRate×0.1)）驱动 AP 整数与径向环；Voltage 点仅技能产，预览无卡组恒 0；Fever 翻倍 VL 已接线，谱面段落窗未接（IsFever 恒 false）；EnableFeverDisplay 门控两侧大特效（预览不做）。

@@ -159,6 +159,79 @@ export function technicalPercent(push: number): number {
   return push / 10000;
 }
 
+
+/** ApResolver.Scaler */
+export const AP_SCALER = 10_000;
+/** ApResolver.StandardValue — basePlus = STANDARD / AllNoteSize */
+export const AP_STANDARD_VALUE = 600_000;
+
+/** eps-ceiling used by ApResolver.Add (@0x4AFF0B4). */
+export function apCeilEps(g: number): number {
+  const t = Math.trunc(g);
+  return g - t >= 0.0001 ? Math.ceil(g) : t;
+}
+
+/**
+ * ApResolver.Add(type, rate): Miss/Bad no recover; Good → halfPlus; Great/P/PP → basePlus.
+ * g = b * (1 + rate * 0.1); ap += ceil_eps(g).
+ */
+export function apAddDelta(
+  type: NoteJudgementType,
+  apRate: number,
+  basePlus: number,
+  halfPlus: number,
+): number {
+  if (type <= 1) return 0;
+  const b = type === 2 ? halfPlus : basePlus;
+  return apCeilEps(b * (1 + apRate * 0.1));
+}
+
+/** Display: d = ap * 0.0001; integer = floor(d); gauge = fractional part. */
+export function apDisplay(ap: number): { value: number; gauge: number } {
+  const d = ap * 0.0001;
+  const value = Math.floor(d);
+  let gauge = d - value;
+  if (gauge < 0) gauge = 0;
+  if (gauge > 1) gauge = 1;
+  return { value, gauge };
+}
+
+/**
+ * VoltageResolver.CalcLevel(point).
+ * p>=2100 → floor((p-2100)*0.005)+20; else triangular: t=floor(p*0.1); smallest n with T_n>t, level=n-2.
+ */
+export function voltageCalcLevel(point: number): number {
+  const p = Math.max(0, point);
+  if (p >= 2100) return Math.floor((p - 2100) * 0.005) + 20;
+  const t = Math.floor(p * 0.1);
+  let n = 0;
+  // T_n = n(n+1)/2; find smallest n with T_n > t
+  while ((n * (n + 1)) / 2 <= t) n += 1;
+  return Math.max(0, n - 2);
+}
+
+/**
+ * VoltageResolver.CalcGauge(point, level) → 0..1 ring fill.
+ */
+export function voltageCalcGauge(point: number, level: number): number {
+  const p = Math.max(0, point);
+  const L = Math.max(0, level);
+  if (p >= 2100) {
+    const g = (p - 200 * L + 1900) * 0.005;
+    return Math.min(1, Math.max(0, g));
+  }
+  const denom = ((L + 2) * (L + 1) - (L + 1) * L) * 5;
+  if (denom <= 0) return 0;
+  const g = (p - (L + 1) * L * 5) / denom;
+  return Math.min(1, Math.max(0, g));
+}
+
+/** get_VoltageLevel = level << (fever ? 1 : 0) */
+export function voltageLevelDisplayed(level: number, isFever: boolean): number {
+  const L = Math.max(0, Math.trunc(level));
+  return isFever ? L << 1 : L;
+}
+
 export interface ScoreEngineConfig {
   totalAppeal: number;
   musicMasteryLevel: number;
@@ -178,10 +251,17 @@ export class ScoreEngine {
   combo = 0;
   userCombo = 0;
   apRate = 0;
+  /** ApResolver raw accumulator (Scaler 10000). */
+  apPoints = 0;
+  /** VoltageResolver.point — preview has no skills ⇒ stays 0. */
+  voltagePoints = 0;
   rank: ScoreRankId = 0;
   readonly judgements = [0, 0, 0, 0, 0, 0];
   private halfway = 0;
   private noteCount = 1;
+  private basePlus = AP_STANDARD_VALUE;
+  private halfPlus = AP_STANDARD_VALUE * 0.5;
+  private isFever = false;
   private cfg: ScoreEngineConfig;
 
   constructor(cfg: ScoreEngineConfig = DEFAULT_SCORE_CONFIG) {
@@ -203,14 +283,54 @@ export class ScoreEngine {
     this.combo = 0;
     this.userCombo = 0;
     this.apRate = 0;
+    this.apPoints = 0;
+    this.voltagePoints = 0;
     this.rank = 0;
     for (let i = 0; i < 6; i++) this.judgements[i] = 0;
     this.noteCount = chart ? chartAllNoteSize(chart) : 1;
+    this.basePlus = AP_STANDARD_VALUE / Math.max(1, this.noteCount);
+    this.halfPlus = this.basePlus * 0.5;
     this.halfway = halfwayScore(
       this.cfg.totalAppeal,
       this.cfg.musicMasteryLevel,
       this.noteCount,
     );
+  }
+
+  setFever(on: boolean): void {
+    this.isFever = on;
+  }
+
+  get feverActive(): boolean {
+    return this.isFever;
+  }
+
+  /** VoltageResolver level before Fever doubling. */
+  get voltageBaseLevel(): number {
+    return voltageCalcLevel(this.voltagePoints);
+  }
+
+  /** Displayed VoltageLevel (Fever doubles). Also drives score CalcAdd when wired via cfg. */
+  get voltageLevel(): number {
+    return voltageLevelDisplayed(this.voltageBaseLevel, this.isFever);
+  }
+
+  get apDisplayValue(): number {
+    return apDisplay(this.apPoints).value;
+  }
+
+  get apGauge(): number {
+    return apDisplay(this.apPoints).gauge;
+  }
+
+  get voltageGauge(): number {
+    return voltageCalcGauge(this.voltagePoints, this.voltageBaseLevel);
+  }
+
+  /** Skill-only in original; preview may call for tests. */
+  addVoltagePoints(delta: number): void {
+    this.voltagePoints = Math.max(0, this.voltagePoints + delta);
+    this.cfg.voltageLevel = this.voltageLevel;
   }
 
   get allNoteSize(): number {
@@ -232,14 +352,15 @@ export class ScoreEngine {
     if (type === 1) {
       this.combo = 0;
       this.apRate = 0;
-      if (mentalAlive) this.score += calcAdd(this.halfway, type, this.cfg.voltageLevel);
+      if (mentalAlive) this.score += calcAdd(this.halfway, type, this.voltageLevel);
       this.rank = getScoreRank(this.score, this.cfg.rankValues);
       return;
     }
     this.combo += 1;
     if (this.userCombo < this.combo) this.userCombo = this.combo;
-    if (mentalAlive) this.score += calcAdd(this.halfway, type, this.cfg.voltageLevel);
+    if (mentalAlive) this.score += calcAdd(this.halfway, type, this.voltageLevel);
     this.apRate = Math.min(Math.max(this.apRate, Math.trunc(this.combo * 0.1)), 5);
+    this.apPoints += apAddDelta(type, this.apRate, this.basePlus, this.halfPlus);
     this.rank = getScoreRank(this.score, this.cfg.rankValues);
   }
 

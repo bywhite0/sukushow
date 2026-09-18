@@ -70,8 +70,17 @@
 .hud-ap-value.is-vo{color:#ff574c}
 .hud-disc.is-missing{border-radius:50%;background:rgba(8,18,36,.45);box-shadow:inset 0 0 0 7px rgba(255,255,255,.28)}
 .hud-base02{z-index:1}
-/* Scene Image Filled / Radial360 / fillOrigin Top / counterclockwise / fillAmount 1. Placeholder keeps fill hidden. */
-.hud-gage{z-index:2;opacity:0}
+/* Image.Type.Filled / Radial360 / fillOrigin Top / fillClockwise=false.
+   --fill 0..1 = Image.fillAmount. CSS conic 0deg = top (Unity fillOrigin Top); fillClockwise=false via transparent-first then opaque sweep. */
+.hud-gage{z-index:2;opacity:1;overflow:hidden}
+.hud-gage > img{
+  -webkit-mask-image:conic-gradient(from 0deg at 50% 50%, transparent 0deg, transparent calc((1 - var(--fill, 0)) * 360deg), #fff calc((1 - var(--fill, 0)) * 360deg), #fff 360deg);
+  mask-image:conic-gradient(from 0deg at 50% 50%, transparent 0deg, transparent calc((1 - var(--fill, 0)) * 360deg), #fff calc((1 - var(--fill, 0)) * 360deg), #fff 360deg);
+  -webkit-mask-size:100% 100%;
+  mask-size:100% 100%;
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+}
 .hud-ap-label,.hud-ap-value{z-index:2}
 .hud-mental{position:absolute;right:100px;top:50px;width:400px;height:80px;border-radius:40px;background:rgba(0,0,0,.302);box-shadow:inset 0 0 0 2px #1debc7;color:#fff;font-size:24px;font-weight:700}
 .hud-mental-label{color:#fff}

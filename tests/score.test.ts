@@ -11,6 +11,11 @@ import {
   technicalPercent,
   technicalPushValue,
   technicalRaw,
+  apAddDelta,
+  apDisplay,
+  voltageCalcLevel,
+  voltageCalcGauge,
+  voltageLevelDisplayed,
 } from '../src/score';
 
 describe('score math', () => {
@@ -79,5 +84,45 @@ describe('ScoreEngine', () => {
     expect(eng.combo).toBe(200);
     expect(eng.score).toBeGreaterThan(0);
     expect(eng.rank).toBeGreaterThanOrEqual(0);
+  });
+});
+
+
+describe('ApResolver / Voltage', () => {
+  it('apDisplay splits integer and fractional gauge', () => {
+    expect(apDisplay(0)).toEqual({ value: 0, gauge: 0 });
+    expect(apDisplay(15_000).value).toBe(1);
+    expect(apDisplay(15_000).gauge).toBeCloseTo(0.5, 5);
+  });
+
+  it('apAddDelta skips Miss/Bad; Good uses halfPlus', () => {
+    const base = 6000;
+    const half = 3000;
+    expect(apAddDelta(0, 0, base, half)).toBe(0);
+    expect(apAddDelta(1, 5, base, half)).toBe(0);
+    expect(apAddDelta(2, 0, base, half)).toBe(3000);
+    expect(apAddDelta(4, 0, base, half)).toBe(6000);
+    expect(apAddDelta(4, 5, base, half)).toBe(9000);
+  });
+
+  it('voltage level / gauge / fever doubling', () => {
+    expect(voltageCalcLevel(0)).toBe(0);
+    expect(voltageCalcLevel(2100)).toBe(20);
+    expect(voltageLevelDisplayed(3, false)).toBe(3);
+    expect(voltageLevelDisplayed(3, true)).toBe(6);
+    expect(voltageCalcGauge(0, 0)).toBe(0);
+  });
+
+  it('ScoreEngine accumulates AP on hits; Voltage stays 0 without skills', () => {
+    const eng = new ScoreEngine();
+    eng.reset(null);
+    eng.addMany(4, 10);
+    expect(eng.apPoints).toBeGreaterThan(0);
+    expect(eng.voltagePoints).toBe(0);
+    expect(eng.voltageLevel).toBe(0);
+    eng.setFever(true);
+    expect(eng.voltageLevel).toBe(0);
+    eng.addVoltagePoints(50);
+    expect(eng.voltageLevel).toBe(eng.voltageBaseLevel << 1);
   });
 });
