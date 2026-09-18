@@ -16,8 +16,8 @@
 
 ## 预览皮肤 / FX
 
-- 预览侧栏「击中特效」`hitEffect`（非原版 RhythmGameOption）：`current`=直冲天上（不接 LimitVelocity，默认），`limited`=限速，`off`=关闭；后续可再加深 Trail/模块，技能相关不做。
-- HitFx 预览选项：`current`=不接 LimitVelocity（Cone `rotx=-90`→+Y 冲天，startSpeed 可达 40–80）；`limited`=接 `ps.limit`（|v|→limit.speed≈1 + dampen）；`off`=关闭。
+- 预览侧栏「击中特效」`hitEffect`（非原版 RhythmGameOption）：`current`=直冲天上（不接 LimitVelocity，默认），`limited`=限速，`full`=加深（限速+rotol；Trail 仅 trail.en），`off`=关闭。
+- HitFx：`limited`/`full` 接 LimitVelocity；`full` 另接 RotationOverLifetime 与 Trail 丝带近似（仅 `trail.en`；打击 prefab 多为 false）。
 
 
 - 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。

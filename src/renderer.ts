@@ -106,7 +106,7 @@ export class PreviewRenderer {
   private gridCountOpt = 0;
   private laneDarknessOpt = 80;
   private fx: HitFx | null = null;
-  private hitEffectMode: 'off' | 'current' | 'limited' = 'current';
+  private hitEffectMode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private phase = new Map<number, number>();
   private observer: ResizeObserver;
   private disposed = false;
@@ -495,7 +495,7 @@ export class PreviewRenderer {
     this.uiRoot.scale.set(s, s, 1);
   }
 
-  setHitEffectMode(mode: 'off' | 'current' | 'limited') {
+  setHitEffectMode(mode: 'off' | 'current' | 'limited' | 'full') {
     this.hitEffectMode = mode;
     this.fx?.setMode(mode);
   }

@@ -21,6 +21,13 @@ export interface FxNode {
     sizeol?: { en: boolean; curve?: FxMM; y?: FxMM; sep?: boolean };
     /** LimitVelocityOverLifetime — clamps |v| toward speed with dampen. */
     limit?: { en: boolean; dampen: number; speed?: FxMM };
+    /** Rotation over Lifetime (rad/s); `curve` is Z / billboard spin when not sep. */
+    rotol?: { en: boolean; curve?: FxMM; sep?: boolean; x?: FxMM; y?: FxMM };
+    trail?: {
+      en: boolean; ratio: number; life?: FxMM; minVertexDist: number;
+      sizeWidth?: boolean; inheritColor?: boolean; width?: FxMM;
+      colMode?: number; colMax?: FxGrad; colMin?: FxGrad; colMaxA?: number;
+    };
   };
   rend?: { off?: boolean; mode: number; align: number; mat?: string; mesh?: string; sortOrder?: number };
 }
