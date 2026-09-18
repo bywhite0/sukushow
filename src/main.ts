@@ -15,7 +15,7 @@ app.innerHTML=`
 </section>
 <aside aria-label="预览设置">
  <section class="panel"><h2>打开你的谱面</h2><p>直接读取 llll 原始格式，<br>不转换轨道，不量化时间。</p><label class="file-button" for="chart-file">选择谱面文件<span>JSON / 解密后的 .bytes</span></label><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes"><label class="audio-button" for="audio-file">＋ 添加本地音频</label><input class="sr-only" id="audio-file" type="file" accept="audio/*"><p class="file-name" id="audio-name">未加载音频 · 可以无声预览</p><button id="demo" class="text-button">重新打开演示谱</button></section>
- <section class="panel"><h2>轨道与播放</h2><label class="setting" for="speed"><span>下落速度<output id="speed-value">6.0</output></span><input id="speed" type="range" min="1" max="15" step="0.1" value="6"></label><label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label><label class="setting" for="volume"><span>音量</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.7"></label><label class="check"><input id="mirror" type="checkbox">左右镜像</label><label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label><label class="setting" for="rank-preview"><span>段位预览</span><select id="rank-preview"><option value="none" selected>未激活</option><option value="D">D</option><option value="C">C</option><option value="B">B</option><option value="A">A</option><option value="S">S</option></select></label><label class="setting" for="tech-score"><span>技术分显示</span><select id="tech-score"><option value="0" selected>关闭</option><option value="1">实时</option><option value="2">预估全 PP</option></select></label></section>
+ <section class="panel"><h2>轨道与播放</h2><label class="setting" for="speed"><span>下落速度<output id="speed-value">6.0</output></span><input id="speed" type="range" min="1" max="15" step="0.1" value="6"></label><label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label><label class="setting" for="volume"><span>音量</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.7"></label><label class="check"><input id="mirror" type="checkbox">左右镜像</label><label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label><label class="check"><input id="opt-perfect-plus" type="checkbox">Perfect+ 判定显示</label><label class="setting" for="opt-judgement-output"><span>判定字输出</span><select id="opt-judgement-output"><option value="0" selected>全部</option><option value="1">Perfect+ 以下</option><option value="2">Perfect 以下</option><option value="3">Great 以下</option><option value="4">Good 以下</option><option value="5">Bad 以下</option><option value="6">Miss 以下</option></select></label><label class="setting" for="opt-fast-slow"><span>FAST/SLOW 显示</span><select id="opt-fast-slow"><option value="0" selected>关闭</option><option value="1">Great 以下</option><option value="2">Perfect 以下</option></select></label><label class="setting" for="rank-preview"><span>段位预览</span><select id="rank-preview"><option value="none" selected>未激活</option><option value="D">D</option><option value="C">C</option><option value="B">B</option><option value="A">A</option><option value="S">S</option></select></label><label class="setting" for="tech-score"><span>技术分显示</span><select id="tech-score"><option value="0" selected>关闭</option><option value="1">实时</option><option value="2">预估全 PP</option></select></label></section>
  <section class="panel note-key"><h2>音符说明</h2><div><span class="key pink">━</span>Single <span class="key cyan">━</span>Hold</div><div><span class="key pink">⌃</span>Flick <span class="key cyan">◆</span>Trace</div><p id="counts"></p></section>
 </aside>
 </main><div id="message" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div><footer><span>基于原始谱面与已核验的空间数学</span><span>空格 播放 / 暂停 · ← → 跳转 5 秒</span></footer>`;
@@ -49,6 +49,18 @@ document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('in
 const hud=new LiveHud(el('stage'));
 const applyTechScore=()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);hud.setTechnicalScoreDisplay((v===1||v===2?v:0) as 0|1|2);};
 el<HTMLSelectElement>('tech-score').onchange=applyTechScore;applyTechScore();
+const applyHudOptions=()=>{
+ hud.setEnablePerfectPlus(el<HTMLInputElement>('opt-perfect-plus').checked);
+ const jo=Number(el<HTMLSelectElement>('opt-judgement-output').value);
+ hud.setJudgementOutput((jo>=0&&jo<=6?jo:0) as 0|1|2|3|4|5|6);
+ const fs=Number(el<HTMLSelectElement>('opt-fast-slow').value);
+ hud.setFastSlowThreshold((fs===1||fs===2?fs:0) as 0|1|2);
+};
+el<HTMLInputElement>('opt-perfect-plus').onchange=applyHudOptions;
+el<HTMLSelectElement>('opt-judgement-output').onchange=applyHudOptions;
+el<HTMLSelectElement>('opt-fast-slow').onchange=applyHudOptions;
+applyHudOptions();
+
 const applyRank=()=>{const v=el<HTMLSelectElement>('rank-preview').value;hud.setRank((v==='D'||v==='C'||v==='B'||v==='A'||v==='S'?v:'none') as 'none'|'D'|'C'|'B'|'A'|'S');};
 el<HTMLSelectElement>('rank-preview').onchange=applyRank;applyRank();
 let frame=0;
