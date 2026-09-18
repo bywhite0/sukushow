@@ -51,6 +51,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **RankRoot shine/deco **: White->Gray/RankColor; Shine a.2, Deco01/02 a.8; setRank(none|D|C|B|A|S); inactive=SetRankNotActive. Material tints D/C/B/A solid, S gradient. Sidebar rank preview.
 - **Rank hex clip**: icon + fill layers mask to ui_sc2_button_rank so shine/deco stay inside hex.
 - **用户设置默认值（4.12.0）**：`RhythmGameOptionValue..ctor` @0x44A2C2C 取各 `OptionRange.First`——`EnablePerfectPlus=false`；`EnableFastSlow/FastSlowThreshold=0`(Off, range 0..2)；`JudgementOutput=0`(All, range 0..6)；`TechnicalScoreDisplayType=0`(Off, range 0..2)。侧栏「Perfect+ / 判定字输出 / FAST·SLOW」已接；判定显示门控 `type < 6-opt`；AutoPlay 在 PP 开启时用 `hantei_perfect_plus`。
-- **计分/段位**：`src/score.ts` 按 ScoreResolver——`halfwayScore=Appeal×(1+专精×0.01)/AllNoteSize`，`CalcAdd=ceil(halfway×factor×(1+VL×0.1))`，factor Bad5…PP35；`GetScoreRank` 降序 [S,A,B,C]；槽位填充 (0,0)/(C,.409)/(B,.587)/(A,.773)/(S,.912)/(1.5S,1)；RankLabels dump xs [17,76,137,183]（相对比例约偏 2px，按 dump）。预览 AllNoteSize=`notes.length`（与 countHeads 一致）。默认 Appeal 350000、界值 1千万/500万/150万/50万。技术分权重 20/50/90/100/101，侧栏三态推送 raw/N×10000。
+- **计分/段位**：`src/score.ts` 按 ScoreResolver——`halfwayScore=Appeal×(1+熟练度等级×0.01)/AllNoteSize`，`CalcAdd=ceil(halfway×factor×(1+VL×0.1))`，factor Bad5…PP35；`GetScoreRank` 降序 [S,A,B,C]；槽位填充 (0,0)/(C,.409)/(B,.587)/(A,.773)/(S,.912)/(1.5S,1)；RankLabels dump xs [17,76,137,183]（相对比例约偏 2px，按 dump）。预览 AllNoteSize=`notes.length`（与 countHeads 一致）。默认 Appeal 350000、界值 1千万/500万/150万/50万。技术分权重 20/50/90/100/101，侧栏三态推送 raw/N×10000。
+- **侧栏计分配置**：TotalAppeal + 熟练度等级（MusicMasteryLevel，默认 0）。
 - **Rank/gauge fix**: score>0 且未达 C → 显示 D（Clear 仍 none）；槽位填充结 S=0.912（非 1.0），与 RankLabels 对齐。
-- **TMP SDF 描边像素宽**：`src/tmpOutline.ts` — `cssPx = OutlineWidth × ScaleRatioA × GradientScale × (fontSize/pointSize)`；Rodin SDF pointSize=32、GradientScale=5、atlasPadding=4。ScoreLabel/AP/Voltage 标签 1.0；RankLetter 1.4；Mental/Tech 标签 1.2；AP/Voltage 数值 OutLineWhite 1.3（0.319×0.8×5）。RankLetter 去掉四向 text-shadow 叠描边。
+- **TMP SDF 描边**：双层 .hud-ol / .hud-face 同尺寸对齐；**整层** scale(0.92)（避免字面单独缩放造成描边双侧偏移）；underlayer stroke 2×outlinePx。
+- **JudgeRoot/Condition**：(0, FastSlowY→−210±) 180×64；精灵 hantei_fast/slow/flick；与判定字同 0.7 s 硬切 + 0.5→1 缓出。ToCondition(diff==0)⇒Slow；shouldShowFastSlow 门控（Off 永不；UnderGreat type≤3；UnderPerfect type≤4）。AutoPlay 精确过线在 UnderPerfect 下显示 SLOW。
+- **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
+- **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
+- **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。
