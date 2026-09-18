@@ -1,5 +1,12 @@
 import type { Chart, Note } from './chart';
 import {
+  DEFAULT_SCORE_CONFIG,
+  ScoreEngine,
+  scoreRankDisplay,
+  technicalPercent,
+  type ScoreEngineConfig,
+} from './score';
+import {
   RG_OPTION_DEFAULTS,
   autoPlayJudgementType,
   judgementSprite,
@@ -147,6 +154,12 @@ export class LiveHud {
   private readonly apRateBadge: HTMLElement;
   private readonly apRateValue: HTMLElement;
   private readonly techRoot: HTMLElement;
+  private readonly scoreDigits: HTMLElement[] = [];
+  private readonly scoreCommas: HTMLElement[] = [];
+  private gaugeFillEl: HTMLElement | null = null;
+  private readonly scoreEngine = new ScoreEngine(DEFAULT_SCORE_CONFIG);
+  private techDisplayMode: 0 | 1 | 2 = 0;
+  private rankManual = false;
   private rankColorEl: HTMLElement | null = null;
   private rankNameEl: HTMLElement | null = null;
   private rankGrayEl: HTMLElement | null = null;
@@ -211,12 +224,18 @@ export class LiveHud {
     if (time - previousTime < SEEK_GAP) {
       const hits = countHeads(chart.notes, previousTime, time);
       if (hits > 0) {
-        this.combo += hits;
-        // apRate = min(max(apRate, (int)(combo*0.1)), 5); Miss/Bad clear is not modeled in preview.
-        this.apRate = Math.min(Math.max(this.apRate, Math.trunc(this.combo * 0.1)), 5);
+        const jType = autoPlayJudgementType(this.enablePerfectPlus);
+        this.scoreEngine.addMany(jType, hits);
+        this.combo = this.scoreEngine.combo;
+        this.apRate = this.scoreEngine.apRate;
         this.paintCombo();
         this.paintApRate();
-        const jType = autoPlayJudgementType(this.enablePerfectPlus);
+        this.paintScore();
+        this.paintGauge();
+        this.paintTechnicalFromEngine();
+        if (!this.rankManual) {
+          this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+        }
         if (shouldShowJudgement(jType, this.judgementOutput)) {
           this.applyJudgeSprite(jType);
           this.judgeAt = time;
@@ -238,12 +257,31 @@ export class LiveHud {
    * Preview has no scoring engine: mode 1 shows 0.0000%, mode 2 shows 101.0000% (all-PP ceiling).
    */
   setTechnicalScoreDisplay(mode: 0 | 1 | 2): void {
-    const on = mode !== 0;
-    this.techRoot.hidden = !on;
-    if (!on) return;
-    // Mode 2 = BuildJudgementsAssumingRemainingPerfectPlus → N*101/N = 101%.
-    const percent = mode === 2 ? 101 : 0;
-    this.paintTechnicalScore(percent);
+    this.techDisplayMode = mode;
+    this.techRoot.hidden = mode === 0;
+    this.paintTechnicalFromEngine();
+  }
+
+  /** TotalAppeal / mastery / rank thresholds for halfwayScore + GetScoreRank. */
+  setScoreConfig(partial: Partial<ScoreEngineConfig>): void {
+    this.scoreEngine.configure(partial);
+    if (this.chart) this.scoreEngine.reset(this.chart);
+    this.combo = this.scoreEngine.combo;
+    this.apRate = this.scoreEngine.apRate;
+    this.paintScore();
+    this.paintGauge();
+    if (!this.rankManual) this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+    this.paintTechnicalFromEngine();
+  }
+
+  private paintTechnicalFromEngine(): void {
+    if (this.techDisplayMode === 0) {
+      this.techRoot.hidden = true;
+      return;
+    }
+    this.techRoot.hidden = false;
+    const push = this.scoreEngine.technicalPush(this.techDisplayMode);
+    this.paintTechnicalScore(technicalPercent(push));
   }
 
   private paintTechnicalScore(percent: number): void {
@@ -255,13 +293,19 @@ export class LiveHud {
 
   private resetLive(time: number): void {
     this.previousTime = time;
+    this.scoreEngine.reset(this.chart);
     this.combo = 0;
     this.apRate = 0;
     this.judgeAt = -1;
     this.comboBounceAt = -1;
     this.comboRow.style.transform = '';
+    this.rankManual = false;
     this.paintCombo();
     this.paintApRate();
+    this.paintScore();
+    this.paintGauge();
+    this.setRank('none');
+    this.paintTechnicalFromEngine();
     this.paintJudge(time);
   }
 
@@ -358,11 +402,14 @@ export class LiveHud {
     place(strip, 512, 160, 0.5, 0.5, 0.5, 0.5, 45.8, -47, 300, 40);
     // Clear()/UpdateScore(0): all twelve digits = num_score_11, commas = num_score_12. No opacity dimming.
     const score = 0;
+    this.scoreDigits.length = 0;
+    this.scoreCommas.length = 0;
     for (let i = 0; i < SCORE_DIGIT_X.length; i++) {
       const slot = document.createElement('div');
       slot.className = 'hud-sdigit';
       place(slot, 300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_DIGIT_X[i], 0, 32, 40);
       mountSprite(slot, scoreDigitSprite(score, i), '0');
+      this.scoreDigits.push(slot);
       strip.append(slot);
     }
     for (let i = 0; i < SCORE_COMMA_X.length; i++) {
@@ -370,6 +417,7 @@ export class LiveHud {
       slot.className = 'hud-scomma';
       place(slot, 300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_COMMA_X[i], 0, 32, 40);
       mountSprite(slot, scoreCommaSprite(score, i), ',');
+      this.scoreCommas.push(slot);
       strip.append(slot);
     }
     this.buildGauge(root);
@@ -388,14 +436,16 @@ export class LiveHud {
     place(slider, 400, 48, 0.5, 0.5, 0.5, 0.5, 15, 0, 330, 16);
     const fill = document.createElement('div');
     fill.className = 'hud-gauge-fill';
-    // score 0 ⇒ fill 0 (Clear). Piecewise map unused until a live score exists.
+    // score 0 ⇒ fill 0 (Clear). Live width from scoreGaugeFill piecewise map.
     fill.style.width = '0%';
+    this.gaugeFillEl = fill;
     slider.append(fill);
     gauge.append(slider);
     scoreRoot.append(gauge);
   }
 
   private buildRankLabels(scoreRoot: HTMLElement): void {
+    // Dump RankLabels xs (level56); ~2px off pure fill-knot math — keep dump.
     const xs = [17, 76, 137, 183];
     const letters = ['C', 'B', 'A', 'S'];
     for (let i = 0; i < xs.length; i++) {
@@ -485,6 +535,12 @@ export class LiveHud {
    * ScoreRankIcon preview: `none` = SetRankNotActive (gray only).
    * D/C/B/A/S shows RankColor + shine/deco + RankName (material solid/gradient tint).
    */
+  /** Sidebar preview pins rank until chart seek/reset. */
+  setRankManual(rank: 'none' | 'D' | 'C' | 'B' | 'A' | 'S'): void {
+    this.rankManual = true;
+    this.setRank(rank);
+  }
+
   setRank(rank: 'none' | 'D' | 'C' | 'B' | 'A' | 'S'): void {
     const color = this.rankColorEl;
     const name = this.rankNameEl;
@@ -589,6 +645,27 @@ export class LiveHud {
     this.judge.style.width = `${w}px`;
     place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, -270, w, 80);
     mountSprite(this.judge, name, fallback);
+  }
+
+
+  private paintScore(): void {
+    const score = this.scoreEngine.score;
+    for (let i = 0; i < this.scoreDigits.length; i++) {
+      const slot = this.scoreDigits[i];
+      while (slot.firstChild) slot.removeChild(slot.firstChild);
+      mountSprite(slot, scoreDigitSprite(score, i), '0');
+    }
+    for (let i = 0; i < this.scoreCommas.length; i++) {
+      const slot = this.scoreCommas[i];
+      while (slot.firstChild) slot.removeChild(slot.firstChild);
+      mountSprite(slot, scoreCommaSprite(score, i), ',');
+    }
+  }
+
+  private paintGauge(): void {
+    if (!this.gaugeFillEl) return;
+    const fill = this.scoreEngine.gaugeFill();
+    this.gaugeFillEl.style.width = `${Math.max(0, Math.min(1, fill)) * 100}%`;
   }
 
   private buildJudge(safe: HTMLElement): HTMLElement {
