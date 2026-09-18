@@ -17,7 +17,7 @@
 ## 预览皮肤 / FX
 
 - 预览侧栏「击中特效」`hitEffect`（非原版 RhythmGameOption）：`current`=直冲天上（不限速，但带 rotol+软拖尾），`limited`=限速，`full`=加深（限速+rotol+拖尾），`off`=关闭。
-- HitFx：`limited`/`full` 接 LimitVelocity；`current`/`full` 接 rotol + 拖尾（trail.en 或 limit 喷雾软拖尾）。
+- HitFx：`limited`/`full` 接 LimitVelocity，`v(t)=lim+(v0−lim)e^(−κt)`、`κ=−ln(1−dampen)×50`（BannerFxMath）；先积分再限速以免出生帧被刹死；`current`/`full` 接 rotol + 拖尾。
 
 
 - 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。

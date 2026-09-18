@@ -482,18 +482,21 @@ export class HitFx {
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
-        // LimitVelocityOverLifetime: limited + full (current keeps 直冲天上).
+        if ((this.mode === 'full' || this.mode === 'current') && s.omega) s.spin += s.omega * dt;
+        // Integrate before LimitVelocity so the birth frame keeps startSpeed punch.
+        s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+        // LimitVelocity: v(t)=lim+(v0−lim)e^(−κt), κ=−ln(1−dampen)×50 (BannerFxMath / PLAN).
         if ((this.mode === 'limited' || this.mode === 'full') && s.limitEn) {
           const sp = Math.hypot(s.vx, s.vy, s.vz);
           const lim = Math.max(0, s.limitSpeed);
           if (sp > lim && sp > 1e-8) {
-            const k = Math.min(1, Math.max(0, s.limitDamp));
-            const scale = (1 - k) + k * (lim / sp);
+            const damp = Math.min(0.999999, Math.max(0, s.limitDamp));
+            const kappa = -Math.log(1 - damp) * 50;
+            const next = lim + (sp - lim) * Math.exp(-kappa * dt);
+            const scale = next / sp;
             s.vx *= scale; s.vy *= scale; s.vz *= scale;
           }
         }
-        if ((this.mode === 'full' || this.mode === 'current') && s.omega) s.spin += s.omega * dt;
-        s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
         if ((this.mode === 'full' || this.mode === 'current') && s.trailEn) {
           const last = s.trail[s.trail.length - 1];
           const dist = last ? Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) : 1e9;
