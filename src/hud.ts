@@ -185,6 +185,25 @@ export function formatTechnicalScore(percent: number): { whole: string; frac: st
   return { whole, frac: `${frac} %` };
 }
 
+
+/** Face on top + outline clone underneath. Stroke on the underlayer only (2× outlinePx)
+ *  so the face keeps Rodin weight while the visible ring matches TMP band width. */
+function mountOutlinedText(host: HTMLElement, text: string, asHtml = false): void {
+  const ol = document.createElement('span');
+  ol.className = 'hud-ol';
+  ol.setAttribute('aria-hidden', 'true');
+  const face = document.createElement('span');
+  face.className = 'hud-face';
+  if (asHtml) {
+    ol.innerHTML = text;
+    face.innerHTML = text;
+  } else {
+    ol.textContent = text;
+    face.textContent = text;
+  }
+  host.replaceChildren(ol, face);
+}
+
 export class LiveHud {
   private readonly stage: HTMLElement;
   private readonly root: HTMLElement;
@@ -436,7 +455,7 @@ export class LiveHud {
     root.className = 'hud-score';
     const label = document.createElement('div');
     label.className = 'hud-score-label';
-    label.textContent = 'SCORE';
+    mountOutlinedText(label, 'SCORE');
     place(label, 512, 160, 0.5, 0.5, 0.5, 0.5, -80, 20, 120, 40);
     const strip = document.createElement('div');
     strip.className = 'hud-score-strip';
@@ -495,7 +514,7 @@ export class LiveHud {
       place(line, 512, 160, 0.5, 0.5, 0.5, 0.5, xs[i], -5, 4, 30);
       const letter = document.createElement('div');
       letter.className = 'hud-rank-letter';
-      letter.textContent = letters[i];
+      mountOutlinedText(letter, letters[i]);
       place(letter, 512, 160, 0.5, 0.5, 0.5, 0.5, xs[i], 16, 60, 40);
       scoreRoot.append(line, letter);
     }
@@ -649,7 +668,7 @@ export class LiveHud {
     root.hidden = true;
     const label = document.createElement('div');
     label.className = 'hud-tech-label';
-    label.innerHTML = 'TECHNICAL<br>SCORE';
+    mountOutlinedText(label, 'TECHNICAL<br>SCORE', true);
     const value = document.createElement('div');
     value.className = 'hud-tech-value';
     const formatted = formatTechnicalScore(0);
@@ -813,7 +832,7 @@ export class LiveHud {
     const label = (text: string, x: number, y: number, w: number, className: string) => {
       const node = document.createElement('div');
       node.className = className;
-      node.textContent = text;
+      mountOutlinedText(node, text);
       place(node, 320, 160, 0.5, 0.5, 0.5, 0.5, x, y, w, 40);
       root.append(node);
     };
@@ -831,7 +850,8 @@ export class LiveHud {
     const text = (content: string, className: string, x: number, w: number) => {
       const node = document.createElement('div');
       node.className = className;
-      node.textContent = content;
+      if (className.includes('hud-mental-label')) mountOutlinedText(node, content);
+      else node.textContent = content;
       place(node, 400, 80, 0.5, 0.5, 0.5, 0.5, x, 16, w, 40);
       root.append(node);
     };
