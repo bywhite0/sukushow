@@ -78,6 +78,7 @@ function place(
 // Missing /rg sprites must not throw. Text fallback stays up until the image loads;
 // a 404 removes the image and keeps the fallback (or a CSS disc for empty bases).
 function mountSprite(host: HTMLElement, name: string, fallback: string): void {
+  host.dataset.sprite = name;
   const text = document.createElement('span');
   text.className = 'hud-fb';
   text.textContent = fallback;
@@ -106,6 +107,41 @@ function mountSprite(host: HTMLElement, name: string, fallback: string): void {
     if (img.naturalWidth > 0) reveal();
     else fail();
   }
+}
+
+/** Swap sprite in place — used by live score digits to avoid clear+remount flicker. */
+function setSprite(host: HTMLElement, name: string, fallback: string): void {
+  if (host.dataset.sprite === name) return;
+  const img = host.querySelector(':scope > img') as HTMLImageElement | null;
+  if (!img) {
+    while (host.firstChild) host.removeChild(host.firstChild);
+    host.classList.remove('is-missing');
+    mountSprite(host, name, fallback);
+    return;
+  }
+  host.dataset.sprite = name;
+  host.classList.remove('is-missing');
+  const url = spriteUrl(name);
+  // Keep the previous frame visible; cached same-origin sprites usually complete sync.
+  const onLoad = () => {
+    img.hidden = false;
+    host.querySelector(':scope > .hud-fb')?.remove();
+  };
+  img.onload = onLoad;
+  img.onerror = () => {
+    img.remove();
+    host.classList.add('is-missing');
+    let text = host.querySelector(':scope > .hud-fb') as HTMLElement | null;
+    if (!text) {
+      text = document.createElement('span');
+      text.className = 'hud-fb';
+      host.append(text);
+    }
+    text.textContent = fallback;
+    text.hidden = fallback.length === 0;
+  };
+  img.src = url;
+  if (img.complete && img.naturalWidth > 0) onLoad();
 }
 
 function countHeads(notes: readonly Note[], previousTime: number, time: number): number {
@@ -651,14 +687,10 @@ export class LiveHud {
   private paintScore(): void {
     const score = this.scoreEngine.score;
     for (let i = 0; i < this.scoreDigits.length; i++) {
-      const slot = this.scoreDigits[i];
-      while (slot.firstChild) slot.removeChild(slot.firstChild);
-      mountSprite(slot, scoreDigitSprite(score, i), '0');
+      setSprite(this.scoreDigits[i], scoreDigitSprite(score, i), '0');
     }
     for (let i = 0; i < this.scoreCommas.length; i++) {
-      const slot = this.scoreCommas[i];
-      while (slot.firstChild) slot.removeChild(slot.firstChild);
-      mountSprite(slot, scoreCommaSprite(score, i), ',');
+      setSprite(this.scoreCommas[i], scoreCommaSprite(score, i), ',');
     }
   }
 

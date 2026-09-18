@@ -36,6 +36,7 @@ export const DEFAULT_SCORE_RANK_VALUES: readonly [number, number, number, number
 
 /** Play-test style appeal so full-PP charts can leave D and climb ranks. */
 export const DEFAULT_TOTAL_APPEAL = 350_000;
+/** 曲目熟练度等级（マスタリー / MusicMasteryLevel）；公式里按 ×0.01 加成。 */
 export const DEFAULT_MUSIC_MASTERY_LEVEL = 0;
 
 export function chartAllNoteSize(chart: Chart): number {
