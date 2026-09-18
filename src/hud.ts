@@ -9,12 +9,16 @@ import {
 } from './score';
 import {
   RG_OPTION_DEFAULTS,
+  autoPlayConditionType,
   autoPlayJudgementType,
+  conditionSprite,
   judgementLayoutY,
   judgementSprite,
+  shouldShowFastSlow,
   shouldShowJudgement,
   type FastSlowOption,
   type JudgementOutputOption,
+  type NoteConditionType,
   type NoteJudgementType,
 } from './rgOptions';
 
@@ -230,6 +234,8 @@ export class LiveHud {
   private combo = 0;
   private apRate = 0;
   private judgeAt = -1;
+  private conditionAt = -1;
+  private conditionEl: HTMLElement | null = null;
   private enablePerfectPlus: boolean = RG_OPTION_DEFAULTS.enablePerfectPlus;
   private judgementYOpt = RG_OPTION_DEFAULTS.judgementY;
   private fastSlowYOpt = RG_OPTION_DEFAULTS.fastSlowY;
@@ -303,10 +309,16 @@ export class LiveHud {
           this.applyJudgeSprite(jType);
           this.judgeAt = time;
         }
+        // ToCondition(diff==0) ⇒ Slow; Score.Add zeros condition when FastSlow gate fails.
+        if (shouldShowFastSlow(jType, this.fastSlowThreshold)) {
+          this.applyConditionSprite(autoPlayConditionType());
+          this.conditionAt = time;
+        }
         if (this.combo >= 10) this.comboBounceAt = time;
       }
     }
     this.paintJudge(time);
+    this.paintCondition(time);
     this.paintComboBounce(time);
   }
 
@@ -360,6 +372,7 @@ export class LiveHud {
     this.combo = 0;
     this.apRate = 0;
     this.judgeAt = -1;
+    this.conditionAt = -1;
     this.comboBounceAt = -1;
     this.comboRow.style.transform = '';
     this.rankManual = false;
@@ -688,7 +701,7 @@ export class LiveHud {
     this.judgementOutput = opt;
   }
 
-  /** ConfigResolver.FastSlowThreshold — gates Condition FAST/SLOW (chrome TBD). */
+  /** ConfigResolver.FastSlowThreshold — gates Condition FAST/SLOW. */
   setFastSlowThreshold(opt: FastSlowOption): void {
     this.fastSlowThreshold = opt;
   }
@@ -700,7 +713,7 @@ export class LiveHud {
 
   setFastSlowY(opt: number): void {
     this.fastSlowYOpt = opt;
-    // Condition chrome TBD — store for when FAST/SLOW nodes exist.
+    this.repositionCondition();
   }
 
   setEnableFeverDisplay(on: boolean): void {
@@ -717,6 +730,43 @@ export class LiveHud {
     if (this.judgePop) {
       place(this.judgePop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 340, 80);
     }
+  }
+
+  private repositionCondition(): void {
+    if (!this.conditionEl) return;
+    const y = judgementLayoutY(this.fastSlowYOpt, -210);
+    place(this.conditionEl, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 180, 64);
+  }
+
+  private applyConditionSprite(condition: NoteConditionType): void {
+    if (!this.conditionEl) return;
+    const spr = conditionSprite(condition);
+    if (!spr) {
+      this.conditionEl.style.visibility = 'hidden';
+      return;
+    }
+    mountSprite(this.conditionEl, spr.name, spr.fallback);
+  }
+
+  private paintCondition(time: number): void {
+    if (!this.conditionEl) return;
+    if (this.conditionAt < 0) {
+      this.conditionEl.style.visibility = 'hidden';
+      this.conditionEl.style.transform = '';
+      return;
+    }
+    const age = time - this.conditionAt;
+    if (age < 0 || age >= JUDGE_LIFE) {
+      this.conditionEl.style.visibility = 'hidden';
+      this.conditionEl.style.transform = '';
+      this.conditionAt = -1;
+      return;
+    }
+    this.conditionEl.style.visibility = 'visible';
+    // Same JudgementRectTween as Judge (0.5 → 1.0 over 0.1 s).
+    const u = Math.min(age, JUDGE_TWEEN) * (1 / JUDGE_TWEEN);
+    const scale = 0.5 + u - 0.5 * u * u;
+    this.conditionEl.style.transform = `scale(${scale})`;
   }
 
 
@@ -762,7 +812,14 @@ export class LiveHud {
     place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt, -270), 340, 80);
     mountSprite(pop, 'ui_sc2_ingame_hantei_perfect', 'PERFECT');
     pop.style.visibility = 'hidden';
-    root.append(pop);
+    // JudgeRoot/Condition (0, -210) 180×64; FastSlowY moves it; gated by FastSlowThreshold.
+    const cond = document.createElement('div');
+    cond.className = 'hud-condition';
+    this.conditionEl = cond;
+    place(cond, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.fastSlowYOpt, -210), 180, 64);
+    mountSprite(cond, 'ui_sc2_ingame_hantei_slow', 'SLOW');
+    cond.style.visibility = 'hidden';
+    root.append(pop, cond);
     safe.append(root);
     return pop;
   }

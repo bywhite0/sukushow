@@ -50,6 +50,7 @@
 .hud-fb{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
 .hud-sdigit .hud-fb,.hud-scomma .hud-fb{font-size:28px;font-variant-numeric:tabular-nums}
 .hud-judge{position:absolute;left:50%;top:50%;width:400px;height:400px;transform:translate(-50%,-50%);overflow:visible}
+.hud-condition{position:absolute;overflow:visible;pointer-events:none}
 .hud-perfect{transform-origin:center center}
 .hud-perfect .hud-fb{font-size:42px;letter-spacing:2px;color:#ffe14a}
 .hud-combo{position:absolute;right:0;top:50%;width:400px;height:320px;transform:translateY(calc(-50% - 160px));overflow:visible}
@@ -147,3 +148,4 @@
 }
 .stage canvas{position:relative;z-index:1;background:transparent}
 .stage .hud-stage,.stage .hud-root{position:relative;z-index:2}
+

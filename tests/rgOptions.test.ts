@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   RG_OPTION_DEFAULTS,
   RG_OPTION_RANGES,
+  autoPlayConditionType,
   autoPlayJudgementType,
+  conditionSprite,
   darknessAlpha,
   gridLaneCount,
   judgementLayoutY,
@@ -60,5 +62,12 @@ describe('rgOptions defaults (4.12.0 OptionRange.First)', () => {
     expect(shouldShowFastSlow(3, 1)).toBe(true);
     expect(shouldShowFastSlow(4, 1)).toBe(false);
     expect(shouldShowFastSlow(4, 2)).toBe(true);
+  });
+
+  it('AutoPlay exact timing maps to Slow condition', () => {
+    expect(autoPlayConditionType()).toBe(2);
+    expect(conditionSprite(0)).toBeNull();
+    expect(conditionSprite(2)?.name).toBe('ui_sc2_ingame_hantei_slow');
+    expect(conditionSprite(1)?.fallback).toBe('FAST');
   });
 });

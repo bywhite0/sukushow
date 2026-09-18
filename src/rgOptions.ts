@@ -155,3 +155,31 @@ export function shouldShowFastSlow(
   if (fastSlowThreshold === 1) return type <= 3;
   return type <= 4;
 }
+
+/** NoteConditionTypes: None=0, Fast=1, Slow=2, Flick=3 */
+export type NoteConditionType = 0 | 1 | 2 | 3;
+
+const CONDITION = [
+  null,
+  'ui_sc2_ingame_hantei_fast',
+  'ui_sc2_ingame_hantei_slow',
+  'ui_sc2_ingame_hantei_flick',
+] as const;
+
+const CONDITION_FB = ['', 'FAST', 'SLOW', 'FLICK'] as const;
+
+/**
+ * AutoPlay / exact timing: ToCondition(diff==0) ⇒ Slow (RHYTHM_GAME_ANALYSIS).
+ * Callers must still gate with shouldShowFastSlow; when gated off, use 0.
+ */
+export function autoPlayConditionType(): NoteConditionType {
+  return 2;
+}
+
+export function conditionSprite(
+  condition: NoteConditionType,
+): { name: string; fallback: string } | null {
+  if (condition === 0) return null;
+  const c = Math.max(1, Math.min(3, condition)) as 1 | 2 | 3;
+  return { name: CONDITION[c]!, fallback: CONDITION_FB[c] };
+}
