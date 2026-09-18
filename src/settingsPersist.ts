@@ -36,8 +36,8 @@ export type PreviewSettings = {
   rankPreview: 'none' | 'D' | 'C' | 'B' | 'A' | 'S';
   techScore: 0 | 1 | 2;
   rate: number;
-  /** Preview-only hit FX style. `current` = existing HitFx GPU-quad approx. */
-  hitEffect: 'off' | 'current';
+  /** Preview-only hit FX. `current` = 直冲天上 (no LimitVelocity); `limited` = with LimitVelocity. */
+  hitEffect: 'off' | 'current' | 'limited';
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -129,7 +129,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     rate: [0.5, 0.75, 1, 1.25, 1.5, 2].includes(num('rate', d.rate))
       ? num('rate', d.rate)
       : d.rate,
-    hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' ? o.hitEffect : d.hitEffect,
+    hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' || o.hitEffect === 'limited' ? o.hitEffect : d.hitEffect,
   };
 }
 

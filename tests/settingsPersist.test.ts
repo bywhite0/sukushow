@@ -54,6 +54,7 @@ describe('sanitizePreviewSettings', () => {
     expect(DEFAULT_PREVIEW_SETTINGS.speed).toBe(5);
     expect(DEFAULT_PREVIEW_SETTINGS.hitEffect).toBe('current');
     expect(sanitizePreviewSettings({ hitEffect: 'nope' }).hitEffect).toBe('current');
+    expect(sanitizePreviewSettings({ hitEffect: 'limited' }).hitEffect).toBe('limited');
   });
 });
 

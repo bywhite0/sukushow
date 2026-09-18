@@ -19,6 +19,8 @@ export interface FxNode {
     };
     col?: { en: boolean; mode: number; max?: FxGrad; min?: FxGrad };
     sizeol?: { en: boolean; curve?: FxMM; y?: FxMM; sep?: boolean };
+    /** LimitVelocityOverLifetime — clamps |v| toward speed with dampen. */
+    limit?: { en: boolean; dampen: number; speed?: FxMM };
   };
   rend?: { off?: boolean; mode: number; align: number; mat?: string; mesh?: string; sortOrder?: number };
 }
