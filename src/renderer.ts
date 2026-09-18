@@ -3,7 +3,13 @@ import type { Chart, Note } from './chart';
 import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';
-import { feverLineRgba } from './fever';
+import {
+  FEVER_MOVE_LENGTH,
+  feverLineRgba,
+  feverMoveLocalY,
+  feverMovePhase,
+  feverMoveRgba,
+} from './fever';
 import { loadRgLibrary, whiteTexture, type RgLibrary } from './rgAssets';
 import { planeMaterial, spriteMaterial } from './shaders';
 import {
@@ -112,6 +118,9 @@ export class PreviewRenderer {
   private feverStart = 0;
   private feverOutline: THREE.Mesh | null = null;
   private feverOutlineCol: THREE.BufferAttribute | null = null;
+  private feverMove: THREE.Mesh | null = null;
+  private feverMovePos: THREE.BufferAttribute | null = null;
+  private feverMoveCol: THREE.BufferAttribute | null = null;
   private phase = new Map<number, number>();
   private observer: ResizeObserver;
   private disposed = false;
@@ -256,6 +265,24 @@ export class PreviewRenderer {
     this.laneUi.add(feverOutline);
     this.feverOutline = feverOutline;
     this.feverOutlineCol = fog.getAttribute('tint') as THREE.BufferAttribute;
+
+    // LineMove L/R bright bars (sortingOrder 1000 equiv — above LineBase).
+    const mpos = new Float32Array(12 * 3), muv = new Float32Array(12 * 2), mcol = new Float32Array(12 * 4);
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(mpos, 3));
+    mg.setAttribute('uv', new THREE.BufferAttribute(muv, 2));
+    mg.setAttribute('tint', new THREE.BufferAttribute(mcol, 4));
+    mg.setDrawRange(0, 12);
+    const moveMat = spriteMaterial(this.white);
+    moveMat.depthWrite = false;
+    const feverMove = new THREE.Mesh(mg, moveMat);
+    feverMove.frustumCulled = false;
+    feverMove.renderOrder = 1;
+    feverMove.visible = false;
+    this.laneUi.add(feverMove);
+    this.feverMove = feverMove;
+    this.feverMovePos = mg.getAttribute('position') as THREE.BufferAttribute;
+    this.feverMoveCol = mg.getAttribute('tint') as THREE.BufferAttribute;
 
     const line = lib.sprites.sc2_ingame_tap_line;
     const meta = lib.meta.sc2_ingame_tap_line;
@@ -527,6 +554,7 @@ export class PreviewRenderer {
     const col = this.feverOutlineCol;
     if (!mesh || !col) return;
     mesh.visible = this.feverOn;
+    if (this.feverMove) this.feverMove.visible = this.feverOn;
     if (!this.feverOn) return;
     const rgba = feverLineRgba(time, this.feverStart);
     const arr = col.array as Float32Array;
@@ -534,6 +562,42 @@ export class PreviewRenderer {
       arr[i] = rgba[0]; arr[i + 1] = rgba[1]; arr[i + 2] = rgba[2]; arr[i + 3] = rgba[3];
     }
     col.needsUpdate = true;
+    this.paintFeverMove(time);
+  }
+
+  private paintFeverMove(time: number) {
+    const mesh = this.feverMove;
+    const pos = this.feverMovePos;
+    const col = this.feverMoveCol;
+    if (!mesh || !pos || !col) return;
+    const phase = feverMovePhase(time, this.feverStart);
+    const localY = feverMoveLocalY(phase);
+    // Outline centers (−512.6 / +512.6, ≈−3.3); bar rides local +Y along rotated edge.
+    const leftRot = 2 * Math.atan2(-0.341118, 0.940021);
+    const rightRot = 2 * Math.atan2(0.341118, 0.940021);
+    const barH = 1416 * FEVER_MOVE_LENGTH;
+    const rgba = feverMoveRgba(time, this.feverStart);
+    const p = pos.array as Float32Array;
+    const c = col.array as Float32Array;
+    const u = new Float32Array(12 * 2);
+    // Offset bar center along edge local Y (pushScreen: cy + lx*s + ly*c).
+    const shift = (rot: number, ly: number) => {
+      const c0 = Math.cos(rot), s0 = Math.sin(rot);
+      return { dx: -ly * s0, dy: ly * c0 };
+    };
+    const sl = shift(leftRot, localY);
+    const sr = shift(rightRot, localY);
+    let n = pushScreen(p, u, c, 0, 12, -512.6168 + sl.dx, -3.30142 + sl.dy, 2, barH, leftRot, rgba);
+    n = pushScreen(p, u, c, n, 12, 512.6168 + sr.dx, -3.30227 + sr.dy, 2, barH, rightRot, rgba);
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+    // keep uv attribute in sync if present
+    const uvAttr = mesh.geometry.getAttribute('uv') as THREE.BufferAttribute | undefined;
+    if (uvAttr) {
+      (uvAttr.array as Float32Array).set(u);
+      uvAttr.needsUpdate = true;
+    }
+    mesh.geometry.setDrawRange(0, n);
   }
 
   setHitEffectMode(mode: 'off' | 'current' | 'limited' | 'full') {
