@@ -27,6 +27,7 @@ interface Spec {
   };
   grad?: FxGrad; gradMin?: FxGrad; gradTwo: boolean;
   sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
+  limitEn: boolean; limitDamp: number; limitSpeed: FxMM;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   rate: FxMM;
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
@@ -42,6 +43,7 @@ interface Spark {
   align: number; mesh: number; slice: boolean; tex: string;
   pitchLocal: boolean; spin: number;
   grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
+  limitEn: boolean; limitDamp: number; limitSpeed: number;
 }
 interface Live {
   uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
@@ -174,7 +176,7 @@ class FxBatch {
 /** GPU quads for the six note-effect prefabs. Not a full ParticleSystem. */
 export class HitFx {
   readonly group = new THREE.Group();
-  private mode: 'off' | 'current' = 'current';
+  private mode: 'off' | 'current' | 'limited' = 'current';
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
@@ -232,6 +234,9 @@ export class HitFx {
         sizeOl: n.ps.sizeol?.en ? n.ps.sizeol.curve : undefined,
         sizeOlY: n.ps.sizeol?.en && n.ps.sizeol.sep ? n.ps.sizeol.y : undefined,
         sizeSep: !!(n.ps.sizeol?.en && n.ps.sizeol.sep),
+        limitEn: !!n.ps.limit?.en,
+        limitDamp: n.ps.limit?.dampen ?? 0,
+        limitSpeed: n.ps.limit?.speed || { k: 0, v: 1, lo: 1, hi: 1, mult: 1 },
         bursts: (n.ps.bursts || []).map(b => ({
           t: b.t, count: b.count, cycles: Math.max(1, b.cycles || 1), interval: b.interval || 0,
         })),
@@ -357,6 +362,7 @@ export class HitFx {
         align: spec.align, mesh: spec.mesh, slice: spec.slice, tex: spec.tex,
         pitchLocal, spin: sample(spec.rot, rnd),
         grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
+        limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
       });
     }
   }
@@ -381,8 +387,8 @@ export class HitFx {
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
     }
   }
-  /** Preview hit-effect style. `off` clears live FX; `current` = existing approx. */
-  setMode(mode: 'off' | 'current') {
+  /** `off` | `current` (no LimitVelocity / 冲天) | `limited` (apply ps.limit). */
+  setMode(mode: 'off' | 'current' | 'limited') {
     if (mode === this.mode) return;
     this.mode = mode;
     if (mode === 'off') this.clear();
@@ -449,6 +455,16 @@ export class HitFx {
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
+        // LimitVelocityOverLifetime: only in `limited` mode (current keeps 冲天 fountain).
+        if (this.mode === 'limited' && s.limitEn) {
+          const sp = Math.hypot(s.vx, s.vy, s.vz);
+          const lim = Math.max(0, s.limitSpeed);
+          if (sp > lim && sp > 1e-8) {
+            const k = Math.min(1, Math.max(0, s.limitDamp));
+            const scale = (1 - k) + k * (lim / sp);
+            s.vx *= scale; s.vy *= scale; s.vz *= scale;
+          }
+        }
         s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
         sparks.push(s);
         this.sparks++;
