@@ -28,6 +28,9 @@ interface Spec {
   grad?: FxGrad; gradMin?: FxGrad; gradTwo: boolean;
   sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: FxMM;
+  rotOlEn: boolean; rotOl: FxMM;
+  trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
+  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   rate: FxMM;
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
@@ -44,6 +47,10 @@ interface Spark {
   pitchLocal: boolean; spin: number;
   grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
+  omega: number;
+  trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
+  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
+  trail: { x: number; y: number; z: number; t: number }[];
 }
 interface Live {
   uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
@@ -176,7 +183,7 @@ class FxBatch {
 /** GPU quads for the six note-effect prefabs. Not a full ParticleSystem. */
 export class HitFx {
   readonly group = new THREE.Group();
-  private mode: 'off' | 'current' | 'limited' = 'current';
+  private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
@@ -237,6 +244,17 @@ export class HitFx {
         limitEn: !!n.ps.limit?.en,
         limitDamp: n.ps.limit?.dampen ?? 0,
         limitSpeed: n.ps.limit?.speed || { k: 0, v: 1, lo: 1, hi: 1, mult: 1 },
+        rotOlEn: !!n.ps.rotol?.en,
+        rotOl: (n.ps.rotol?.en
+          ? ((n.ps.rotol.sep ? n.ps.rotol.x : n.ps.rotol.curve) || n.ps.rotol.curve)
+          : undefined) || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+        trailEn: !!n.ps.trail?.en,
+        trailLife: Math.max(0.05, (n.ps.trail?.life?.v ?? n.ps.trail?.life?.lo ?? 0.35) || 0.35),
+        trailMinDist: n.ps.trail?.minVertexDist ?? 0.2,
+        trailWidth: Math.max(0.01, (n.ps.trail?.width?.v ?? n.ps.trail?.width?.lo ?? 1) || 1),
+        trailSizeWidth: !!n.ps.trail?.sizeWidth,
+        trailInherit: n.ps.trail?.inheritColor !== false,
+        trailGrad: n.ps.trail?.en ? n.ps.trail.colMax : undefined,
         bursts: (n.ps.bursts || []).map(b => ({
           t: b.t, count: b.count, cycles: Math.max(1, b.cycles || 1), interval: b.interval || 0,
         })),
@@ -363,6 +381,15 @@ export class HitFx {
         pitchLocal, spin: sample(spec.rot, rnd),
         grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
+        omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
+        trailEn: spec.trailEn || (this.mode === 'full' && spec.limitEn),
+        trailLife: spec.trailEn ? spec.trailLife : 0.18,
+        trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
+        trailWidth: spec.trailEn ? spec.trailWidth : 0.35,
+        trailSizeWidth: spec.trailSizeWidth,
+        trailInherit: spec.trailInherit,
+        trailGrad: spec.trailGrad,
+        trail: [],
       });
     }
   }
@@ -388,7 +415,7 @@ export class HitFx {
     }
   }
   /** `off` | `current` (no LimitVelocity / 冲天) | `limited` (apply ps.limit). */
-  setMode(mode: 'off' | 'current' | 'limited') {
+  setMode(mode: 'off' | 'current' | 'limited' | 'full') {
     if (mode === this.mode) return;
     this.mode = mode;
     if (mode === 'off') this.clear();
@@ -455,8 +482,8 @@ export class HitFx {
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
-        // LimitVelocityOverLifetime: only in `limited` mode (current keeps 冲天 fountain).
-        if (this.mode === 'limited' && s.limitEn) {
+        // LimitVelocityOverLifetime: limited + full (current keeps 直冲天上).
+        if ((this.mode === 'limited' || this.mode === 'full') && s.limitEn) {
           const sp = Math.hypot(s.vx, s.vy, s.vz);
           const lim = Math.max(0, s.limitSpeed);
           if (sp > lim && sp > 1e-8) {
@@ -465,7 +492,15 @@ export class HitFx {
             s.vx *= scale; s.vy *= scale; s.vz *= scale;
           }
         }
+        if (this.mode === 'full' && s.omega) s.spin += s.omega * dt;
         s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+        if (this.mode === 'full' && s.trailEn) {
+          const last = s.trail[s.trail.length - 1];
+          const dist = last ? Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) : 1e9;
+          if (dist >= s.trailMinDist) s.trail.push({ x: s.x, y: s.y, z: s.z, t: s.age });
+          const cut = s.age - s.trailLife;
+          while (s.trail.length && s.trail[0].t < cut) s.trail.shift();
+        }
         sparks.push(s);
         this.sparks++;
       }
@@ -506,7 +541,33 @@ export class HitFx {
       const slice = s.slice ? s.sliceSize * mulX : 0;
       for (let i = before; i < batch.n; i++) batch.slice[i] = slice;
     }
+    if (this.mode === 'full') this.drawTrails();
     for (const batch of this.batches.values()) batch.flush();
+  }
+  /** Ribbon approx: authoring trail.en, or soft streak in `full` for limit-enabled sprays. */
+  private drawTrails() {
+    for (const live of this.live) for (const s of live.sparks) {
+      if (!s.trailEn || s.trail.length < 2) continue;
+      const batch = this.batches.get(s.tex);
+      if (!batch) continue;
+      const tw = s.trailSizeWidth ? s.trailWidth * s.sx : s.trailWidth;
+      for (let i = 1; i < s.trail.length; i++) {
+        const a = s.trail[i - 1], b = s.trail[i];
+        const midX = (a.x + b.x) * 0.5, midY = (a.y + b.y) * 0.5, midZ = (a.z + b.z) * 0.5;
+        const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
+        const g = s.trailGrad ? gradAt(s.trailGrad, Math.min(1, Math.max(0, u))) : [1, 1, 1, 1 - u];
+        const color = s.trailInherit
+          ? [s.r * g[0], s.g * g[1], s.b * g[2], s.a * g[3]]
+          : [g[0], g[1], g[2], g[3]];
+        const seg = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+        const before = batch.n;
+        batch.n = pushBillboard(
+          batch.pos, batch.uv, batch.col, batch.n, batch.cap,
+          midX, midY, midZ, Math.max(0.001, tw * 0.15), Math.max(0.001, seg), color, 1, 1, 0,
+        );
+        for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
+      }
+    }
   }
   dispose() {
     for (const batch of this.batches.values()) batch.dispose();
