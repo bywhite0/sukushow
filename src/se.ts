@@ -366,6 +366,8 @@ export function collectAutoPlaySeHits(
     for (let j = 0; j < times.length; j++) {
       const t = times[j]!;
       if (!(previousTime < t && time >= t)) continue;
+      // Hold 中间采样只用于计分；持续音由 AddHold 单独维护。
+      if (note.type === 1 && j > 0 && j < times.length - 1) continue;
       const isHoldTail = note.type === 1 && t === last;
       let lineHash = 0;
       if (isHoldTail) {
@@ -396,7 +398,7 @@ export function countActiveHolds(chart: Chart, time: number): number {
 
 /**
  * AutoPlay SE dispatch (NOTE_STATE_MACHINES):
- * Single/Hold samples → AddSingle; Flick → AddFlick; AutoTrace → AddSingle (not AddTrace).
+ * Single/Hold 首尾 → AddSingle；Flick → AddFlick；AutoTrace → AddSingle（非 AddTrace）。
  */
 export function dispatchAutoPlaySe(
   se: SeResolver,
