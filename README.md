@@ -29,10 +29,14 @@ pnpm verify:corpus "本地谱面目录"
 - RhythmGameMain 风格 3D 轨道：仓库内附带 note / 判定线 9-slice、Plane Fade、简化 hit FX；删除或缺失 `public/rg` 时回退程序化色块。
 - 直播 HUD 覆盖层：计分 / 段位 / combo / 判定字等预览实现；非完整对局客户端。
 - 播放、暂停、跳转、倍速、左右镜像、下落速度、音量、音频偏移、全屏。
-- 本地音频解码，错误文件保留已有谱面，中文界面及移动端布局。
+- 本地音频解码，错误文件保留已有谱面，中文工作台、分类设置面板及移动端布局；预览设置保存到 localStorage。
+- 局内 SE：打击音、Hold 持续音、开场与曲终音效；音乐 / 打击音 / SE 独立音量。Hold 中间计分采样不重复触发按键音。
 - 空格播放／暂停，方向键跳转 5 秒；焦点在表单控件时不拦截快捷键。
 - Fever：Sections/`FeverSectionNo` 窗（N≥5 时 end≈曲长/+0x34）、LineBase 彩虹、LineMove 行进亮条、两侧 fever 粒子
-- 预览侧栏「击中特效」：关闭 / 直冲天上 / 限速 / 加深（`HitFx`）
+- 「显示与特效」面板中的「击中特效」：关闭 / 直冲天上 / 限速 / 加深（`HitFx`）；Hold 核心光效跟随头部，飞散粒子保留世界坐标。
+- sprite / FX 自定义着色器使用 `NoColorSpace` 贴图，避免额外 sRGB 解码造成音符偏暗。
+
+设置分为「播放与轨道」「显示与特效」「音量」「计分」四类；技术分、TotalAppeal、熟练度和段位预览位于「计分」。分类标签支持方向键及 Home / End 切换。Voice、技能与 MV 控件保留配置入口，不代表已实现语音、技能演出或 MV 播放。
 
 音符时间单位为秒。音频偏移为毫秒，正值使音频晚开始；这是预览器的附加功能，不把源 JSON 的 Offset 当作原游戏已消费的字段。
 
@@ -54,7 +58,7 @@ node scripts/copy-rg-assets.mjs --unity <RhythmGameAssetsDir> --meta <sprite_met
 
 **不宣称像素级还原。** 有 `public/rg` 时使用附带皮肤 / 简化 FX / SafeArea HUD；无资源时程序化回退。粒子为 Additive 近似（非完整 Unity ParticleSystem）。浮点计算使用 JavaScript double，并非逐指令 float32 仿真。移动端扩大垂直视角属于预览器适配。
 
-默认不包含游戏谱面与音频；只能导入已解密谱面，不提供解密入口。16 MiB 谱面、128 MiB 音频、50,000 音符为加载上限。极端密集自制谱可能达到绘制批容量，当前未实现分页渲染。
+默认不包含游戏谱面与歌曲音频；附带 `public/se/` 局内音效。只能导入已解密谱面，不提供解密入口。16 MiB 谱面、128 MiB 音频、50,000 音符为加载上限。极端密集自制谱可能达到绘制批容量，当前未实现分页渲染。
 
 测试覆盖格式解析、几何边界、9-slice / HUD 缩放、播放状态和浏览器交互。语料校验不等价于逐帧视觉一致性验证。
 
@@ -64,9 +68,11 @@ node scripts/copy-rg-assets.mjs --unity <RhythmGameAssetsDir> --meta <sprite_met
 - `src/geometry.ts`：空间数学。
 - `src/slice.ts`、`src/shaders.ts`、`src/rgAssets.ts`、`src/fx.ts`：9-slice、着色器、资源加载、hit FX。
 - `src/hud.ts`：SafeArea 覆盖层。
-- `src/transport.ts`、`src/audio.ts`：播放时基与音频适配。
+- `src/transport.ts`、`src/audio.ts`、`src/se.ts`：播放时基、本地音乐与局内音效。
+- `src/score.ts`、`src/fever.ts`、`src/hudFxMath.ts`：计分、Fever 窗与 HUD 动画曲线。
 - `src/renderer.ts`：WebGL 批量几何。
-- `src/main.ts`、`src/style.css`：中文工作台。
+- `src/main.ts`、`src/style.css`、`src/workspace.css`：中文工作台、分类设置与响应式布局。
+- `src/settingsPersist.ts`、`src/rgOptions.ts`：设置持久化与游戏选项默认值。
 - `scripts/copy-rg-assets.mjs`：可选，从本机资源树刷新 `public/rg/`。
 - `tests/`、`scripts/`：回归测试与本地语料校验。
 
@@ -74,6 +80,6 @@ node scripts/copy-rg-assets.mjs --unity <RhythmGameAssetsDir> --meta <sprite_met
 
 - **本仓库原创代码**采用 MIT，见 [LICENSE](LICENSE)。
 - **第三方依赖与参考**见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-- **`public/` 内附带的贴图、FX、字体等**来自或还原自游戏客户端资源，**权利归各原权利人所有**；收入本仓库仅供本预览器非商业研究与互操作验证，不构成授权转载、再分发或商用许可。字体（如 FOT-Rodin Pro）尤受字厂许可约束，请勿单独抽出挪作他用。
+- **`public/` 内附带的贴图、FX、字体、局内音效等**来自或还原自游戏客户端资源，**权利归各原权利人所有**；收入本仓库仅供本预览器非商业研究与互操作验证，不构成授权转载、再分发或商用许可。字体（如 FOT-Rodin Pro）尤受字厂许可约束，请勿单独抽出挪作他用。
 - 本工具为**非官方**研究预览器，与游戏运营方、开发商、发行商及任何关联商标**无隶属、无赞助、无背书**关系。
 - 使用本仓库即表示你自行评估并承担与附带游戏素材相关的合规风险；作者不对因使用或再分发这些素材产生的后果负责。

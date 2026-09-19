@@ -21,9 +21,17 @@
 
 
 - 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。
-- 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（节点 TRS / SetWidth / bursts、Local·billboard、NoColorSpace 纹理；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
+- 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（节点 TRS / SetWidth / bursts、Local·billboard；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
+- **纹理颜色空间**：sprite / FX 自定义 shader 直接在显示颜色上运算，不做线性空间输出转换，因此对应贴图使用 `NoColorSpace`，避免额外 sRGB 解码造成偏暗；不将此规则泛化到其他材质。
+- **Hold 头部光效**：`holdLoop` 的 `core` 角色与名为 `Core` 的节点跟随当前 Hold 头部，`setLoop` 同步平移已有核心粒子；飞散粒子保留世界坐标，不随头部一起横移。
 - 无资源时：程序化色块回退，页面仍可打开与播放。
 - HUD：计分 / 段位 / combo / 判定等为预览实现，非完整对局客户端。
+
+## 工作台与设置
+
+- 顶部工具栏导入谱面与本地音乐；预览区下方集中放置时间轴、播放、重播、倍率和全屏。
+- 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类，标签支持方向键及 Home / End；击中特效位于「显示与特效」，技术分位于「计分」。
+- `src/settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能与 MV 开关保留配置入口，尚未接入对应语音、技能演出或视频播放。
 
 ## 参考
 
@@ -35,7 +43,7 @@
 
 ## 非原版一致部分
 
-不宣称像素级还原。有本地 `public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。未实现完整计分、判定状态机、SE、结算、角色技能和 MV。
+不宣称像素级还原。有本地 `public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever 与局内 SE；未实现完整手动判定状态机、结算、角色技能、语音和 MV，不能视为完整对局客户端。
 
 JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端扩大视角和输入大小限制属于预览器行为。
 
@@ -48,14 +56,14 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **判定字**：寿命 0.7 s 硬切（无淡出）；缩放 `JudgementRectTween` 0.5->1 / 0.1 s；combo >= 10 时 `ComboRectTween` 0.8->1 / 0.1 s。
 - **AP/Voltage 环**：level56 Image Filled / Radial360 / fillOrigin Top / fillClockwise=false；fillAmount=ApResolver 小数部（Voltage 为 CalcGauge）；CSS 对 gage img 做 from 0deg（正上方）逆时针 conic mask（度单位）。
 - **isAuto 死码**：4.12.0 `ScoreResolver.isAuto` 无置 true 写入，`autoSprite` 运行时不出现；AutoPlay 仍走常规判定精灵。
-- **P2 chrome**：GaugeRoot + RankLabels + RankRoot（开局 SetRankNotActive / D）；PauseButton（无 Pattern 花纹）；TechnicalScoreRoot 默认 `hidden`（TechnicalScoreDisplay 未提取）。
-- **TechnicalScoreDisplay**：侧栏「显示技术分」开关映射；默认关。
-- **TechnicalScoreDisplay 三态**：0 关闭 / 1 实时 / 2 预估剩余全 PP；推送值 raw/N×10000，面板文案 percent=value/10000（全 PP ⇒ 101.0000%）。场景 TMP 模板 `99.9999%` 仅占位，开局 Clear 为 `0.0000%`。预览无计分引擎时：实时固定 0、预估固定 101。
+- **P2 chrome**：GaugeRoot + RankLabels + RankRoot（开局 SetRankNotActive / D）；PauseButton 包含遮罩内 Pattern；TechnicalScoreRoot 默认隐藏，由技术分三态设置控制。
+- **TechnicalScoreDisplay**：「计分」面板中的「技术分显示」映射；默认关闭。
+- **TechnicalScoreDisplay 三态**：0 关闭 / 1 实时 / 2 预估剩余全 PP；推送值 raw/N×10000，面板文案 percent=value/10000（全 PP ⇒ 101.0000%）。场景 TMP 模板 `99.9999%` 仅占位，开局 Clear 为 `0.0000%`。预览由 `ScoreEngine.technicalPush` 按已判定结果计算实时值，并以剩余判定全 PP 计算预估值。
 - **Pause Pattern**：`ui_sc2_button_shine` / `ui_sc2_button_dot` 在 `Art/Resources/SelectUI`（非 GameUI）；α .349 / .298，挂在 ColorImage Mask 内。
 - **RankRoot shine/deco **: White->Gray/RankColor; Shine a.2, Deco01/02 a.8; setRank(none|D|C|B|A|S); inactive=SetRankNotActive. Material tints D/C/B/A solid, S gradient. Sidebar rank preview.
 - **Rank hex clip**: icon + fill layers mask to ui_sc2_button_rank so shine/deco stay inside hex.
 - **用户设置默认值（4.12.0）**：`RhythmGameOptionValue..ctor` @0x44A2C2C 取各 `OptionRange.First`——`EnablePerfectPlus=false`；`EnableFastSlow/FastSlowThreshold=0`(Off, range 0..2)；`JudgementOutput=0`(All, range 0..6)；`TechnicalScoreDisplayType=0`(Off, range 0..2)。侧栏「Perfect+ / 判定字输出 / FAST·SLOW」已接；判定显示门控 `type < 6-opt`；AutoPlay 在 PP 开启时用 `hantei_perfect_plus`。
-- **计分/段位**：`src/score.ts` 按 ScoreResolver——`halfwayScore=Appeal×(1+熟练度等级×0.01)/AllNoteSize`，`CalcAdd=ceil(halfway×factor×(1+VL×0.1))`，factor Bad5…PP35；`GetScoreRank` 降序 [S,A,B,C]；槽位填充 (0,0)/(C,.409)/(B,.587)/(A,.773)/(S,.912)/(1.5S,1)；RankLabels dump xs [17,76,137,183]（相对比例约偏 2px，按 dump）。预览 AllNoteSize=`notes.length`（与 countHeads 一致）。默认 Appeal 350000、界值 1千万/500万/150万/50万。技术分权重 20/50/90/100/101，侧栏三态推送 raw/N×10000。
+- **计分/段位**：`src/score.ts` 按 ScoreResolver——`halfwayScore=Appeal×(1+熟练度等级×0.01)/AllNoteSize`，`CalcAdd=ceil(halfway×factor×(1+VL×0.1))`，factor Bad5…PP35；`GetScoreRank` 降序 [S,A,B,C]；槽位填充 (0,0)/(C,.409)/(B,.587)/(A,.773)/(S,.912)/(1.5S,1)；RankLabels dump xs [17,76,137,183]（相对比例约偏 2px，按 dump）。预览 AllNoteSize=`chartAllNoteSize(chart)`，按 `noteJudgementTimes` 累计判定点（与 countHeads 一致），不是 `notes.length`。默认 Appeal 350000、界值 1千万/500万/150万/50万。技术分权重 20/50/90/100/101，侧栏三态推送 raw/N×10000。
 - **侧栏计分配置**：TotalAppeal + 熟练度等级（MusicMasteryLevel，默认 0）。
 - **Rank/gauge fix**: score>0 且未达 C → 显示 D（Clear 仍 none）；槽位填充结 S=0.912（非 1.0），与 RankLabels 对齐。
 - **TMP SDF 描边**：双层 .hud-ol / .hud-face 同尺寸对齐；**整层** scale(0.92)（避免字面单独缩放造成描边双侧偏移）；underlayer stroke 2×outlinePx。
@@ -72,7 +80,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **AP増加**：`apRate` 变化且 ≥1 时 `APIncreaseAnimation` 0.75s（scale smoothstep→1.5，alpha 1→0）；粉徽章 `(1,0.2275,0.6)`；UI 近似 burst（Root/Bg_core/particles/glitter）。`apRate<1` 只清文本、不重启动画。
 - 纯函数：`src/hudFxMath.ts` + `tests/hudFxMath.test.ts`。Skill/粒子技能 FX 仍不在范围。
 
-- **AP/Voltage 环数值**：每帧 `paintApVoltage`；整数变化时 ComboRectTween 弹跳。Voltage 预览恒 0（技能到位前不加分）。
+- **AP/Voltage 环数值**：每帧 `paintApVoltage`；整数变化时底座使用 JudgementRectTween，上层使用独立数值闪光（详见下节），不是 ComboRectTween。Voltage 预览恒 0（未实现技能加点）。
 - **AP増加**：底座徽章常显；`APRateUpper` 独立闪光副本（0.75s scale→1.5 + α→0）；`APRateEffect` 贴图爆发（glow/light02/glitter，@1/60s，寿命 1s，Local 缩放）。
 
 ## AddScore 加分飘字
