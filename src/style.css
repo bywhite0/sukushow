@@ -164,29 +164,23 @@
   opacity:0;
 }
 
-/* Cross-100 ComboAnimation overlay (upper digit row + burst) */
+/* Cross-100 ComboAnimation overlay — same rect/layout as SpriteRoot digits */
 .hud-combo-flash{
-  position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
   pointer-events:none;
   transform-origin:center center;
   opacity:0;
   z-index:5;
+  overflow:visible;
 }
 .hud-combo-flash.is-on{opacity:var(--flash-a, 1);transform:scale(var(--flash-s, 1))}
-.hud-combo-flash-digits{display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 8px rgba(255,255,255,.85))}
-.hud-combo-flash-digits .hud-cdigit{position:relative}
-.hud-combo-flash-digits .hud-cdigit::before{
-  content:"";
-  position:absolute;inset:-6px;
-  border-radius:12px;
-  background:rgba(255,255,255,.35);
-  box-shadow:0 0 16px rgba(255,200,80,.8);
-  z-index:-1;
-  opacity:var(--digit-burst, 1);
+.hud-combo-flash-digits{
+  display:flex;
+  flex-direction:row-reverse;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  height:100%;
+  filter:drop-shadow(0 0 10px rgba(10,150,255,.55));
 }
 
 /* AP増加 ApRateFlash + burst approx */
