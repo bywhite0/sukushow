@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 test('演示绘制、播放暂停、跳转与倍率',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
- await expect(page.locator('.stage-caption')).toContainText('RhythmGameMain 轨道');
+ await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
  await expect(page.locator('.hud')).toBeAttached();
  await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
  await page.getByRole('button',{name:'播放',exact:true}).click();
@@ -33,9 +33,15 @@ test('过线后 combo 递增并显示 PERFECT',async({page})=>{
 test('导入谱面，坏文件不清空已有内容',async({page})=>{
  await page.goto('/');
  await page.locator('#chart-file').setInputFiles({name:'测试.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Notes:[{Uid:1,just:'1',Flags:80,holds:[]}],Bpms:[{Bpm:120,Time:0}]}))});
- await expect(page.locator('#song-title')).toHaveText('测试.json');
+ await expect(page.locator('#message')).toContainText('已加载 测试.json');
+ await page.locator('#timeline').evaluate((e:HTMLInputElement)=>{e.value='1';e.dispatchEvent(new Event('input'));});
+ await expect(page.locator('canvas')).toHaveAttribute('data-time','1.0000');
+ const visibleNotes=await page.locator('canvas').getAttribute('data-visible-notes');
+ expect(Number(visibleNotes)).toBeGreaterThan(0);
  await page.locator('#chart-file').setInputFiles({name:'损坏.json',mimeType:'application/json',buffer:Buffer.from('{bad')});
- await expect(page.locator('#message')).toContainText('原谱面已保留');await expect(page.locator('#song-title')).toHaveText('测试.json');
+ await expect(page.locator('#message')).toContainText('原谱面已保留');
+ await expect(page.locator('canvas')).toHaveAttribute('data-time','1.0000');
+ await expect(page.locator('canvas')).toHaveAttribute('data-visible-notes',visibleNotes!);
 });
 test('窄屏不横溢，音频错误可恢复',async({page})=>{
  await page.setViewportSize({width:400,height:850});await page.goto('/');

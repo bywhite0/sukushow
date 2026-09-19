@@ -41,6 +41,14 @@ import {
   type NoteJudgementType,
 } from './rgOptions';
 
+import {
+  buildLineHashTables,
+  collectAutoPlaySeHits,
+  countActiveHolds,
+  dispatchAutoPlaySe,
+  SeResolver,
+} from './se';
+
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
 
@@ -269,6 +277,11 @@ export class LiveHud {
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
   private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
   private lastJudgeType: NoteJudgementType = 4;
+  private se: SeResolver | null = null;
+  private seHashes: { first: Map<number, number>; second: Map<number, number> } = {
+    first: new Map(),
+    second: new Map(),
+  };
   private comboBounceAt = -1;
   private comboFlashAt = -1;
   private apRateFlashAt = -1;
@@ -322,10 +335,16 @@ export class LiveHud {
     this.paintApVoltage();
   }
 
+  setSe(se: SeResolver | null): void {
+    this.se = se;
+  }
+
   sync(chart: Chart, time: number): void {
     if (!Number.isFinite(time)) return;
     if (chart !== this.chart) {
       this.chart = chart;
+      this.seHashes = buildLineHashTables(chart);
+      this.se?.clear();
       this.resetLive(time);
       const win = resolveFeverWindow(chart.sections, this.feverSectionNo, chart.duration);
       this.feverStart = win.start;
@@ -339,13 +358,15 @@ export class LiveHud {
     this.scoreEngine.setFever(this.enableFeverDisplay && isFeverAt(time, win));
     if (time < previousTime) {
       this.resetLive(time);
+      this.se?.clear();
       return;
     }
     if (time - previousTime < SEEK_GAP) {
+      this.se?.process();
       const hits = countHeads(chart, previousTime, time);
+      const jType = autoPlayJudgementType(this.enablePerfectPlus);
       if (hits > 0) {
         const prevCombo = this.combo;
-        const jType = autoPlayJudgementType(this.enablePerfectPlus);
         this.scoreEngine.addMany(jType, hits);
         this.combo = this.scoreEngine.combo;
         this.apRate = this.scoreEngine.apRate;
@@ -370,6 +391,11 @@ export class LiveHud {
         }
         if (this.combo >= 10) this.comboBounceAt = time;
         this.onComboAdvanced(prevCombo, time);
+      }
+      if (this.se) {
+        const seHits = collectAutoPlaySeHits(chart, previousTime, time, this.seHashes);
+        dispatchAutoPlaySe(this.se, seHits, jType, countActiveHolds(chart, time));
+        this.se.applyHold();
       }
     }
     this.paintJudge(time);

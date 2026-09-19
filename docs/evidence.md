@@ -88,3 +88,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
   - scale.xyz：t≤0.1 保持 1；t∈[0.1,0.6] Hermite 1→1.8（outSlope=9.6, inSlope=0）
   - fontColor.a：t<0.1 为 0；key@0.1 起多项式 (16,−12,0,1) →0@0.6s；rgb 常量 AP (0,0.518,1) / Voltage (1,0.341,0.298)
 - 预览：底座 JudgementRectTween；上层 `apGageFlashScale/Alpha`；数值嵌在环 disc 内居中；预览 Y+2 光学基线上移（Rodin 字重）。
+
+## SE（SeResolver）
+
+- 资产：`public/se/*.wav` 自 `rhythm.acb`（vgmstream）；cue id 与 `SE_SYSTEM.md` 一致（flick=4 hold=5 bad/good/great/perfect=6–9 trace=10 touch=22 start=21 finish=11–14）。
+- 逻辑：`src/se.ts` 移植 `Process` 三帧窗 ×1.5、`AddSingle`/`AddFlick`/`AddHold`/`ApplyHold`；AutoPlay 路径 Single/Hold/Trace→`AddSingle`，Flick→`AddFlick`（AutoTrace 不用 `AddTrace`）。
+- 同时押：`buildLineHashTables`（|Δ|<0.004 且 Count≥2 → trunc(t×1e7)）。
+- 音量：打击音走 NoteTap（`vol-tap`），开场/曲终走 SE（`vol-se`）；与原版 CRI category 出口乘子对应。
+
