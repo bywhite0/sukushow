@@ -1,4 +1,5 @@
 import './style.css';
+import './workspace.css';
 import { decodeChart } from './chart';
 import { demoChart } from './demo';
 import { AudioPlayer } from './audio';
@@ -12,23 +13,24 @@ import {
 } from './settingsPersist';
 const app=document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML=`
-<header><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>3D chart preview</small></span></a><span class="local-badge">本地解析 · 文件不会上传</span></header>
+<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
- <div class="stage" id="stage"><div id="live-bg" class="live-bg" aria-hidden="true"><div class="live-bg-image"></div><div class="live-bg-dot"></div></div><div id="live-bg-dim" class="live-bg-dim" aria-hidden="true"></div><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas></div>
+ <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
+ <div class="stage-shell"><div class="stage" id="stage"><div id="live-bg" class="live-bg" aria-hidden="true"><div class="live-bg-image"></div><div class="live-bg-dot"></div></div><div id="live-bg-dim" class="live-bg-dim" aria-hidden="true"></div><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas></div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
  <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button></div></div>
- <div class="load-bar" aria-label="打开谱面与音频">
-  <label class="file-button" for="chart-file">选择谱面文件<span>JSON / 解密后的 .bytes · 原格式直读</span></label><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes">
-  <div class="load-bar-audio">
-   <label class="audio-button" for="audio-file">＋ 添加本地音频</label><input class="sr-only" id="audio-file" type="file" accept="audio/*">
-   <p class="file-name" id="audio-name">未加载音频 · 可以无声预览</p>
-   <button id="demo" class="text-button">重新打开演示谱</button>
-  </div>
- </div>
 </section>
 <aside aria-label="预览设置">
- <section class="panel"><h2>轨道与播放</h2>
+ <div class="inspector-heading"><h2>预览设置</h2><span>自动保存</span></div>
+ <div class="settings-tabs" role="tablist" aria-label="设置分类">
+  <button id="tab-track" role="tab" aria-selected="true" aria-controls="panel-track">播放与轨道</button>
+  <button id="tab-display" role="tab" aria-selected="false" aria-controls="panel-display" tabindex="-1">显示与特效</button>
+  <button id="tab-audio" role="tab" aria-selected="false" aria-controls="panel-audio" tabindex="-1">音量</button>
+  <button id="tab-score" role="tab" aria-selected="false" aria-controls="panel-score" tabindex="-1">计分</button>
+ </div>
+ <div class="settings-body">
+ <section class="panel" id="panel-track" role="tabpanel" aria-labelledby="tab-track" tabindex="0"><h2>轨道与播放</h2>
 <label class="setting" for="speed"><span>下落速度 <small>NoteSpeed×0.1</small><output id="speed-value">5.0</output></span><input id="speed" type="range" min="1" max="20" step="0.1" value="5"></label>
 <label class="setting" for="opt-start-z"><span>出现位置 NoteStartZ<output id="opt-start-z-value">0</output></span><input id="opt-start-z" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="opt-lane-width"><span>轨道宽度 LaneWidth<output id="opt-lane-width-value">100</output></span><input id="opt-lane-width" type="range" min="80" max="120" step="1" value="100"></label>
@@ -38,7 +40,7 @@ app.innerHTML=`
 <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
 <label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label>
 </section>
-<section class="panel"><h2>显示</h2>
+<section class="panel" id="panel-display" role="tabpanel" aria-labelledby="tab-display" tabindex="0" hidden><h2>显示与特效</h2>
 <label class="setting" for="opt-lane-dark"><span>轨道暗度 LaneDarkness<output id="opt-lane-dark-value">80</output></span><input id="opt-lane-dark" type="range" min="0" max="130" step="1" value="80"></label>
 <label class="setting" for="opt-bg-dark"><span>背景暗度 BackgroundDarkness<output id="opt-bg-dark-value">0</output></span><input id="opt-bg-dark" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="opt-judge-y"><span>判定字高度 JudgementY<output id="opt-judge-y-value">5</output></span><input id="opt-judge-y" type="range" min="1" max="10" step="1" value="5"></label>
@@ -54,23 +56,48 @@ app.innerHTML=`
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
 <label class="check"><input id="opt-mv" type="checkbox" checked>MV / MusicVideo</label>
 </section>
-<section class="panel"><h2>音量</h2>
+<section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
 <label class="setting" for="volume"><span>音乐 Music</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.7"></label>
 <label class="setting" for="vol-tap"><span>打击音 NoteTap</span><input id="vol-tap" type="range" min="0" max="1" step="0.01" value="1"></label>
 <label class="setting" for="vol-se"><span>SE</span><input id="vol-se" type="range" min="0" max="1" step="0.01" value="1"></label>
 <label class="setting" for="vol-voice"><span>Voice</span><input id="vol-voice" type="range" min="0" max="1" step="0.01" value="1"></label>
 </section>
-<section class="panel"><h2>预览专用</h2>
+<section class="panel" id="panel-score" role="tabpanel" aria-labelledby="tab-score" tabindex="0" hidden><h2>计分预览</h2>
 <label class="setting" for="opt-appeal"><span>TotalAppeal</span><input id="opt-appeal" type="number" min="1000" max="2000000" step="1000" value="350000"><small>卡组 Appeal；默认 350000。</small></label>
 <label class="setting" for="opt-mastery"><span>熟练度等级</span><input id="opt-mastery" type="number" min="0" max="50" step="1" value="0"><small>MusicMasteryLevel；halfwayScore = Appeal×(1+等级×0.01)/音符数。</small></label>
 <label class="setting" for="opt-hit-effect"><span>击中特效</span><select id="opt-hit-effect"><option value="current" selected>直冲天上</option><option value="limited">限速</option><option value="full">加深</option><option value="off">关闭</option></select></label>
 <label class="setting" for="rank-preview"><span>段位预览</span><select id="rank-preview"><option value="none" selected>未激活</option><option value="D">D</option><option value="C">C</option><option value="B">B</option><option value="A">A</option><option value="S">S</option></select></label>
-</section></section>
+</section></div>
+<div class="inspector-footer">设置仅影响预览，不会修改源文件。</div>
 </aside>
-</main><footer><span>基于原始谱面与已核验的空间数学</span><span>空格 播放 / 暂停 · ← → 跳转 5 秒</span></footer>`;
+</main><footer><span>非官方研究工具 · 原格式谱面预览</span><span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span></footer>`;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const input=(id:string)=>el<HTMLInputElement>(id);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
+el('open-chart').onclick=()=>input('chart-file').click();
+el('open-audio').onclick=()=>input('audio-file').click();
+el('panel-display').querySelector('h2')!.after(el('opt-hit-effect').closest('label')!);
+el('panel-score').querySelector('h2')!.after(el('tech-score').closest('label')!);
+const settingTabs=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+function selectSettingsTab(tab:HTMLButtonElement){
+ for(const item of settingTabs){
+  const selected=item===tab;
+  item.setAttribute('aria-selected',String(selected));
+  item.tabIndex=selected?0:-1;
+  el(item.getAttribute('aria-controls')!).hidden=!selected;
+ }
+}
+for(const [index,tab] of settingTabs.entries()){
+ tab.onclick=()=>selectSettingsTab(tab);
+ tab.onkeydown=(event)=>{
+  const positions:Record<string,number>={ArrowRight:(index+1)%settingTabs.length,ArrowLeft:(index+settingTabs.length-1)%settingTabs.length,Home:0,End:settingTabs.length-1};
+  const next=positions[event.key];
+  if(next===undefined)return;
+  event.preventDefault();event.stopPropagation();
+  selectSettingsTab(settingTabs[next]!);settingTabs[next]!.focus();
+ };
+}
+
 
 function readSettings():PreviewSettings{
  return{
@@ -159,10 +186,10 @@ input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offse
 input('chart-file').onchange=async()=>{
  const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
  try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ chart=next;el('chart-name').textContent=file.name;player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
-el('demo').onclick=()=>{generation++;chart=demoChart();player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
+el('demo').onclick=()=>{generation++;chart=demoChart();el('chart-name').textContent='演示谱面';player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
