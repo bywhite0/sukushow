@@ -13,8 +13,13 @@ export function shouldComboHundredFlash(prevCombo: number, curCombo: number): bo
   return Math.trunc(prevCombo / 100) !== Math.trunc(curCombo / 100);
 }
 
+/** StreamedClip cubic: ((a·dx+b)·dx+c)·dx+d (AssetStudio / Unity). */
+function evalStreamedPoly(dx: number, a: number, b: number, c: number, d: number): number {
+  return ((a * dx + b) * dx + c) * dx + d;
+}
+
 /** ComboAnimation 0.7833s — scale 1→1.6@0.7→1.7 (piecewise linear on normalized t). */
-export function comboFlashScale(age: number, duration = 0.7833): number {
+export function comboFlashScale(age: number, duration = 0.7833333611488342): number {
   if (age <= 0) return 1;
   if (age >= duration) return 1.7;
   const t = age / duration;
@@ -22,13 +27,15 @@ export function comboFlashScale(age: number, duration = 0.7833): number {
   return 1.6 + (1.7 - 1.6) * ((t - 0.7) / 0.3);
 }
 
-/** Alpha curve for ComboAnimation: fade in then out over duration. */
-export function comboFlashAlpha(age: number, duration = 0.7833): number {
+/**
+ * ComboAnimation Sprite*.color.a (sharedassets56 #96).
+ * 0 until 1/30s → 1 hold until 1/6s → poly (8.5286,−7.889,0,1) → 0 @ duration.
+ */
+export function comboFlashAlpha(age: number, duration = 0.7833333611488342): number {
   if (age <= 0 || age >= duration) return 0;
-  const t = age / duration;
-  if (t < 0.15) return t / 0.15;
-  if (t > 0.75) return (1 - t) / 0.25;
-  return 1;
+  if (age < 1 / 30) return 0;
+  if (age < 1 / 6) return 1;
+  return evalStreamedPoly(age - 1 / 6, 8.5286, -7.889, 0, 1);
 }
 
 function smoothstep(x: number): number {
@@ -53,15 +60,10 @@ export function apRateFlashAlpha(age: number, duration = 0.75): number {
 }
 
 export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
-export const COMBO_FLASH_DURATION = 0.7833;
+export const COMBO_FLASH_DURATION = 0.7833333611488342;
 export const AP_RATE_FLASH_DURATION = 0.75;
 
 
-
-/** StreamedClip cubic: ((a·dx+b)·dx+c)·dx+d  (AssetStudio / Unity). */
-function evalStreamedPoly(dx: number, a: number, b: number, c: number, d: number): number {
-  return ((a * dx + b) * dx + c) * dx + d;
-}
 
 /**
  * ApGageIncreaseAnimation / VoltageIncreaseAnimation (sharedassets56 #95/#97).
