@@ -56,6 +56,32 @@ export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
 export const COMBO_FLASH_DURATION = 0.7833;
 export const AP_RATE_FLASH_DURATION = 0.75;
 
+
+
+/** StreamedClip cubic: ((a·dx+b)·dx+c)·dx+d  (AssetStudio / Unity). */
+function evalStreamedPoly(dx: number, a: number, b: number, c: number, d: number): number {
+  return ((a * dx + b) * dx + c) * dx + d;
+}
+
+/**
+ * ApGageIncreaseAnimation / VoltageIncreaseAnimation (sharedassets56 #95/#97).
+ * Duration 0.6s. Scale: 1 until 0.1s; then poly from key@0.1 (−12.8, 9.6, 0, 1) → 1.8 @0.6s.
+ */
+export const AP_GAGE_FLASH_DURATION = 0.6;
+
+export function apGageFlashScale(age: number): number {
+  if (age <= 0.1) return 1;
+  if (age >= AP_GAGE_FLASH_DURATION) return 1.8;
+  return evalStreamedPoly(age - 0.1, -12.8, 9.6, 0, 1);
+}
+
+/** fontColor.a: 0 until 0.1s; poly from key@0.1 (16, −12, 0, 1) → 0 @0.6s. */
+export function apGageFlashAlpha(age: number): number {
+  if (age < 0.1) return 0;
+  if (age >= AP_GAGE_FLASH_DURATION) return 0;
+  return evalStreamedPoly(age - 0.1, 16, -12, 0, 1);
+}
+
 /** ScoreAddTween @0x486177C — duration 0.2, u=min(age,0.2)*5. */
 export const SCORE_ADD_TWEEN = 0.2;
 /** scoreAddHideTime = t + 0.7 (same as judgement hide). */

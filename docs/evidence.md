@@ -80,3 +80,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **布局**：level56 `AddScore` (305.8, −52) 200×40 pivot (0.5,0.5)；TMP 24、**左对齐**、`characterSpacing` 4、材质 IngameScorePink（面白 / 描边 RGB(255,58,153) width 0.4）。
 - **文案**：判定 `Add(type,…)` 与技能 `Add(long,t)` 均 `SetCharArray` → `scoreAddText`（"+"N）；`scoreAddHideTime = t+0.7`（技能路径字面量 `@0x1aa10b8`；判定路径复用 `judgementHideTime`）。预览用 `ScoreEngine.lastAdd`。
 - **ScoreAddTween @0x486177C**：寿命显示至 0.7s；缓动段 **0.2s**，`u=min(age,0.2)×5`；`anchoredPosition.x = -48·u·(u−2)+256`（0→304），**y 钉 −52**；`color.a = -0.4·u·(u−2)+0.6`（0.6→1）；0.2–0.7s 保持终态，超时清文本。预览另加 `SCORE_ADD_X_NUDGE = -40` 整体略左；DOM/z-index 在 `CurrentScoreRoot` 分数带之下。
+
+## AP/Voltage 数值闪光
+
+- **ParamViewResolver.UpdateAp @0x499E284**：`prevAp != value` 时 upper `SetCharArray` + `Animator.CrossFade(apUpperEffect)` + `JudgementRectTween(apRect=底座 APValue, hide=t+0.1)`。Voltage 同构。
+- **Animator**：`APEffectBase`→`ApGageIncreaseAnimation`（sharedassets56 #107/#95）；`VoltageEffectBase`→`VoltageIncreaseAnimation`（#109/#97）。时长 **0.6s**。
+  - scale.xyz：t≤0.1 保持 1；t∈[0.1,0.6] Hermite 1→1.8（outSlope=9.6, inSlope=0）
+  - fontColor.a：t<0.1 为 0；key@0.1 起多项式 (16,−12,0,1) →0@0.6s；rgb 常量 AP (0,0.518,1) / Voltage (1,0.341,0.298)
+- 预览：底座 JudgementRectTween；上层 `apGageFlashScale/Alpha`；数值嵌在环 disc 内居中；预览 Y+2 光学基线上移（Rodin 字重）。

@@ -68,9 +68,16 @@
 .hud-ap-label{font-size:20px;color:#fff}
 .hud-ap-label.is-ap{}
 .hud-ap-label.is-vo{}
-.hud-ap-value{font-size:32px;font-variant-numeric:tabular-nums}
+.hud-ap-value{font-size:32px;font-variant-numeric:tabular-nums;line-height:40px;text-align:center;z-index:2}
 .hud-ap-value.is-ap{color:#0084ff}
 .hud-ap-value.is-vo{color:#ff574c}
+.hud-ap-value-upper{display:flex;align-items:center;justify-content:center;font-size:32px;font-variant-numeric:tabular-nums;font-weight:700;line-height:40px;text-align:center;z-index:3;pointer-events:none;transform-origin:center center;white-space:nowrap}
+.hud-ap-value-upper.is-ap .hud-ol{color:#fff;-webkit-text-stroke:2.6px #fff}
+.hud-ap-value-upper.is-ap .hud-face{color:#0084ff}
+.hud-ap-value-upper.is-vo .hud-ol{color:#fff;-webkit-text-stroke:2.6px #fff}
+.hud-ap-value-upper.is-vo .hud-face{color:#ff574c}
+.hud-ap-value-upper.is-on{visibility:visible}
+.hud-disc{overflow:visible}
 .hud-disc.is-missing{border-radius:50%;background:rgba(8,18,36,.45);box-shadow:inset 0 0 0 7px rgba(255,255,255,.28)}
 .hud-base02{z-index:1}
 /* Image.Type.Filled / Radial360 / fillOrigin Top / fillClockwise=false.

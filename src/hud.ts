@@ -7,6 +7,9 @@ import {
   comboFlashAlpha,
   comboFlashScale,
   shouldComboHundredFlash,
+  apGageFlashScale,
+  apGageFlashAlpha,
+  AP_GAGE_FLASH_DURATION,
   scoreAddTweenX,
   scoreAddTweenAlpha,
   SCORE_ADD_LIFE,
@@ -273,8 +276,12 @@ export class LiveHud {
   private lastPaintedApRate = -1;
   private lastApDisplay = -1;
   private lastVoltageDisplay = -1;
-  private apValueBounceAt = -1;
-  private voltageValueBounceAt = -1;
+  private apValuePopAt = -1;
+  private voltageValuePopAt = -1;
+  private apValueFlashAt = -1;
+  private voltageValueFlashAt = -1;
+  private apValueUpperEl: HTMLElement | null = null;
+  private voltageValueUpperEl: HTMLElement | null = null;
   private apRateUpperEl: HTMLElement | null = null;
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
@@ -372,7 +379,7 @@ export class LiveHud {
     this.paintApRateFlash(time);
     this.paintAddScore(time);
     this.paintApVoltage();
-    this.paintApVoltageBounce(time);
+    this.paintApVoltageFx(time);
   }
 
   dispose(): void {
@@ -445,8 +452,20 @@ export class LiveHud {
     this.rankManual = false;
     this.lastApDisplay = -1;
     this.lastVoltageDisplay = -1;
-    this.apValueBounceAt = -1;
-    this.voltageValueBounceAt = -1;
+    this.apValuePopAt = -1;
+    this.voltageValuePopAt = -1;
+    this.apValueFlashAt = -1;
+    this.voltageValueFlashAt = -1;
+    if (this.apValueUpperEl) {
+      this.apValueUpperEl.classList.remove('is-on');
+      this.apValueUpperEl.style.opacity = '0';
+      this.apValueUpperEl.style.transform = '';
+    }
+    if (this.voltageValueUpperEl) {
+      this.voltageValueUpperEl.classList.remove('is-on');
+      this.voltageValueUpperEl.style.opacity = '0';
+      this.voltageValueUpperEl.style.transform = '';
+    }
     if (this.apRateUpperEl) {
       this.apRateUpperEl.classList.remove('is-on');
       this.apRateUpperEl.style.opacity = '0';
@@ -1158,7 +1177,14 @@ export class LiveHud {
     const root = document.createElement('div');
     root.className = 'hud-ap';
     // Gauges are children of the 138 bases (pos 0,0), not siblings of APVoltageRoot.
-    const meter = (base: string, gage: string, x: number): HTMLElement => {
+    // Value/upper nest inside the disc so TMP stays centered on the ring (level56 same anchor).
+    const meter = (
+      base: string,
+      gage: string,
+      x: number,
+      valueClass: string,
+      upperClass: string,
+    ): { fill: HTMLElement; value: HTMLElement; upper: HTMLElement } => {
       const slot = document.createElement('div');
       slot.className = 'hud-disc';
       place(slot, 320, 160, 0.5, 0.5, 0.5, 0.5, x, -8, 138, 138);
@@ -1173,12 +1199,41 @@ export class LiveHud {
       // level56: Filled Radial360, fillOrigin Top, fillClockwise=false; CSS conic from 0deg (=top).
       mountSprite(fill, gage, '');
       fill.style.setProperty('--fill', '0');
-      slot.append(ring, fill);
+      const value = document.createElement('div');
+      value.className = valueClass;
+      mountOutlinedText(value, '0');
+      // level56 APValue/VoltageValue (0,0) relative to EffectBase stretch; disc-local center.
+      // Optical baseline nudge (+Y) so Rodin digits sit centered in the ring.
+      place(value, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 2, 80, 40);
+      const upper = document.createElement('div');
+      upper.className = upperClass;
+      mountOutlinedText(upper, '0');
+      place(upper, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 2, 80, 40);
+      upper.style.opacity = '0';
+      slot.append(ring, fill, value, upper);
       root.append(slot);
-      return fill;
+      return { fill, value, upper };
     };
-    this.apGageEl = meter('ui_sc2_ingame_ap_base', 'ui_sc2_ingame_gage_ap', -60);
-    this.voltageGageEl = meter('ui_sc2_ingame_voltage_base', 'ui_sc2_ingame_gage_voltage', 80);
+    const ap = meter(
+      'ui_sc2_ingame_ap_base',
+      'ui_sc2_ingame_gage_ap',
+      -60,
+      'hud-ap-value is-ap',
+      'hud-ap-value-upper is-ap',
+    );
+    const vo = meter(
+      'ui_sc2_ingame_voltage_base',
+      'ui_sc2_ingame_gage_voltage',
+      80,
+      'hud-ap-value is-vo',
+      'hud-ap-value-upper is-vo',
+    );
+    this.apGageEl = ap.fill;
+    this.voltageGageEl = vo.fill;
+    this.apValueEl = ap.value;
+    this.voltageValueEl = vo.value;
+    this.apValueUpperEl = ap.upper;
+    this.voltageValueUpperEl = vo.upper;
     const label = (text: string, x: number, y: number, w: number, className: string) => {
       const node = document.createElement('div');
       node.className = className;
@@ -1189,8 +1244,6 @@ export class LiveHud {
     };
     label('AP', -60, 53, 80, 'hud-ap-label is-ap');
     label('VOLTAGE', 80, 53, 120, 'hud-ap-label is-vo');
-    this.apValueEl = label('0', -60, -8, 80, 'hud-ap-value is-ap');
-    this.voltageValueEl = label('0', 80, -8, 80, 'hud-ap-value is-vo');
     safe.append(root);
   }
 
@@ -1207,12 +1260,17 @@ export class LiveHud {
     const voInt = this.scoreEngine.voltageLevel;
     setOutlined(this.apValueEl, String(apInt));
     setOutlined(this.voltageValueEl, String(voInt));
-    // Integer tick → short pop (same curve family as ComboRectTween).
+    // ParamViewResolver.UpdateAp/UpdateVoltage: value change → upper SetCharArray +
+    // Animator.CrossFade + JudgementRectTween(baseRect, 0.1s). Not ComboRectTween.
     if (this.lastApDisplay >= 0 && apInt !== this.lastApDisplay) {
-      this.apValueBounceAt = this.previousTime;
+      setOutlined(this.apValueUpperEl, String(apInt));
+      this.apValuePopAt = this.previousTime;
+      this.apValueFlashAt = this.previousTime;
     }
     if (this.lastVoltageDisplay >= 0 && voInt !== this.lastVoltageDisplay) {
-      this.voltageValueBounceAt = this.previousTime;
+      setOutlined(this.voltageValueUpperEl, String(voInt));
+      this.voltageValuePopAt = this.previousTime;
+      this.voltageValueFlashAt = this.previousTime;
     }
     this.lastApDisplay = apInt;
     this.lastVoltageDisplay = voInt;
@@ -1230,25 +1288,56 @@ export class LiveHud {
     }
   }
 
-  private paintApVoltageBounce(time: number): void {
-    const tick = (el: HTMLElement | null, at: number, clear: () => void) => {
+  /**
+   * ParamViewResolver.Process: JudgementRectTween on base AP/Voltage value rect (0.5→1 / 0.1s);
+   * APEffectBase→ApGageIncreaseAnimation / VoltageEffectBase→VoltageIncreaseAnimation (0.6s).
+   */
+  private paintApVoltageFx(time: number): void {
+    const popBase = (el: HTMLElement | null, at: number, clear: () => void) => {
       if (!el) return;
       if (at < 0) {
         el.style.transform = '';
         return;
       }
       const age = time - at;
-      if (age < 0 || age >= COMBO_TWEEN) {
+      if (age < 0 || age >= JUDGE_TWEEN) {
         el.style.transform = '';
         clear();
         return;
       }
-      const u = Math.min(age, COMBO_TWEEN) * (1 / COMBO_TWEEN);
-      const scale = 0.8 + 0.4 * u - 0.2 * u * u;
+      // JudgementRectTween: u=min(age,0.1)*10; scale=0.5+u-0.5*u*u
+      const u = Math.min(age, JUDGE_TWEEN) * (1 / JUDGE_TWEEN);
+      const scale = 0.5 + u - 0.5 * u * u;
       el.style.transform = `scale(${0.92 * scale})`;
     };
-    tick(this.apValueEl, this.apValueBounceAt, () => { this.apValueBounceAt = -1; });
-    tick(this.voltageValueEl, this.voltageValueBounceAt, () => { this.voltageValueBounceAt = -1; });
+    popBase(this.apValueEl, this.apValuePopAt, () => { this.apValuePopAt = -1; });
+    popBase(this.voltageValueEl, this.voltageValuePopAt, () => { this.voltageValuePopAt = -1; });
+
+    const flashUpper = (el: HTMLElement | null, at: number, clear: () => void) => {
+      if (!el) return;
+      if (at < 0) {
+        el.classList.remove('is-on');
+        el.style.opacity = '0';
+        el.style.transform = '';
+        return;
+      }
+      const age = time - at;
+      if (age < 0 || age >= AP_GAGE_FLASH_DURATION) {
+        clear();
+        el.classList.remove('is-on');
+        el.style.opacity = '0';
+        el.style.transform = '';
+        return;
+      }
+      // ApGageIncreaseAnimation / VoltageIncreaseAnimation @ sharedassets56.
+      const s = apGageFlashScale(age);
+      const a = apGageFlashAlpha(age);
+      el.classList.add('is-on');
+      el.style.opacity = String(a);
+      el.style.transform = `scale(${0.92 * s})`;
+    };
+    flashUpper(this.apValueUpperEl, this.apValueFlashAt, () => { this.apValueFlashAt = -1; });
+    flashUpper(this.voltageValueUpperEl, this.voltageValueFlashAt, () => { this.voltageValueFlashAt = -1; });
   }
 
   private buildMental(safe: HTMLElement): void {

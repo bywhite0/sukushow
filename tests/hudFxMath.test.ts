@@ -10,6 +10,9 @@ import {
   scoreAddTweenAlpha,
   SCORE_ADD_TWEEN,
   SCORE_ADD_LIFE,
+  apGageFlashScale,
+  apGageFlashAlpha,
+  AP_GAGE_FLASH_DURATION,
 } from '../src/hudFxMath';
 
 describe('radialFillAmount', () => {
@@ -64,5 +67,22 @@ describe('ScoreAddTween', () => {
     expect(scoreAddTweenX(SCORE_ADD_LIFE)).toBe(304);
     expect(scoreAddTweenAlpha(0)).toBeCloseTo(0.6, 5);
     expect(scoreAddTweenAlpha(SCORE_ADD_TWEEN)).toBeCloseTo(1, 5);
+  });
+});
+
+describe('ApGageIncreaseAnimation', () => {
+  it('scale holds 1 until 0.1s then poly to 1.8 at 0.6s', () => {
+    expect(apGageFlashScale(0)).toBe(1);
+    expect(apGageFlashScale(0.1)).toBe(1);
+    expect(apGageFlashScale(AP_GAGE_FLASH_DURATION)).toBeCloseTo(1.8, 5);
+    expect(apGageFlashScale(0.35)).toBeCloseTo(1.4, 5);
+  });
+
+  it('alpha flat 0 until 0.1s, then 1→0 by 0.6s', () => {
+    expect(apGageFlashAlpha(0)).toBe(0);
+    expect(apGageFlashAlpha(0.05)).toBe(0);
+    expect(apGageFlashAlpha(0.1)).toBeCloseTo(1, 5);
+    expect(apGageFlashAlpha(0.35)).toBeCloseTo(0.5, 5);
+    expect(apGageFlashAlpha(AP_GAGE_FLASH_DURATION)).toBe(0);
   });
 });
