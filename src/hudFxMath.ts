@@ -55,3 +55,25 @@ export function apRateFlashAlpha(age: number, duration = 0.75): number {
 export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
 export const COMBO_FLASH_DURATION = 0.7833;
 export const AP_RATE_FLASH_DURATION = 0.75;
+
+/** ScoreAddTween @0x486177C — duration 0.2, u=min(age,0.2)*5. */
+export const SCORE_ADD_TWEEN = 0.2;
+/** scoreAddHideTime = t + 0.7 (same as judgement hide). */
+export const SCORE_ADD_LIFE = 0.7;
+/** Prefab rest anchored X (level56); tween end is 304. */
+export const SCORE_ADD_REST_X = 305.8;
+export const SCORE_ADD_REST_Y = -52;
+/** Preview: shift whole float a bit left of binary X. */
+export const SCORE_ADD_X_NUDGE = -40;
+
+/** Anchored X: -48*u*(u-2)+256 (u in [0,1]). */
+export function scoreAddTweenX(age: number): number {
+  const u = Math.min(Math.max(age, 0), SCORE_ADD_TWEEN) * 5;
+  return -48 * u * (u - 2) + 256;
+}
+
+/** Color.a: -0.4*u*(u-2)+0.6 → 0.6 at birth, 1 at u=1. */
+export function scoreAddTweenAlpha(age: number): number {
+  const u = Math.min(Math.max(age, 0), SCORE_ADD_TWEEN) * 5;
+  return -0.4 * u * (u - 2) + 0.6;
+}

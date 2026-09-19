@@ -7,6 +7,11 @@ import {
   comboFlashAlpha,
   comboFlashScale,
   shouldComboHundredFlash,
+  scoreAddTweenX,
+  scoreAddTweenAlpha,
+  SCORE_ADD_LIFE,
+  SCORE_ADD_REST_X,
+  SCORE_ADD_X_NUDGE,
 } from './hudFxMath';
 
 import { isFeverAt, resolveFeverWindow } from './fever';
@@ -274,6 +279,8 @@ export class LiveHud {
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
   private apRateBurstEl: HTMLElement | null = null;
+  private addScoreEl: HTMLElement | null = null;
+  private addScoreAt = -1;
 
 
   constructor(stage: HTMLElement) {
@@ -338,6 +345,7 @@ export class LiveHud {
         this.paintCombo();
         this.paintApRate();
         this.paintScore();
+        if (this.scoreEngine.lastAdd > 0) this.triggerAddScore(this.scoreEngine.lastAdd, time);
         this.paintApVoltage();
         this.paintGauge();
         this.paintTechnicalFromEngine();
@@ -362,6 +370,7 @@ export class LiveHud {
     this.paintComboBounce(time);
     this.paintComboFlash(time);
     this.paintApRateFlash(time);
+    this.paintAddScore(time);
     this.paintApVoltage();
     this.paintApVoltageBounce(time);
   }
@@ -420,11 +429,17 @@ export class LiveHud {
     this.comboBounceAt = -1;
     this.comboFlashAt = -1;
     this.apRateFlashAt = -1;
+    this.addScoreAt = -1;
     this.prevComboForFlash = 0;
     this.lastPaintedApRate = -1;
     if (this.comboFlashEl) {
       this.comboFlashEl.classList.remove('is-on');
       this.comboFlashEl.style.opacity = '0';
+    }
+    if (this.addScoreEl) {
+      this.addScoreEl.style.visibility = 'hidden';
+      this.addScoreEl.style.opacity = '0';
+      this.addScoreEl.style.transform = '';
     }
     this.comboRow.style.transform = '';
     this.rankManual = false;
@@ -690,7 +705,15 @@ export class LiveHud {
     this.buildGauge(root);
     this.buildRankLabels(root);
     this.buildRankRoot(root);
-    root.append(label, strip);
+    const addScore = document.createElement('div');
+    addScore.className = 'hud-add-score';
+    // level56 AddScore (305.8,−52) 200×40 pivot .5; TMP 24 left align charSpacing 4 IngameScorePink.
+    place(addScore, 512, 160, 0.5, 0.5, 0.5, 0.5, 305.8, -52, 200, 40);
+    mountOutlinedText(addScore, '+0');
+    addScore.style.visibility = 'hidden';
+    addScore.style.opacity = '0';
+    this.addScoreEl = addScore;
+    root.append(label, addScore, strip);
     safe.append(root);
   }
 
@@ -1001,6 +1024,44 @@ export class LiveHud {
     for (let i = 0; i < this.scoreCommas.length; i++) {
       setSprite(this.scoreCommas[i], scoreCommaSprite(score, i), ',');
     }
+  }
+
+  /** ScoreResolver Add → scoreAddText "+"N + ScoreAddTween @0x486177C. */
+  private triggerAddScore(delta: number, time: number): void {
+    const el = this.addScoreEl;
+    if (!el || delta <= 0) return;
+    const text = `+${delta}`;
+    const ol = el.querySelector('.hud-ol');
+    const face = el.querySelector('.hud-face');
+    if (ol) ol.textContent = text;
+    if (face) face.textContent = text;
+    this.addScoreAt = time;
+    el.style.visibility = 'visible';
+  }
+
+  private paintAddScore(time: number): void {
+    const el = this.addScoreEl;
+    if (!el) return;
+    if (this.addScoreAt < 0) {
+      el.style.visibility = 'hidden';
+      el.style.opacity = '0';
+      el.style.transform = '';
+      return;
+    }
+    const age = time - this.addScoreAt;
+    // Process: tween while active; hide when scoreAddHideTime < t (life 0.7).
+    if (age < 0 || age >= SCORE_ADD_LIFE) {
+      this.addScoreAt = -1;
+      el.style.visibility = 'hidden';
+      el.style.opacity = '0';
+      el.style.transform = '';
+      return;
+    }
+    const x = scoreAddTweenX(age) + SCORE_ADD_X_NUDGE;
+    const alpha = scoreAddTweenAlpha(age);
+    el.style.visibility = 'visible';
+    el.style.opacity = String(alpha);
+    el.style.transform = `translate(${x - SCORE_ADD_REST_X}px, 0)`;
   }
 
   private paintGauge(): void {

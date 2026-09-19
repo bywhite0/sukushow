@@ -125,4 +125,16 @@ describe('ApResolver / Voltage', () => {
     eng.addVoltagePoints(50);
     expect(eng.voltageLevel).toBe(eng.voltageBaseLevel << 1);
   });
+
+  it('lastAdd tracks single hit and addMany sum; Miss stays 0', () => {
+    const eng = new ScoreEngine();
+    eng.reset(null);
+    eng.add(4);
+    expect(eng.lastAdd).toBeGreaterThan(0);
+    const one = eng.lastAdd;
+    eng.addMany(4, 3);
+    expect(eng.lastAdd).toBe(one * 3);
+    eng.add(0);
+    expect(eng.lastAdd).toBe(0);
+  });
 });

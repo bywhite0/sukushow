@@ -74,3 +74,9 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 - **AP/Voltage 环数值**：每帧 `paintApVoltage`；整数变化时 ComboRectTween 弹跳。Voltage 预览恒 0（技能到位前不加分）。
 - **AP増加**：底座徽章常显；`APRateUpper` 独立闪光副本（0.75s scale→1.5 + α→0）；`APRateEffect` 贴图爆发（glow/light02/glitter，@1/60s，寿命 1s，Local 缩放）。
+
+## AddScore 加分飘字
+
+- **布局**：level56 `AddScore` (305.8, −52) 200×40 pivot (0.5,0.5)；TMP 24、**左对齐**、`characterSpacing` 4、材质 IngameScorePink（面白 / 描边 RGB(255,58,153) width 0.4）。
+- **文案**：判定 `Add(type,…)` 与技能 `Add(long,t)` 均 `SetCharArray` → `scoreAddText`（"+"N）；`scoreAddHideTime = t+0.7`（技能路径字面量 `@0x1aa10b8`；判定路径复用 `judgementHideTime`）。预览用 `ScoreEngine.lastAdd`。
+- **ScoreAddTween @0x486177C**：寿命显示至 0.7s；缓动段 **0.2s**，`u=min(age,0.2)×5`；`anchoredPosition.x = -48·u·(u−2)+256`（0→304），**y 钉 −52**；`color.a = -0.4·u·(u−2)+0.6`（0.6→1）；0.2–0.7s 保持终态，超时清文本。预览另加 `SCORE_ADD_X_NUDGE = -40` 整体略左；DOM/z-index 在 `CurrentScoreRoot` 分数带之下。

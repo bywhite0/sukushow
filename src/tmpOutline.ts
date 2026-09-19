@@ -73,6 +73,7 @@ export const TMP_HUD_STROKES = {
   voltageLabel: tmpOutlineCssPxRounded(20, TMP_OUTLINE_MATERIALS.colorOutline04),
   mentalLabel: tmpOutlineCssPxRounded(24, TMP_OUTLINE_MATERIALS.colorOutline04),
   techLabel: tmpOutlineCssPxRounded(24, TMP_OUTLINE_MATERIALS.colorOutline04),
+  addScore: tmpOutlineCssPxRounded(24, TMP_OUTLINE_MATERIALS.colorOutline04),
   apValue: tmpOutlineCssPxRounded(32, TMP_OUTLINE_MATERIALS.outlineWhite),
   voltageValue: tmpOutlineCssPxRounded(32, TMP_OUTLINE_MATERIALS.outlineWhite),
 } as const;
