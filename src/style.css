@@ -159,16 +159,7 @@
 .stage .hud-stage,.stage .hud-root{position:relative;z-index:2}
 
 /* === HUD FX: rings / combo flash / AP増加 (2026-09-19) === */
-/* AP/Voltage rings — Unity Image Filled Radial360, fillOrigin Top, fillClockwise=false */
-.hud-gage{
-  z-index:2;
-  opacity:1;
-  /* Clockwise mask with empty leading arc ≡ CCW fill from top (fillOrigin Top, !clockwise). */
-  -webkit-mask-image:conic-gradient(from 0deg at 50% 50%,transparent 0deg,transparent calc((1 - var(--fill, 0)) * 360deg),#000 0);
-  mask-image:conic-gradient(from 0deg at 50% 50%,transparent 0deg,transparent calc((1 - var(--fill, 0)) * 360deg),#000 0);
-  -webkit-mask-size:100% 100%;
-  mask-size:100% 100%;
-}
+/* Ring mask lives on .hud-gage > img above; empty rings hide until fill > 0. */
 .hud-gage[data-fill="0"],.hud-gage.is-empty{
   opacity:0;
 }
