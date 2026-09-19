@@ -64,3 +64,10 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。
 - **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）；Fever 窗由 `Sections` + `FeverSectionNo`（默认 3；无 Sections 时用曲长 45%–70% 回退）驱动 `IsFever`（VL 翻倍）；`N-1>=4` 时 end 用 `tableEnd`（预览以曲长作 FinishTime / +0x34 近似，非 `sections[N-1]`）；`EnableFeverDisplay` 门控 LineBase 彩虹、LineMove 0.8s 往复亮条（长 4.4% 边线）与两侧 fever 粒子。
+
+## HUD FX：两个环 + Combo/AP増加
+
+- **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。预览用 hit 推进 AP(+0.2)/Voltage(+0.15) 以可见填充分数环。
+- **Combo**：`paintComboBounce`（≥10，ComboRectTween）保留；跨 100/200/… 触发 `DoEffectCombo` 近似（0.7833s scale 1→1.6@0.7→1.7 + alpha），上层数字行 + outline burst（AP-continue 时 burst 更强）。
+- **AP増加**：`apRate` 变化且 ≥1 时 `APIncreaseAnimation` 0.75s（scale smoothstep→1.5，alpha 1→0）；粉徽章 `(1,0.2275,0.6)`；UI 近似 burst（Root/Bg_core/particles/glitter）。`apRate<1` 只清文本、不重启动画。
+- 纯函数：`src/hudFxMath.ts` + `tests/hudFxMath.test.ts`。Skill/粒子技能 FX 仍不在范围。
