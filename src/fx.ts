@@ -35,7 +35,7 @@ interface Spec {
   rate: FxMM;
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
   role: 'core' | 'impact' | 'parr' | 'p2' | 'plain';
-  base: number; loop: boolean; dur: number;
+  base: number; loop: boolean; dur: number; followHead: boolean;
   /** Emitter clock: next one-shot burst index / loop wrap / rate accumulator. */
   burstI: number; rateAcc: number; cycle: number;
 }
@@ -44,7 +44,7 @@ interface Spark {
   age: number; life: number; sx: number; sy: number; sliceSize: number;
   r: number; g: number; b: number; a: number; grav: number;
   align: number; mesh: number; slice: boolean; tex: string;
-  pitchLocal: boolean; spin: number;
+  pitchLocal: boolean; spin: number; followHead: boolean;
   grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
   fever?: boolean;
@@ -282,6 +282,8 @@ export class HitFx {
         mesh: n.rend?.mode === 4 ? (n.rend.mesh?.includes('Plane') ? 2 : 1) : 0,
         slice, combo, tex: mat.tex + shader, role, base: cores.get(i) || 0,
         loop: !!n.ps.loop, dur: Math.max(0.05, n.ps.dur || 1),
+        // Hold 核心贴住当前头部；飞散粒子仍保留世界坐标。
+        followHead: prefab.id === 'holdLoop' && (role === 'core' || n.name === 'Core'),
         burstI: 0, rateAcc: 0, cycle: 0,
       });
     });
@@ -397,7 +399,7 @@ export class HitFx {
         sx: sized.drawX, sy: sized.drawY, sliceSize: sized.sliceSize,
         r: spec.col[0], g: spec.col[1], b: spec.col[2], a: spec.col[3], grav: spec.grav,
         align: spec.align, mesh: spec.mesh, slice: spec.slice, tex: spec.tex,
-        pitchLocal, spin: sample(spec.rot, rnd),
+        pitchLocal, spin: sample(spec.rot, rnd), followHead: spec.followHead,
         grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
         fever: !!live.fever,
@@ -548,7 +550,14 @@ export class HitFx {
     this.live = next;
   }
   setLoop(uid: number, x: number) {
-    for (const live of this.live) if (live.loop && live.uid === uid) live.x = x;
+    for (const live of this.live) {
+      if (!live.loop || live.uid !== uid) continue;
+      const dx = x - live.x;
+      live.x = x;
+      for (const spark of live.sparks) {
+        if (spark.followHead) spark.x += dx;
+      }
+    }
   }
   draw() {
     for (const batch of this.batches.values()) batch.reset();
