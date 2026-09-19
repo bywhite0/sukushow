@@ -183,6 +183,21 @@ class FxBatch {
 }
 
 /** GPU quads for the six note-effect prefabs. Not a full ParticleSystem. */
+
+/** LimitVelocityOverLifetime — BannerFxMath / PLAN (50 Hz discrete → continuous). */
+function applyLimitVelocity(s: { vx: number; vy: number; vz: number; limitDamp: number; limitSpeed: number }, dt: number) {
+  const sp = Math.hypot(s.vx, s.vy, s.vz);
+  const lim = Math.max(0, s.limitSpeed);
+  if (sp <= lim || sp <= 1e-8) return;
+  const damp = Math.min(0.999999, Math.max(0, s.limitDamp));
+  const kappa = -Math.log(1 - damp) * 50;
+  const next = lim + (sp - lim) * Math.exp(-kappa * dt);
+  const scale = next / sp;
+  s.vx *= scale;
+  s.vy *= scale;
+  s.vz *= scale;
+}
+
 export class HitFx {
   readonly group = new THREE.Group();
   private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
@@ -373,7 +388,7 @@ export class HitFx {
       const sh = this.emitShape(spec, sized, rnd, rnd2);
       const speed = sample(spec.speed, rnd);
       const grad = spec.gradTwo && spec.gradMin && Math.random() < 0.5 ? spec.gradMin : spec.grad;
-      live.sparks.push({
+      const spark: Spark = {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
         z: (live.abs ? 0 : BORDER) + spec.offset[2] + sh.oz,
@@ -396,7 +411,8 @@ export class HitFx {
         trailInherit: spec.trailInherit,
         trailGrad: spec.trailGrad,
         trail: [],
-      });
+      };
+      live.sparks.push(spark);
     }
   }
   private emitDue(live: Live, spec: Spec, prevAge: number, age: number) {
@@ -503,19 +519,17 @@ export class HitFx {
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
         if (s.omega) s.spin += s.omega * dt;
-        // Integrate before LimitVelocity so the birth frame keeps startSpeed punch.
-        s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
-        // LimitVelocity: v(t)=lim+(v0−lim)e^(−κt), κ=−ln(1−dampen)×50 (BannerFxMath / PLAN).
-        if ((this.mode === 'limited' || this.mode === 'full' || s.fever) && s.limitEn) {
-          const sp = Math.hypot(s.vx, s.vy, s.vz);
-          const lim = Math.max(0, s.limitSpeed);
-          if (sp > lim && sp > 1e-8) {
-            const damp = Math.min(0.999999, Math.max(0, s.limitDamp));
-            const kappa = -Math.log(1 - damp) * 50;
-            const next = lim + (sp - lim) * Math.exp(-kappa * dt);
-            const scale = next / sp;
-            s.vx *= scale; s.vy *= scale; s.vz *= scale;
-          }
+        // Middle+: ~40% free integrate for a bit of punch, then LimitVelocity, then rest.
+        // Full integrate-first flew too high; limit-first + birth brake was too flat.
+        // BannerFxMath: v=lim+(v0−lim)e^(−κt), κ=−ln(1−dampen)×50.
+        const limitHit =
+          (this.mode === 'limited' || this.mode === 'full' || s.fever) && s.limitEn;
+        const free = limitHit ? dt * 0.4 : dt;
+        s.x += s.vx * free; s.y += s.vy * free; s.z += s.vz * free;
+        if (limitHit) {
+          applyLimitVelocity(s, dt);
+          const rest = dt - free;
+          s.x += s.vx * rest; s.y += s.vy * rest; s.z += s.vz * rest;
         }
         if (s.trailEn) {
           const last = s.trail[s.trail.length - 1];
