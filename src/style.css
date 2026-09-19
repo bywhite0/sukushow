@@ -87,8 +87,22 @@
 .hud-mental{position:absolute;right:100px;top:50px;width:400px;height:80px;border-radius:40px;background:rgba(0,0,0,.302);box-shadow:inset 0 0 0 2px #1debc7;color:#fff;font-size:24px;font-weight:700}
 .hud-mental-label{color:#fff}
 .hud-mental-now,.hud-mental-max{justify-content:flex-end}
-.hud-mental-track{border-radius:8px;background:#191418;box-shadow:0 0 0 2px #4e444b;overflow:hidden}
-.hud-mental-fill{width:0;height:100%}
+.hud-mental-track{
+  border-radius:8px;
+  background:rgb(25,20,24);
+  box-shadow:0 0 0 2px rgb(78,68,75);
+  overflow:hidden;
+}
+.hud-mental-fill{
+  width:100%;
+  height:100%;
+  border-radius:inherit;
+  /* GradientColor level56 #1546 × white Fill; UpdateMental switches to red ≤ ceil(max×0.2) */
+  background:linear-gradient(90deg,rgb(29,235,199),rgb(118,240,224));
+}
+.hud-mental-fill.is-low{
+  background:linear-gradient(90deg,rgb(235,37,78),rgb(255,114,143));
+}
 .hud-gauge{border-radius:24px;background:rgba(77,49,63,.702);box-shadow:inset 0 0 0 2px rgb(255,58,153);z-index:0}
 .hud-gauge-slider{border-radius:8px;background:#191418;box-shadow:0 0 0 2px #4e444b;overflow:hidden}
 .hud-gauge-fill{height:100%;width:0;background:linear-gradient(90deg,rgb(71,244,242),rgb(223,93,251))}
