@@ -266,6 +266,11 @@ export class LiveHud {
   private apRateFlashAt = -1;
   private prevComboForFlash = 0;
   private lastPaintedApRate = -1;
+  private lastApDisplay = -1;
+  private lastVoltageDisplay = -1;
+  private apValueBounceAt = -1;
+  private voltageValueBounceAt = -1;
+  private apRateUpperEl: HTMLElement | null = null;
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
   private apRateBurstEl: HTMLElement | null = null;
@@ -357,6 +362,8 @@ export class LiveHud {
     this.paintComboBounce(time);
     this.paintComboFlash(time);
     this.paintApRateFlash(time);
+    this.paintApVoltage();
+    this.paintApVoltageBounce(time);
   }
 
   dispose(): void {
@@ -419,15 +426,22 @@ export class LiveHud {
       this.comboFlashEl.classList.remove('is-on');
       this.comboFlashEl.style.opacity = '0';
     }
-    this.apRateBadge.classList.remove('is-flashing');
-    this.apRateBadge.style.opacity = '';
-    this.apRateBadge.style.transform = '';
     this.comboRow.style.transform = '';
     this.rankManual = false;
+    this.lastApDisplay = -1;
+    this.lastVoltageDisplay = -1;
+    this.apValueBounceAt = -1;
+    this.voltageValueBounceAt = -1;
+    if (this.apRateUpperEl) {
+      this.apRateUpperEl.classList.remove('is-on');
+      this.apRateUpperEl.style.opacity = '0';
+      this.apRateUpperEl.style.transform = '';
+    }
     this.paintCombo();
     this.paintApRate();
     this.paintScore();
     this.paintGauge();
+    this.paintApVoltage();
     this.setRank('none');
     this.paintTechnicalFromEngine();
     this.paintJudge(time);
@@ -464,15 +478,18 @@ export class LiveHud {
 
   private paintApRate(): void {
     // UpdateApRate: apRate >= 1 ⇒ COMBO label on + badge text; else both hidden / alpha 0.
-    // ApRateFlash animator restart is gated in onComboAdvanced (only when apRate changes).
+    // ApRateFlash (APRateUpper) restart is gated in onComboAdvanced (only when apRate changes).
     const on = this.apRate >= 1;
     this.comboLabel.hidden = !on;
     this.apRateBadge.hidden = !on;
+    const label = on ? `AP増加 ×1.${this.apRate}` : '';
+    this.apRateValue.textContent = label;
+    if (this.apRateUpperEl) {
+      const uv = this.apRateUpperEl.querySelector('.hud-aprate-value');
+      if (uv) uv.textContent = label;
+    }
     if (on) {
-      this.apRateValue.textContent = `AP増加 ×1.${this.apRate}`;
       this.apRateBadge.style.background = 'rgb(255,58,153)'; // (1, 0.2275, 0.6)
-    } else {
-      this.apRateValue.textContent = '';
     }
   }
 
@@ -510,9 +527,11 @@ export class LiveHud {
         this.spawnApRateBurst();
       } else {
         this.apRateFlashAt = -1;
-        this.apRateBadge.classList.remove('is-flashing');
-        this.apRateBadge.style.opacity = '';
-        this.apRateBadge.style.transform = '';
+        if (this.apRateUpperEl) {
+          this.apRateUpperEl.classList.remove('is-on');
+          this.apRateUpperEl.style.opacity = '0';
+          this.apRateUpperEl.style.transform = '';
+        }
       }
       this.lastPaintedApRate = this.apRate;
     }
@@ -563,47 +582,61 @@ export class LiveHud {
   }
 
   private paintApRateFlash(time: number): void {
-    const badge = this.apRateBadge;
+    const upper = this.apRateUpperEl;
+    if (!upper) return;
     if (this.apRateFlashAt < 0) {
-      badge.classList.remove('is-flashing');
+      upper.classList.remove('is-on');
+      upper.style.opacity = '0';
+      upper.style.transform = '';
       return;
     }
     const age = time - this.apRateFlashAt;
     if (age < 0 || age >= AP_RATE_FLASH_DURATION) {
       this.apRateFlashAt = -1;
-      badge.classList.remove('is-flashing');
-      badge.style.opacity = '';
-      badge.style.transform = '';
+      upper.classList.remove('is-on');
+      upper.style.opacity = '0';
+      upper.style.transform = '';
       return;
     }
     const s = apRateFlashScale(age);
     const a = apRateFlashAlpha(age);
-    badge.classList.add('is-flashing');
-    badge.style.setProperty('--ap-flash-s', String(s));
-    badge.style.setProperty('--ap-flash-a', String(a));
-    badge.style.opacity = String(a);
-    badge.style.transform = `scale(${s})`;
+    upper.classList.add('is-on');
+    upper.style.opacity = String(a);
+    upper.style.transform = `scale(${s})`;
   }
 
+  /** PLAN §47 APRateEffect — textured approx; Local scaling (sibling of badge, not under Upper). */
   private spawnApRateBurst(): void {
     const host = this.apRateBurstEl;
     if (!host) return;
     host.classList.remove('is-on');
     host.replaceChildren();
-    const root = document.createElement('div');
-    root.className = 'burst-root';
-    const core = document.createElement('div');
-    core.className = 'burst-core';
-    const particles = document.createElement('div');
-    particles.className = 'burst-particles';
-    const glitter = document.createElement('div');
-    glitter.className = 'burst-glitter';
+    const mk = (cls: string, src: string, w: number, h: number) => {
+      const d = document.createElement('div');
+      d.className = cls;
+      d.style.width = `${w}px`;
+      d.style.height = `${h}px`;
+      const img = document.createElement('img');
+      img.alt = '';
+      img.draggable = false;
+      img.src = `/rg/fx/tex/${src}`;
+      d.append(img);
+      return d;
+    };
+    // Root #563 ~254×63 white flash; Bg_core #530 pink glow; Particle light02; Closs glitter.
+    const root = mk('burst-root', 'sc2_effect_combo_glow_002.png', 254, 63);
+    const core = mk('burst-core', 'sc2_effect_combo_glow_002.png', 400, 300);
+    const particles = mk('burst-particles', 'sc2_Particle_light02.png', 220, 220);
+    const glitter = mk('burst-glitter', 'sc2_result_effect_glitter_lyrics_01.png', 180, 180);
     host.append(root, core, particles, glitter);
-    host.classList.add('is-on');
+    // clip: APRateEffect SetActive @ 1/60s
+    window.setTimeout(() => {
+      host.classList.add('is-on');
+    }, 17);
     window.setTimeout(() => {
       host.classList.remove('is-on');
       host.replaceChildren();
-    }, 700);
+    }, 1000);
   }
 
 
@@ -1031,6 +1064,15 @@ export class LiveHud {
     const apRateValue = document.createElement('div');
     apRateValue.className = 'hud-aprate-value';
     apRate.append(apRateValue);
+    // APRateUpper: flash copy (scale+fade); base badge stays opaque (PLAN §46).
+    const apRateUpper = document.createElement('div');
+    apRateUpper.className = 'hud-aprate-upper';
+    place(apRateUpper, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 240, 40);
+    apRateUpper.style.opacity = '0';
+    const apRateUpperValue = document.createElement('div');
+    apRateUpperValue.className = 'hud-aprate-value';
+    apRateUpper.append(apRateUpperValue);
+    this.apRateUpperEl = apRateUpper;
     // Flash overlay sits on the same rect as SpriteRoot (not whole ComboRoot),
     // so ComboAnimation scale grows from the digit center — avoids left drift.
     const flash = document.createElement('div');
@@ -1043,7 +1085,7 @@ export class LiveHud {
     const burst = document.createElement('div');
     burst.className = 'hud-aprate-burst';
     place(burst, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 280, 280);
-    root.append(row, label, apRate, flash, burst);
+    root.append(row, label, apRate, apRateUpper, flash, burst);
     this.comboFlashEl = flash;
     this.comboFlashDigits = flashDigits;
     this.apRateBurstEl = burst;
@@ -1100,8 +1142,19 @@ export class LiveHud {
       if (face) face.textContent = text;
       if (!ol && !face) host.textContent = text;
     };
-    setOutlined(this.apValueEl, String(this.scoreEngine.apDisplayValue));
-    setOutlined(this.voltageValueEl, String(this.scoreEngine.voltageLevel));
+    const apInt = this.scoreEngine.apDisplayValue;
+    const voInt = this.scoreEngine.voltageLevel;
+    setOutlined(this.apValueEl, String(apInt));
+    setOutlined(this.voltageValueEl, String(voInt));
+    // Integer tick → short pop (same curve family as ComboRectTween).
+    if (this.lastApDisplay >= 0 && apInt !== this.lastApDisplay) {
+      this.apValueBounceAt = this.previousTime;
+    }
+    if (this.lastVoltageDisplay >= 0 && voInt !== this.lastVoltageDisplay) {
+      this.voltageValueBounceAt = this.previousTime;
+    }
+    this.lastApDisplay = apInt;
+    this.lastVoltageDisplay = voInt;
     const apFill = this.scoreEngine.apGauge;
     const voFill = this.scoreEngine.voltageGauge;
     if (this.apGageEl) {
@@ -1114,6 +1167,27 @@ export class LiveHud {
       this.voltageGageEl.classList.toggle('is-empty', voFill <= 0);
       this.voltageGageEl.dataset.fill = voFill <= 0 ? '0' : '1';
     }
+  }
+
+  private paintApVoltageBounce(time: number): void {
+    const tick = (el: HTMLElement | null, at: number, clear: () => void) => {
+      if (!el) return;
+      if (at < 0) {
+        el.style.transform = '';
+        return;
+      }
+      const age = time - at;
+      if (age < 0 || age >= COMBO_TWEEN) {
+        el.style.transform = '';
+        clear();
+        return;
+      }
+      const u = Math.min(age, COMBO_TWEEN) * (1 / COMBO_TWEEN);
+      const scale = 0.8 + 0.4 * u - 0.2 * u * u;
+      el.style.transform = `scale(${0.92 * scale})`;
+    };
+    tick(this.apValueEl, this.apValueBounceAt, () => { this.apValueBounceAt = -1; });
+    tick(this.voltageValueEl, this.voltageValueBounceAt, () => { this.voltageValueBounceAt = -1; });
   }
 
   private buildMental(safe: HTMLElement): void {
