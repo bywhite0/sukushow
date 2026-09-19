@@ -520,13 +520,20 @@ export class LiveHud {
 
   private rebuildComboFlashDigits(): void {
     if (!this.comboFlashDigits) return;
-    const shown = this.combo < 10 ? 0 : this.combo;
-    const text = shown > 0 ? String(shown) : '';
+    // Mirror UpdateCombo slots: 4 fixed, [0]=units, row-reverse — same as paintCombo.
+    let n = this.combo < 10 ? 0 : this.combo;
     this.comboFlashDigits.replaceChildren();
-    for (const ch of text) {
+    for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
       const slot = document.createElement('div');
       slot.className = 'hud-cdigit';
-      mountSprite(slot, `ui_sc2_ingame_num_combo_${ch}`, ch);
+      if (n > 0) {
+        const d = n % 10;
+        mountSprite(slot, `ui_sc2_ingame_num_combo_${d}`, String(d));
+        n = Math.trunc(n * 0.1);
+      } else {
+        slot.hidden = true;
+        mountSprite(slot, 'ui_sc2_ingame_num_combo_0', '0');
+      }
       this.comboFlashDigits.append(slot);
     }
   }
@@ -553,9 +560,6 @@ export class LiveHud {
     el.style.setProperty('--flash-a', String(a));
     el.style.opacity = String(a);
     el.style.transform = `scale(${s})`;
-    // Upper-digit outline burst gated on apRate >= 1 (AP-continue)
-    const burst = this.apRate >= 1 ? 1 : 0.25;
-    el.style.setProperty('--digit-burst', String(burst * a));
   }
 
   private paintApRateFlash(time: number): void {
@@ -1027,12 +1031,14 @@ export class LiveHud {
     const apRateValue = document.createElement('div');
     apRateValue.className = 'hud-aprate-value';
     apRate.append(apRateValue);
+    // Flash overlay sits on the same rect as SpriteRoot (not whole ComboRoot),
+    // so ComboAnimation scale grows from the digit center — avoids left drift.
     const flash = document.createElement('div');
     flash.className = 'hud-combo-flash';
     flash.style.opacity = '0';
+    place(flash, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, 54, 360, 120);
     const flashDigits = document.createElement('div');
     flashDigits.className = 'hud-combo-flash-digits';
-    place(flashDigits, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
     flash.append(flashDigits);
     const burst = document.createElement('div');
     burst.className = 'hud-aprate-burst';
