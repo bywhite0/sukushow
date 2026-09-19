@@ -2,6 +2,7 @@ import './style.css';
 import { decodeChart } from './chart';
 import { demoChart } from './demo';
 import { AudioPlayer } from './audio';
+import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
 import {
@@ -142,14 +143,14 @@ function applySettingsToForm(s:PreviewSettings){
 applySettingsToForm(loadPreviewSettings());
 
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
-let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;
-try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
+let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
+try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;
 function metadata(){input('timeline').max=String(chart.duration);}metadata();
-async function toggle(){if(!player)return;try{if(player.transport.playing)player.pause();else await player.play();}catch(e){message(`播放失败：${String(e)}`,true);}}
+async function toggle(){if(!player)return;try{if(player.transport.playing){player.pause();se?.pause();}else{await player.play();se?.resume();if(player.transport.time<=0.05)se?.playStart();}}catch(e){message(`播放失败：${String(e)}`,true);}}
 el('play').onclick=()=>void toggle();
-el('restart').onclick=()=>player?.seek(0);
-input('timeline').oninput=()=>player?.seek(Number(input('timeline').value));
+el('restart').onclick=()=>{player?.seek(0);se?.clear();};
+input('timeline').oninput=()=>{player?.seek(Number(input('timeline').value));se?.clear();};
 el<HTMLSelectElement>('rate').onchange=()=>{player?.setRate(Number(el<HTMLSelectElement>('rate').value));persistSettings();};
 input('speed').oninput=()=>{speed=Number(input('speed').value);el('speed-value').textContent=speed.toFixed(1);persistSettings();};
 input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();};input('lines').onchange=()=>{lines=input('lines').checked;persistSettings();};
@@ -165,6 +166,7 @@ el('demo').onclick=()=>{generation++;chart=demoChart();player?.clear();player?.t
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
+hud.setSe(se ?? null);
 const applyTechScore=()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);hud.setTechnicalScoreDisplay((v===1||v===2?v:0) as 0|1|2);persistSettings();};
 el<HTMLSelectElement>('tech-score').onchange=applyTechScore;applyTechScore();
 const applyHudOptions=()=>{
@@ -224,8 +226,8 @@ el<HTMLSelectElement>('opt-grid').onchange=applyVisualOptions;
 el<HTMLSelectElement>('opt-fps').onchange=()=>persistSettings();
 applyVisualOptions();
 
-input('vol-tap').oninput=()=>persistSettings();
-input('vol-se').oninput=()=>persistSettings();
+input('vol-tap').oninput=()=>{seOut?.setTapVolume(Number(input('vol-tap').value));persistSettings();};
+input('vol-se').oninput=()=>{seOut?.setSeVolume(Number(input('vol-se').value));persistSettings();};
 input('vol-voice').oninput=()=>persistSettings();
 
 const applyRank=()=>{const v=el<HTMLSelectElement>('rank-preview').value;hud.setRankManual((v==='D'||v==='C'||v==='B'||v==='A'||v==='S'?v:'none') as 'none'|'D'|'C'|'B'|'A'|'S');persistSettings();};
@@ -248,4 +250,4 @@ function animate(){
  if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverActive,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
-window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();hud.dispose();},{once:true});
+window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();},{once:true});
