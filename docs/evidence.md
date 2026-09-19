@@ -67,7 +67,10 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## HUD FX：两个环 + Combo/AP増加
 
-- **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。预览用 hit 推进 AP(+0.2)/Voltage(+0.15) 以可见填充分数环。
+- **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。AP 环由 ApResolver 累加驱动；Voltage 点仅技能产（预览恒 0）。
 - **Combo**：`paintComboBounce`（≥10，ComboRectTween）保留；跨 100/200/… 触发 `DoEffectCombo` 近似（0.7833s scale 1→1.6@0.7→1.7 + alpha），上层数字行 + outline burst（AP-continue 时 burst 更强）。
 - **AP増加**：`apRate` 变化且 ≥1 时 `APIncreaseAnimation` 0.75s（scale smoothstep→1.5，alpha 1→0）；粉徽章 `(1,0.2275,0.6)`；UI 近似 burst（Root/Bg_core/particles/glitter）。`apRate<1` 只清文本、不重启动画。
 - 纯函数：`src/hudFxMath.ts` + `tests/hudFxMath.test.ts`。Skill/粒子技能 FX 仍不在范围。
+
+- **AP/Voltage 环数值**：每帧 `paintApVoltage`；整数变化时 ComboRectTween 弹跳。Voltage 预览恒 0（技能到位前不加分）。
+- **AP増加**：底座徽章常显；`APRateUpper` 独立闪光副本（0.75s scale→1.5 + α→0）；`APRateEffect` 贴图爆发（glow/light02/glitter，@1/60s，寿命 1s，Local 缩放）。
