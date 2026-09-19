@@ -1,4 +1,15 @@
 import type { Chart, Note } from './chart';
+import {
+  AP_RATE_FLASH_DURATION,
+  COMBO_FLASH_DURATION,
+  apRateFlashAlpha,
+  apRateFlashScale,
+  comboFlashAlpha,
+  comboFlashScale,
+  radialFillAmount,
+  shouldComboHundredFlash,
+} from './hudFxMath';
+
 import { isFeverAt, resolveFeverWindow } from './fever';
 import { noteJudgementTimes } from './chart';
 import {
@@ -252,6 +263,20 @@ export class LiveHud {
   private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
   private lastJudgeType: NoteJudgementType = 4;
   private comboBounceAt = -1;
+  private comboFlashAt = -1;
+  private apRateFlashAt = -1;
+  private prevComboForFlash = 0;
+  private lastPaintedApRate = -1;
+  private apValue = 0;
+  private voltageValue = 0;
+  private apGageEl: HTMLElement | null = null;
+  private voltageGageEl: HTMLElement | null = null;
+  private apValueEl: HTMLElement | null = null;
+  private voltageValueEl: HTMLElement | null = null;
+  private comboFlashEl: HTMLElement | null = null;
+  private comboFlashDigits: HTMLElement | null = null;
+  private apRateBurstEl: HTMLElement | null = null;
+
 
   constructor(stage: HTMLElement) {
     this.stage = stage;
@@ -389,6 +414,19 @@ export class LiveHud {
     this.judgeAt = -1;
     this.conditionAt = -1;
     this.comboBounceAt = -1;
+    this.comboFlashAt = -1;
+    this.apRateFlashAt = -1;
+    this.prevComboForFlash = 0;
+    this.lastPaintedApRate = -1;
+    this.apValue = 0;
+    this.voltageValue = 0;
+    if (this.comboFlashEl) {
+      this.comboFlashEl.classList.remove('is-on');
+      this.comboFlashEl.style.opacity = '0';
+    }
+    this.apRateBadge.classList.remove('is-flashing');
+    this.apRateBadge.style.opacity = '';
+    this.apRateBadge.style.transform = '';
     this.comboRow.style.transform = '';
     this.rankManual = false;
     this.paintCombo();
@@ -431,11 +469,13 @@ export class LiveHud {
 
   private paintApRate(): void {
     // UpdateApRate: apRate >= 1 ⇒ COMBO label on + badge text; else both hidden / alpha 0.
+    // ApRateFlash animator restart is gated in onComboAdvanced (only when apRate changes).
     const on = this.apRate >= 1;
     this.comboLabel.hidden = !on;
     this.apRateBadge.hidden = !on;
     if (on) {
       this.apRateValue.textContent = `AP増加 ×1.${this.apRate}`;
+      this.apRateBadge.style.background = 'rgb(255,58,153)'; // (1, 0.2275, 0.6)
     } else {
       this.apRateValue.textContent = '';
     }
@@ -460,6 +500,135 @@ export class LiveHud {
     const scale = 0.5 + u - 0.5 * u * u;
     this.judge.style.transform = `scale(${scale})`;
   }
+
+
+  /** Preview AP/Voltage: advance gauges on hits so rings show fractional fill (ApResolver-style). */
+  private onComboAdvanced(prevCombo: number, time: number): void {
+    const gained = Math.max(0, this.combo - prevCombo);
+    // Preview stand-in: +0.2 AP / +0.15 Voltage per head (fractional ring). Labels show trunc.
+    this.apValue += gained * 0.2;
+    this.voltageValue += gained * 0.15;
+    if (shouldComboHundredFlash(prevCombo, this.combo)) {
+      this.comboFlashAt = time;
+      this.rebuildComboFlashDigits();
+    }
+    this.prevComboForFlash = this.combo;
+    // ApRateFlash only when apRate value changes
+    if (this.apRate !== this.lastPaintedApRate) {
+      if (this.apRate >= 1) {
+        this.apRateFlashAt = time;
+        this.spawnApRateBurst();
+      } else {
+        this.apRateFlashAt = -1;
+        this.apRateBadge.classList.remove('is-flashing');
+        this.apRateBadge.style.opacity = '';
+        this.apRateBadge.style.transform = '';
+      }
+      this.lastPaintedApRate = this.apRate;
+    }
+  }
+
+  private paintApVoltage(): void {
+    const apFill = radialFillAmount(this.apValue);
+    const voFill = radialFillAmount(this.voltageValue);
+    if (this.apGageEl) {
+      this.apGageEl.style.setProperty('--fill', String(apFill));
+      this.apGageEl.classList.toggle('is-empty', apFill <= 0);
+      this.apGageEl.dataset.fill = apFill <= 0 ? '0' : '1';
+    }
+    if (this.voltageGageEl) {
+      this.voltageGageEl.style.setProperty('--fill', String(voFill));
+      this.voltageGageEl.classList.toggle('is-empty', voFill <= 0);
+      this.voltageGageEl.dataset.fill = voFill <= 0 ? '0' : '1';
+    }
+    if (this.apValueEl) this.apValueEl.textContent = String(Math.trunc(this.apValue));
+    if (this.voltageValueEl) this.voltageValueEl.textContent = String(Math.trunc(this.voltageValue));
+  }
+
+  private rebuildComboFlashDigits(): void {
+    if (!this.comboFlashDigits) return;
+    const shown = this.combo < 10 ? 0 : this.combo;
+    const text = shown > 0 ? String(shown) : '';
+    this.comboFlashDigits.replaceChildren();
+    for (const ch of text) {
+      const slot = document.createElement('div');
+      slot.className = 'hud-cdigit';
+      mountSprite(slot, `ui_sc2_ingame_num_combo_${ch}`, ch);
+      this.comboFlashDigits.append(slot);
+    }
+  }
+
+  private paintComboFlash(time: number): void {
+    const el = this.comboFlashEl;
+    if (!el) return;
+    if (this.comboFlashAt < 0) {
+      el.classList.remove('is-on');
+      el.style.opacity = '0';
+      return;
+    }
+    const age = time - this.comboFlashAt;
+    if (age < 0 || age >= COMBO_FLASH_DURATION) {
+      this.comboFlashAt = -1;
+      el.classList.remove('is-on');
+      el.style.opacity = '0';
+      return;
+    }
+    const s = comboFlashScale(age);
+    const a = comboFlashAlpha(age);
+    el.classList.add('is-on');
+    el.style.setProperty('--flash-s', String(s));
+    el.style.setProperty('--flash-a', String(a));
+    el.style.opacity = String(a);
+    el.style.transform = `scale(${s})`;
+    // Upper-digit outline burst gated on apRate >= 1 (AP-continue)
+    const burst = this.apRate >= 1 ? 1 : 0.25;
+    el.style.setProperty('--digit-burst', String(burst * a));
+  }
+
+  private paintApRateFlash(time: number): void {
+    const badge = this.apRateBadge;
+    if (this.apRateFlashAt < 0) {
+      badge.classList.remove('is-flashing');
+      return;
+    }
+    const age = time - this.apRateFlashAt;
+    if (age < 0 || age >= AP_RATE_FLASH_DURATION) {
+      this.apRateFlashAt = -1;
+      badge.classList.remove('is-flashing');
+      badge.style.opacity = '';
+      badge.style.transform = '';
+      return;
+    }
+    const s = apRateFlashScale(age);
+    const a = apRateFlashAlpha(age);
+    badge.classList.add('is-flashing');
+    badge.style.setProperty('--ap-flash-s', String(s));
+    badge.style.setProperty('--ap-flash-a', String(a));
+    badge.style.opacity = String(a);
+    badge.style.transform = `scale(${s})`;
+  }
+
+  private spawnApRateBurst(): void {
+    const host = this.apRateBurstEl;
+    if (!host) return;
+    host.classList.remove('is-on');
+    host.replaceChildren();
+    const root = document.createElement('div');
+    root.className = 'burst-root';
+    const core = document.createElement('div');
+    core.className = 'burst-core';
+    const particles = document.createElement('div');
+    particles.className = 'burst-particles';
+    const glitter = document.createElement('div');
+    glitter.className = 'burst-glitter';
+    host.append(root, core, particles, glitter);
+    host.classList.add('is-on');
+    window.setTimeout(() => {
+      host.classList.remove('is-on');
+      host.replaceChildren();
+    }, 700);
+  }
+
 
   private paintComboBounce(time: number): void {
     if (this.comboBounceAt < 0) {
@@ -885,7 +1054,20 @@ export class LiveHud {
     const apRateValue = document.createElement('div');
     apRateValue.className = 'hud-aprate-value';
     apRate.append(apRateValue);
-    root.append(row, label, apRate);
+    const flash = document.createElement('div');
+    flash.className = 'hud-combo-flash';
+    flash.style.opacity = '0';
+    const flashDigits = document.createElement('div');
+    flashDigits.className = 'hud-combo-flash-digits';
+    place(flashDigits, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
+    flash.append(flashDigits);
+    const burst = document.createElement('div');
+    burst.className = 'hud-aprate-burst';
+    place(burst, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 280, 280);
+    root.append(row, label, apRate, flash, burst);
+    this.comboFlashEl = flash;
+    this.comboFlashDigits = flashDigits;
+    this.apRateBurstEl = burst;
     safe.append(root);
     return { row, label, apRate, apRateValue };
   }
