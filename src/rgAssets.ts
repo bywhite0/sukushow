@@ -57,7 +57,8 @@ const NOTE_SPRITES = [
 function loadTexture(url: string, repeat = false) {
   return new Promise<THREE.Texture>((resolve, reject) => {
     new THREE.TextureLoader().load(url, tex => {
-      tex.colorSpace = THREE.SRGBColorSpace;
+      // 自定义 sprite/FX shader 直接在显示颜色上运算，不做线性空间输出转换。
+      tex.colorSpace = THREE.NoColorSpace;
       tex.wrapS = tex.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
       tex.needsUpdate = true;
       resolve(tex);
