@@ -6,7 +6,6 @@ import {
   apRateFlashScale,
   comboFlashAlpha,
   comboFlashScale,
-  radialFillAmount,
   shouldComboHundredFlash,
 } from './hudFxMath';
 
@@ -267,12 +266,6 @@ export class LiveHud {
   private apRateFlashAt = -1;
   private prevComboForFlash = 0;
   private lastPaintedApRate = -1;
-  private apValue = 0;
-  private voltageValue = 0;
-  private apGageEl: HTMLElement | null = null;
-  private voltageGageEl: HTMLElement | null = null;
-  private apValueEl: HTMLElement | null = null;
-  private voltageValueEl: HTMLElement | null = null;
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
   private apRateBurstEl: HTMLElement | null = null;
@@ -332,6 +325,7 @@ export class LiveHud {
     if (time - previousTime < SEEK_GAP) {
       const hits = countHeads(chart, previousTime, time);
       if (hits > 0) {
+        const prevCombo = this.combo;
         const jType = autoPlayJudgementType(this.enablePerfectPlus);
         this.scoreEngine.addMany(jType, hits);
         this.combo = this.scoreEngine.combo;
@@ -355,11 +349,14 @@ export class LiveHud {
           this.conditionAt = time;
         }
         if (this.combo >= 10) this.comboBounceAt = time;
+        this.onComboAdvanced(prevCombo, time);
       }
     }
     this.paintJudge(time);
     this.paintCondition(time);
     this.paintComboBounce(time);
+    this.paintComboFlash(time);
+    this.paintApRateFlash(time);
   }
 
   dispose(): void {
@@ -418,8 +415,6 @@ export class LiveHud {
     this.apRateFlashAt = -1;
     this.prevComboForFlash = 0;
     this.lastPaintedApRate = -1;
-    this.apValue = 0;
-    this.voltageValue = 0;
     if (this.comboFlashEl) {
       this.comboFlashEl.classList.remove('is-on');
       this.comboFlashEl.style.opacity = '0';
@@ -502,12 +497,7 @@ export class LiveHud {
   }
 
 
-  /** Preview AP/Voltage: advance gauges on hits so rings show fractional fill (ApResolver-style). */
   private onComboAdvanced(prevCombo: number, time: number): void {
-    const gained = Math.max(0, this.combo - prevCombo);
-    // Preview stand-in: +0.2 AP / +0.15 Voltage per head (fractional ring). Labels show trunc.
-    this.apValue += gained * 0.2;
-    this.voltageValue += gained * 0.15;
     if (shouldComboHundredFlash(prevCombo, this.combo)) {
       this.comboFlashAt = time;
       this.rebuildComboFlashDigits();
@@ -526,23 +516,6 @@ export class LiveHud {
       }
       this.lastPaintedApRate = this.apRate;
     }
-  }
-
-  private paintApVoltage(): void {
-    const apFill = radialFillAmount(this.apValue);
-    const voFill = radialFillAmount(this.voltageValue);
-    if (this.apGageEl) {
-      this.apGageEl.style.setProperty('--fill', String(apFill));
-      this.apGageEl.classList.toggle('is-empty', apFill <= 0);
-      this.apGageEl.dataset.fill = apFill <= 0 ? '0' : '1';
-    }
-    if (this.voltageGageEl) {
-      this.voltageGageEl.style.setProperty('--fill', String(voFill));
-      this.voltageGageEl.classList.toggle('is-empty', voFill <= 0);
-      this.voltageGageEl.dataset.fill = voFill <= 0 ? '0' : '1';
-    }
-    if (this.apValueEl) this.apValueEl.textContent = String(Math.trunc(this.apValue));
-    if (this.voltageValueEl) this.voltageValueEl.textContent = String(Math.trunc(this.voltageValue));
   }
 
   private rebuildComboFlashDigits(): void {
@@ -1123,9 +1096,17 @@ export class LiveHud {
     };
     setOutlined(this.apValueEl, String(this.scoreEngine.apDisplayValue));
     setOutlined(this.voltageValueEl, String(this.scoreEngine.voltageLevel));
-    if (this.apGageEl) this.apGageEl.style.setProperty('--fill', String(this.scoreEngine.apGauge));
+    const apFill = this.scoreEngine.apGauge;
+    const voFill = this.scoreEngine.voltageGauge;
+    if (this.apGageEl) {
+      this.apGageEl.style.setProperty('--fill', String(apFill));
+      this.apGageEl.classList.toggle('is-empty', apFill <= 0);
+      this.apGageEl.dataset.fill = apFill <= 0 ? '0' : '1';
+    }
     if (this.voltageGageEl) {
-      this.voltageGageEl.style.setProperty('--fill', String(this.scoreEngine.voltageGauge));
+      this.voltageGageEl.style.setProperty('--fill', String(voFill));
+      this.voltageGageEl.classList.toggle('is-empty', voFill <= 0);
+      this.voltageGageEl.dataset.fill = voFill <= 0 ? '0' : '1';
     }
   }
 
