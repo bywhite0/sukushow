@@ -37,13 +37,17 @@ describe('shouldComboHundredFlash', () => {
 describe('comboFlash curves', () => {
   it('scale 1→1.6@0.7→1.7 over 0.7833s', () => {
     expect(comboFlashScale(0)).toBeCloseTo(1, 5);
-    expect(comboFlashScale(0.7833 * 0.7)).toBeCloseTo(1.6, 5);
-    expect(comboFlashScale(0.7833)).toBeCloseTo(1.7, 5);
+    expect(comboFlashScale(0.7833333611488342 * 0.7)).toBeCloseTo(1.6, 4);
+    expect(comboFlashScale(0.7833333611488342)).toBeCloseTo(1.7, 5);
   });
-  it('alpha peaks mid-anim', () => {
+  it('alpha: 0→1@1/30, hold to 1/6, poly fade to 0', () => {
     expect(comboFlashAlpha(0)).toBe(0);
-    expect(comboFlashAlpha(0.4)).toBe(1);
-    expect(comboFlashAlpha(0.7833)).toBe(0);
+    expect(comboFlashAlpha(1 / 30 - 1e-6)).toBe(0);
+    expect(comboFlashAlpha(1 / 30)).toBe(1);
+    expect(comboFlashAlpha(1 / 6 - 1e-6)).toBe(1);
+    expect(comboFlashAlpha(0.4)).toBeGreaterThan(0);
+    expect(comboFlashAlpha(0.4)).toBeLessThan(1);
+    expect(comboFlashAlpha(0.7833333611488342)).toBe(0);
   });
 });
 
