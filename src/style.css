@@ -42,6 +42,9 @@
 .hud-logic{position:absolute;left:50%;top:50%;transform-origin:center center}
 .hud-safe{position:absolute;left:50%;top:0;width:1920px;height:100%;transform:translateX(-50%)}
 .hud-score{position:absolute;left:0;top:0;width:512px;height:160px;overflow:visible}
+.hud-add-score{display:flex;align-items:center;justify-content:flex-start;font-size:24px;font-weight:700;letter-spacing:0.04em;z-index:2;pointer-events:none;white-space:nowrap;transform-origin:center center;text-align:left}
+.hud-add-score .hud-ol{color:rgb(255,58,153);-webkit-text-stroke:2.4px rgb(255,58,153)}
+.hud-add-score .hud-face{color:#fff}
 .hud-score-label,.hud-ap-label,.hud-ap-value,.hud-mental-label,.hud-mental-now,.hud-mental-sep,.hud-mental-max{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;white-space:nowrap}
 .hud-score-label{font-size:20px;color:#fff;z-index:3}
 .hud-score-strip{overflow:visible;z-index:3}

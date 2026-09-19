@@ -248,6 +248,8 @@ export const DEFAULT_SCORE_CONFIG: ScoreEngineConfig = {
 
 export class ScoreEngine {
   score = 0;
+  /** Points added by the most recent add()/addMany() call (0 if Miss or mental dead). */
+  lastAdd = 0;
   combo = 0;
   userCombo = 0;
   apRate = 0;
@@ -280,6 +282,7 @@ export class ScoreEngine {
 
   reset(chart: Chart | null): void {
     this.score = 0;
+    this.lastAdd = 0;
     this.combo = 0;
     this.userCombo = 0;
     this.apRate = 0;
@@ -343,6 +346,7 @@ export class ScoreEngine {
 
   /** AutoPlay / live hit. Miss/Bad clear combo; preview AutoPlay uses Perfect/PP only. */
   add(type: NoteJudgementType, mentalAlive = true): void {
+    this.lastAdd = 0;
     this.judgements[type] = (this.judgements[type] ?? 0) + 1;
     if (type === 0) {
       this.combo = 0;
@@ -352,21 +356,34 @@ export class ScoreEngine {
     if (type === 1) {
       this.combo = 0;
       this.apRate = 0;
-      if (mentalAlive) this.score += calcAdd(this.halfway, type, this.voltageLevel);
+      if (mentalAlive) {
+        const delta = calcAdd(this.halfway, type, this.voltageLevel);
+        this.score += delta;
+        this.lastAdd = delta;
+      }
       this.rank = getScoreRank(this.score, this.cfg.rankValues);
       return;
     }
     this.combo += 1;
     if (this.userCombo < this.combo) this.userCombo = this.combo;
-    if (mentalAlive) this.score += calcAdd(this.halfway, type, this.voltageLevel);
+    if (mentalAlive) {
+      const delta = calcAdd(this.halfway, type, this.voltageLevel);
+      this.score += delta;
+      this.lastAdd = delta;
+    }
     this.apRate = Math.min(Math.max(this.apRate, Math.trunc(this.combo * 0.1)), 5);
     this.apPoints += apAddDelta(type, this.apRate, this.basePlus, this.halfPlus);
     this.rank = getScoreRank(this.score, this.cfg.rankValues);
   }
 
-  /** Apply `hits` identical judgements (batch from countHeads). */
+  /** Apply `hits` identical judgements (batch from countHeads). lastAdd = sum of batch. */
   addMany(type: NoteJudgementType, hits: number, mentalAlive = true): void {
-    for (let i = 0; i < hits; i++) this.add(type, mentalAlive);
+    let sum = 0;
+    for (let i = 0; i < hits; i++) {
+      this.add(type, mentalAlive);
+      sum += this.lastAdd;
+    }
+    this.lastAdd = sum;
   }
 
   gaugeFill(): number {

@@ -6,6 +6,10 @@ import {
   comboFlashScale,
   radialFillAmount,
   shouldComboHundredFlash,
+  scoreAddTweenX,
+  scoreAddTweenAlpha,
+  SCORE_ADD_TWEEN,
+  SCORE_ADD_LIFE,
 } from '../src/hudFxMath';
 
 describe('radialFillAmount', () => {
@@ -50,5 +54,15 @@ describe('apRateFlash curves', () => {
     expect(apRateFlashAlpha(0)).toBeCloseTo(1, 5);
     expect(apRateFlashAlpha(0.375)).toBeGreaterThan(0.4);
     expect(apRateFlashAlpha(0.75)).toBeCloseTo(0, 5);
+  });
+});
+
+describe('ScoreAddTween', () => {
+  it('X/alpha at birth and end match binary', () => {
+    expect(scoreAddTweenX(0)).toBe(256);
+    expect(scoreAddTweenX(SCORE_ADD_TWEEN)).toBe(304);
+    expect(scoreAddTweenX(SCORE_ADD_LIFE)).toBe(304);
+    expect(scoreAddTweenAlpha(0)).toBeCloseTo(0.6, 5);
+    expect(scoreAddTweenAlpha(SCORE_ADD_TWEEN)).toBeCloseTo(1, 5);
   });
 });
