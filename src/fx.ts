@@ -427,7 +427,7 @@ export class HitFx {
         const t = b.t + c * (b.interval || 0);
         const due = wrapped
           ? (t >= localPrev || t <= localAge)
-          : (t > localPrev && t <= localAge) || (prevAge <= 0 && t <= localAge);
+          : (t > localPrev && t <= localAge) || (prevAge < 0 && t <= localAge);
         if (due) this.burst(live, spec, b.count);
       }
     }
@@ -452,8 +452,9 @@ export class HitFx {
       this.live = this.live.filter(fx => !fx.fever);
       return;
     }
-    this.spawn('feverLeft', 0, 1, true, -200, true, true);
-    this.spawn('feverRight', 0, 1, true, -201, true, true);
+    // level56 #544/#543：入场爆发不循环，后续批次仍须推进。
+    this.spawn('feverLeft', 0, 1, false, -200, true, true);
+    this.spawn('feverRight', 0, 1, false, -201, true, true);
   }
   spawn(id: string, x: number, width: number, loop = false, uid = -1, abs = false, fever = false) {
     if (this.mode === 'off' && !fever) return null;
