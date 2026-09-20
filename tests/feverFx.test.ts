@@ -5,6 +5,48 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+describe('Fever 出生时间', () => {
+  it('同一时刻的粒子位置不随跨越出生点的帧步长变化', () => {
+    const positions = (times: number[]) => {
+      const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+      const prefab = data.fever![0];
+      prefab.nodes = [prefab.nodes[0]];
+      const ps = prefab.nodes[0].ps!;
+      ps.trail = undefined;
+      ps.limit = undefined;
+      ps.shape = undefined;
+      ps.rotol = undefined;
+      ps.grav = 0;
+      ps.rot = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+      ps.size = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+      ps.size3d = false;
+      ps.speed = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+      ps.life = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+      ps.bursts = [{ ...ps.bursts![0], cycles: 1 }];
+      data.prefabs = [];
+      data.fever = [prefab];
+      const texture = new THREE.Texture();
+      const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+      try {
+        fx.setMode('off');
+        fx.sync(parseChart({ Notes: [], Bpms: [] }), 0, false);
+        fx.setFever(true);
+        for (const t of times) fx.sync(parseChart({ Notes: [], Bpms: [] }), t, false);
+        fx.draw();
+        return fx.group.children.flatMap(child => {
+          const g = (child as THREE.Mesh).geometry;
+          return Array.from(g.getAttribute('position').array).slice(0, g.drawRange.count * 3);
+        });
+      } finally { fx.dispose(); texture.dispose(); }
+    };
+    const coarse = positions([0.1]);
+    const fine = positions([0.01, 1 / 60, 0.1]);
+    expect(coarse.length).toBeGreaterThan(0);
+    expect(coarse.length).toBe(fine.length);
+    coarse.forEach((v, i) => expect(v).toBeCloseTo(fine[i], 5));
+  });
+});
+
 describe('Fever 原始非循环入场爆发', () => {
   it.each([['feverLeft', 10, 20, 30, 45, 55, 70], ['feverRight', 7, 14, 21, 33, 40, 52]] as const)(
     '%s 按原始时间表发出全部六批，不重复第零批', (id, ...counts) => {

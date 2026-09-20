@@ -48,6 +48,7 @@ interface Spark {
   grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
   fever?: boolean;
+  firstStep?: number;
   omega: number;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
@@ -428,7 +429,14 @@ export class HitFx {
         const due = wrapped
           ? (t >= localPrev || t <= localAge)
           : (t > localPrev && t <= localAge) || (prevAge < 0 && t <= localAge);
-        if (due) this.burst(live, spec, b.count);
+        if (due) {
+          const first = live.sparks.length;
+          this.burst(live, spec, b.count);
+          // 非循环 Fever 入场按出生时刻计算首帧年龄，不多积分整帧。
+          if (live.fever && !live.loop) for (let i = first; i < live.sparks.length; i++) {
+            live.sparks[i].firstStep = Math.max(0, age - t);
+          }
+        }
       }
     }
     const rate = sample(spec.rate, Math.random());
@@ -523,7 +531,10 @@ export class HitFx {
         else if (!live.loop) this.emitDue(live, spec, prev, live.age);
       }
       const sparks: Spark[] = [];
+      const frameDt = dt;
       for (const s of live.sparks) {
+        const dt = s.firstStep ?? frameDt;
+        s.firstStep = undefined;
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
