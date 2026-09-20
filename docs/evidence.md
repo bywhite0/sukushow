@@ -73,6 +73,14 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。 Fill 为青渐变 (29,235,199)→(118,240,224)；`value ≤ ceil(max×0.2)` 时切红 (235,37,78)→(255,114,143)（预览满血不触发）。
 - **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）。原始谱面不提供分段，不再读取 `Sections` 或按曲长估算。Fever 由歌曲元数据索引或当前谱面的手动起止秒数驱动：索引使用 `Musics.FeverSectionNo` 选择 `musicscore_<Id>.csv` 中四个 `key_type=20` 边界所划分的段，第五段终点采用 CSV 原始顺序中最后一个 `key_type=99`（MusicEnd）的时间，统一从毫秒转秒；分段事件按时间升序排列，不使用 `Musics.PlayTime` 或“末音符 + 2 秒”作为 Fever 终点。4.12.0 二进制已核实：`FeverResolver.Inject @0x4990388` 在 `0x4990540` 取 `QuestLiveMusicScore +0x34`（MusicEndTime）；`LoadCsv @0x41A537C` 在 `0x41A5C44–0x41A5C54` 将最后一个 MusicEnd 的 SongTime 写入该字段，谓词 `0x41A5FC0` 比较 `KeyType==99`；分段谓词 `0x41A5F88` 比较 `KeyType==20`，`0x41A5B94` 按 SongTime 排序。四个边界的严格校验是预览器策略，不是客户端强制校验。无元数据或输入无效时不启用 Fever。`EnableFeverDisplay` 仅门控 LineBase 彩虹、LineMove 单程 0.8s / 往返 1.6s 亮条（长 4.4% 边线）与两侧粒子，不改变逻辑 `IsFever`（VL 翻倍）；跳转后恢复粒子，关闭击中特效保留 Fever 粒子。
 
+## Fever 特效核对
+
+- 离线核对 4.12.0 `libil2cpp.so`：`FeverResolver.Process @0x4990098` 在开始边界设置逻辑状态，并由 `_isFeverEnabled` 门控 root 激活；结束边界无条件关闭 root。显示开关不改变逻辑 Fever。
+- `src/fever.ts` 的颜色改用原始 `level56` ParticleSystem #542（LineBase_Left）/#604（LineMove_Left）的 `ColorModule.gradient.maxGradient`，不再把重建工程 Play-mode 的屏幕 hue 当作源颜色。
+- 两层共用六个 RGB 色键，ctime 为 `[0,13107,26214,39321,52428,65535]`；RGB 与 alpha 独立线性插值。LineBase alpha 时间为 `[0,6554,33731,58982,65535]/65535`、值为 `[0,0.7058823704719543,1,0.7058823704719543,0]`；LineMove 时间为 `[0,13107,32768,52428,65535]/65535`、值为 `[0,0.47058823704719543,1,0.47058823704719543,0]`。
+- **两侧入场爆发**：原始 `level56` #544/#543 均为 `looping=false`。根发射器按 0、0.05、0.08、0.10、0.13、0.18 秒发射六批，左侧累计 70、右侧累计 52 个粒子（不含子发射器）。预览此前以循环容器包裹非循环节点，导致只发出零时刻一批；现按非循环入场推进所有批次，并修正首个更新帧重复发射零时刻 burst。粒子自然消亡后不自动重播，关闭 Fever 立即清空。
+- **范围限制**：以上对齐的是渐变与入场发射调度，不是完整 ParticleSystem。现有 LineMove 往返、4.4% 长度和屏幕边线投影仍是几何近似，不是二进制确认的运动规律。FeverEffectStartAnimation 入场、LineCoreMove 等层仍未完整复现；预览动画相位继续锚定歌曲 Fever 起点。
+
 ## HUD FX：两个环 + Combo/AP増加
 
 - **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。AP 环由 ApResolver 累加驱动；Voltage 点仅技能产（预览恒 0）。
