@@ -442,7 +442,7 @@ export class HitFx {
   setMode(mode: 'off' | 'current' | 'limited' | 'full') {
     if (mode === this.mode) return;
     this.mode = mode;
-    if (mode === 'off') this.clear();
+    if (mode === 'off') this.live = this.live.filter(fx => fx.fever);
   }
   /** Screen-side fever FX (feverLeft/Right). Independent of hitEffect off. */
   setFever(on: boolean) {
@@ -472,6 +472,7 @@ export class HitFx {
   clear() {
     this.live = [];
     this.sparks = 0;
+    this.feverOn = false;
   }
   sync(chart: Chart, time: number, mirror: boolean) {
     if (!Number.isFinite(this.last)) { this.last = time; return; }

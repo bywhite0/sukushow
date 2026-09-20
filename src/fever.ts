@@ -2,47 +2,6 @@
 
 export type FeverWindow = { start: number; end: number };
 
-/**
- * FeverResolver.Inject window from FeverSectionNo N and section times.
- * start = N==1 ? 0 : sections[N-2]
- * end = (N-1 >= 4) ? tableEnd(+0x34 / FinishTime stand-in) : sections[N-1]
- */
-export function feverWindowFromSections(
-  sections: number[],
-  feverSectionNo: number,
-  /** sectionTable.field_0x34 when N-1>=4; preview uses PlayTime/FinishTime (= chart duration). */
-  tableEnd?: number,
-): FeverWindow | null {
-  const n = Math.trunc(feverSectionNo);
-  if (!sections.length || n < 1) return null;
-  const start = n === 1 ? 0 : sections[n - 2];
-  const indexedEnd = sections[Math.min(n - 1, sections.length - 1)];
-  const end = n - 1 >= 4
-    ? (tableEnd !== undefined && Number.isFinite(tableEnd) && tableEnd > (start ?? 0)
-      ? tableEnd
-      : indexedEnd)
-    : indexedEnd;
-  if (start === undefined || end === undefined || !(end > start)) return null;
-  return { start, end };
-}
-
-/** Preview fallback when chart has no Sections: mid-song window. */
-export function feverWindowFallback(duration: number): FeverWindow {
-  const d = Math.max(1, duration);
-  return { start: d * 0.45, end: d * 0.7 };
-}
-
-export function resolveFeverWindow(
-  sections: number[],
-  feverSectionNo: number,
-  duration: number,
-  /** Optional explicit +0x34; default = duration (FinishTime stand-in). */
-  tableEnd?: number,
-): FeverWindow {
-  const endScalar = tableEnd !== undefined && tableEnd > 0 ? tableEnd : duration;
-  return feverWindowFromSections(sections, feverSectionNo, endScalar) ?? feverWindowFallback(duration);
-}
-
 export function isFeverAt(time: number, win: FeverWindow | null | undefined): boolean {
   if (!win) return false;
   return time >= win.start && time < win.end;

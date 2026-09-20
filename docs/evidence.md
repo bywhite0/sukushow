@@ -71,7 +71,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
 - **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。 Fill 为青渐变 (29,235,199)→(118,240,224)；`value ≤ ceil(max×0.2)` 时切红 (235,37,78)→(255,114,143)（预览满血不触发）。
-- **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）；Fever 窗由 `Sections` + `FeverSectionNo`（默认 3；无 Sections 时用曲长 45%–70% 回退）驱动 `IsFever`（VL 翻倍）；`N-1>=4` 时 end 用 `tableEnd`（预览以曲长作 FinishTime / +0x34 近似，非 `sections[N-1]`）；`EnableFeverDisplay` 门控 LineBase 彩虹、LineMove 0.8s 往复亮条（长 4.4% 边线）与两侧 fever 粒子。
+- **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）。原始谱面不提供分段，不再读取 `Sections` 或按曲长估算。Fever 由歌曲元数据索引或当前谱面的手动起止秒数驱动：索引使用 `Musics.FeverSectionNo` 选择 `musicscore_<Id>.csv` 中四个 `key_type=20` 边界所划分的段，第五段终点采用 CSV 原始顺序中最后一个 `key_type=99`（MusicEnd）的时间，统一从毫秒转秒；分段事件按时间升序排列，不使用 `Musics.PlayTime` 或“末音符 + 2 秒”作为 Fever 终点。4.12.0 二进制已核实：`FeverResolver.Inject @0x4990388` 在 `0x4990540` 取 `QuestLiveMusicScore +0x34`（MusicEndTime）；`LoadCsv @0x41A537C` 在 `0x41A5C44–0x41A5C54` 将最后一个 MusicEnd 的 SongTime 写入该字段，谓词 `0x41A5FC0` 比较 `KeyType==99`；分段谓词 `0x41A5F88` 比较 `KeyType==20`，`0x41A5B94` 按 SongTime 排序。四个边界的严格校验是预览器策略，不是客户端强制校验。无元数据或输入无效时不启用 Fever。`EnableFeverDisplay` 仅门控 LineBase 彩虹、LineMove 单程 0.8s / 往返 1.6s 亮条（长 4.4% 边线）与两侧粒子，不改变逻辑 `IsFever`（VL 翻倍）；跳转后恢复粒子，关闭击中特效保留 Fever 粒子。
 
 ## HUD FX：两个环 + Combo/AP増加
 

@@ -2,6 +2,9 @@ import './style.css';
 import './workspace.css';
 import { decodeChart } from './chart';
 import { demoChart } from './demo';
+import feverIndex from './feverMetadata.json';
+import { feverForFilename, parseFeverWindow } from './feverMetadata';
+import type { FeverWindow } from './fever';
 import { AudioPlayer } from './audio';
 import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
@@ -50,7 +53,9 @@ app.innerHTML=`
 <label class="setting" for="opt-fast-slow"><span>FAST/SLOW 显示</span><select id="opt-fast-slow"><option value="0" selected>关闭</option><option value="1">Great 以下</option><option value="2">Perfect 以下</option></select></label>
 <label class="setting" for="tech-score"><span>技术分显示</span><select id="tech-score"><option value="0" selected>关闭</option><option value="1">实时</option><option value="2">预估全 PP</option></select></label>
 <label class="check"><input id="opt-fever" type="checkbox" checked>Fever 显示</label>
-<label class="setting" for="opt-fever-section"><span>FeverSectionNo</span><input id="opt-fever-section" type="number" min="1" max="8" step="1" value="3"><small>主数据段号；演示谱 Sections 在 8/16/24/32。</small></label>
+<label class="setting" for="opt-fever-start"><span>Fever 开始（秒）</span><input id="opt-fever-start" type="number" min="0" step="any" aria-describedby="fever-status"></label>
+<label class="setting" for="opt-fever-end"><span>Fever 结束（秒）</span><input id="opt-fever-end" type="number" min="0" step="any" aria-describedby="fever-status"><small>仅当前谱面有效；两项留空关闭，不估算。</small></label>
+<button id="fever-reset" type="button" class="quiet">恢复歌曲元数据</button><p id="fever-status" role="status">未配置 Fever</p>
 <label class="check"><input id="opt-skill-view" type="checkbox" checked>技能轨道显示</label>
 <label class="check"><input id="opt-skill-cutin" type="checkbox" checked>技能 Cut-in</label>
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
@@ -131,7 +136,6 @@ function readSettings():PreviewSettings{
   techScore:(()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);return (v===1||v===2?v:0) as 0|1|2;})(),
   rate:Number(el<HTMLSelectElement>('rate').value),
   hitEffect:(()=>{const v=el<HTMLSelectElement>('opt-hit-effect').value;return v==='off'||v==='limited'||v==='full'?v:'current';})(),
-  feverSectionNo:Number(input('opt-fever-section').value)||3,
  };
 }
 function persistSettings(){savePreviewSettings(readSettings());}
@@ -165,7 +169,6 @@ function applySettingsToForm(s:PreviewSettings){
  el<HTMLSelectElement>('tech-score').value=String(s.techScore);
  el<HTMLSelectElement>('rate').value=String(s.rate);
  el<HTMLSelectElement>('opt-hit-effect').value=s.hitEffect;
- input('opt-fever-section').value=String(s.feverSectionNo);
 }
 applySettingsToForm(loadPreviewSettings());
 
@@ -186,14 +189,52 @@ input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offse
 input('chart-file').onchange=async()=>{
  const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
  try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;el('chart-name').textContent=file.name;player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
-el('demo').onclick=()=>{generation++;chart=demoChart();el('chart-name').textContent='演示谱面';player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
+el('demo').onclick=()=>{generation++;chart=demoChart();setChartFever('');el('chart-name').textContent='演示谱面';player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
 hud.setSe(se ?? null);
+let automaticFever: FeverWindow | null = null;
+let baseDuration = chart.duration;
+function applyFever(win: FeverWindow | null, source: string) {
+ hud.setFeverWindow(win);
+ chart.duration = Math.max(baseDuration, win?.end ?? 0);
+ player?.transport.setDuration(chart.duration);
+ metadata();
+ el('fever-status').textContent = win ? `${source}：${win.start}–${win.end} 秒` : '未配置 Fever';
+}
+function restoreFever() {
+ input('opt-fever-start').value = automaticFever ? String(automaticFever.start) : '';
+ input('opt-fever-end').value = automaticFever ? String(automaticFever.end) : '';
+ input('opt-fever-start').removeAttribute('aria-invalid');
+ input('opt-fever-end').removeAttribute('aria-invalid');
+ applyFever(automaticFever, '歌曲元数据');
+}
+function setChartFever(filename: string) {
+ baseDuration = chart.duration;
+ automaticFever = feverForFilename(filename, feverIndex);
+ restoreFever();
+}
+function editFever() {
+ try {
+  const win = parseFeverWindow(input('opt-fever-start').value, input('opt-fever-end').value);
+  input('opt-fever-start').removeAttribute('aria-invalid');
+  input('opt-fever-end').removeAttribute('aria-invalid');
+  applyFever(win, '手动指定');
+ } catch (error) {
+  input('opt-fever-start').setAttribute('aria-invalid', 'true');
+  input('opt-fever-end').setAttribute('aria-invalid', 'true');
+  applyFever(null, '');
+  el('fever-status').textContent = `${String(error)} 当前 Fever 已停用。`;
+ }
+}
+input('opt-fever-start').oninput = editFever;
+input('opt-fever-end').oninput = editFever;
+el('fever-reset').onclick = restoreFever;
+setChartFever('');
 const applyTechScore=()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);hud.setTechnicalScoreDisplay((v===1||v===2?v:0) as 0|1|2);persistSettings();};
 el<HTMLSelectElement>('tech-score').onchange=applyTechScore;applyTechScore();
 const applyHudOptions=()=>{
@@ -205,10 +246,8 @@ const applyHudOptions=()=>{
  hud.setJudgementY(Number(input('opt-judge-y').value));
  hud.setFastSlowY(Number(input('opt-fs-y').value));
  hud.setEnableFeverDisplay(input('opt-fever').checked);
- hud.setFeverSectionNo(Number(input('opt-fever-section').value)||3);
  persistSettings();
 };
-input('opt-fever-section').onchange=applyHudOptions;
 el<HTMLInputElement>('opt-perfect-plus').onchange=applyHudOptions;
 el<HTMLSelectElement>('opt-judgement-output').onchange=applyHudOptions;
 el<HTMLSelectElement>('opt-fast-slow').onchange=applyHudOptions;
@@ -274,7 +313,7 @@ applyScoreCfg();
 
 let frame=0;
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverActive,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();},{once:true});
