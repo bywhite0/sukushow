@@ -32,13 +32,25 @@ pnpm verify:corpus "本地谱面目录"
 - 本地音频解码，错误文件保留已有谱面，中文工作台、分类设置面板及移动端布局；预览设置保存到 localStorage。
 - 局内 SE：打击音、Hold 持续音、开场与曲终音效；音乐 / 打击音 / SE 独立音量。Hold 中间计分采样不重复触发按键音。
 - 空格播放／暂停，方向键跳转 5 秒；焦点在表单控件时不拦截快捷键。
-- Fever：Sections/`FeverSectionNo` 窗（N≥5 时 end≈曲长/+0x34）、LineBase 彩虹、LineMove 行进亮条、两侧 fever 粒子
+- Fever：按谱面文件名匹配歌曲元数据的明确起止时段；支持手动覆盖，未知歌曲不估算；LineBase 彩虹、LineMove 行进亮条、两侧 fever 粒子。
 - 「显示与特效」面板中的「击中特效」：关闭 / 直冲天上 / 限速 / 加深（`HitFx`）；Hold 核心光效跟随头部，飞散粒子保留世界坐标。
 - sprite / FX 自定义着色器使用 `NoColorSpace` 贴图，避免额外 sRGB 解码造成音符偏暗。
 
 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类；技术分、TotalAppeal、熟练度和段位预览位于「计分」。分类标签支持方向键及 Home / End 切换。Voice、技能与 MV 控件保留配置入口，不代表已实现语音、技能演出或 MV 播放。
 
 音符时间单位为秒。音频偏移为毫秒，正值使音频晚开始；这是预览器的附加功能，不把源 JSON 的 Offset 当作原游戏已消费的字段。
+
+## Fever 元数据
+
+原始谱面不包含 Fever 分段。`src/feverMetadata.json` 从本地 `Musics.yaml.json` 的 `FeverSectionNo` 和 `cache/plain/musicscore_<Id>.csv` 的 `key_type=20` 分段事件及 `key_type=99` 曲终事件生成。
+
+```powershell
+pnpm metadata:fever "<Musics.yaml.json>" "<cache/plain目录>"
+```
+
+生成器按时间排序分段事件，要求排序后四个边界严格递增，毫秒转换为秒；第五段终点取 CSV 原始顺序中最后一条 `key_type=99` 的时间，不使用 `PlayTime`，缺失或无效时拒绝生成。缺失 CSV 的歌曲跳过并报告，非法数据或读取权限错误会终止生成，不覆盖索引。
+
+导入 `rhythmgame_chart_<歌曲ID>_<难度>.bytes/json` 时自动匹配。显示与特效中的“Fever 开始 / 结束（秒）”可手动覆盖，区间为 `[start,end)`；同时留空关闭，非法输入停用 Fever。手动值不写入全局设置，换谱清除；“恢复歌曲元数据”撤销覆盖。演示谱默认不配置 Fever。必要时延长播放时间轴以覆盖指定终点，但不修改源谱面文件。“Fever 显示”仅控制特效，不改变逻辑 Fever 状态。
 
 ## 预览皮肤 / FX
 
