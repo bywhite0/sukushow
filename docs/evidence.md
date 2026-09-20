@@ -81,6 +81,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **两侧入场爆发**：原始 `level56` #544/#543 均为 `looping=false`。根发射器按 0、0.05、0.08、0.10、0.13、0.18 秒发射六批，左侧累计 70、右侧累计 52 个粒子（不含子发射器）。预览此前以循环容器包裹非循环节点，导致只发出零时刻一批；现按非循环入场推进所有批次，并修正首个更新帧重复发射零时刻 burst。粒子自然消亡后不自动重播，关闭 Fever 立即清空。
 - **范围限制**：以上对齐的是渐变与入场发射调度，不是完整 ParticleSystem。现有 LineMove 往返、4.4% 长度和屏幕边线投影仍是几何近似，不是二进制确认的运动规律。FeverEffectStartAnimation 入场、LineCoreMove 等层仍未完整复现；预览动画相位继续锚定歌曲 Fever 起点。
 
+- **LineMove 几何依据纠正**：#604/#570 的 `InitialModule.size3D=true`，X=0.1099999994、Y=120、Z=0.1000000015，`rotation3D=true`；Renderer 的 `m_RenderMode=0`，不是拉伸模式。不能仅以 X×`m_LengthScale`÷Shape.length 推导屏幕亮条长度。`ShapeModule.type=4` 的语义也不能沿用重建文档的 Edge 注释，须结合 Unity 序列化枚举核对。
+- **运动**：两侧 `startSpeed=1.2999999523`、寿命 0.8000000119；启用世界空间 VelocityModule，左 X=-0.3499999940、右 X=+0.3499999940，Y/Z=0。父级静态变换均为单位变换；没有从这些参数得到屏幕空间往返的依据。LineBase 的 VelocityModule 则为 disabled，不能采用其中残留的 +12/-20 值。
+- **入场状态机**：sharedassets56 #104 `FeverEffectAnimatorController` 只有一个默认非循环状态，引用 #92 `FeverEffectStartAnimation`。将绑定路径 CRC32 与 level56 层级对应后，曲线 18/19 控制左右爆发根节点：t=0 关闭、t=1/60 秒开启；预览已将两侧入场 burst 时间表统一延后 1/60 秒；延迟期间关闭 Fever 会取消待发射批次，暂停不推进计时。
+- **尚未接入的动画**：曲线 0–5 使 LineCoreMove 左右从 `(±18.46,-9.4,0)` 在 25/60 秒内移至 `(±1.96,6.9,25.8)`，38/60 秒关闭；曲线 12–17 将 LineMask 左右从 `(1,0,1)` / `(4,0,1)` 缩放至 `(40,68,1)`，26/60 秒结束。原始边线 Renderer `m_MaskInteraction=1`，后续需一起核对遮罩、材质与投影，不能只替换一条坐标公式。
+
 ## HUD FX：两个环 + Combo/AP増加
 
 - **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。AP 环由 ApResolver 累加驱动；Voltage 点仅技能产（预览恒 0）。

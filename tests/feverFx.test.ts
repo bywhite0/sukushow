@@ -26,7 +26,15 @@ describe('Fever 原始非循环入场爆发', () => {
         fx.setMode('off');
         fx.sync(chart, 0, false);
         fx.setFever(true);
-        const times = [0, 0.051, 0.081, 0.101, 0.131, 0.181];
+        expect(count()).toBe(0);
+        fx.setFever(false);
+        fx.sync(chart, 1 / 120, false);
+        expect(count()).toBe(0);
+        fx.sync(chart, 0, false);
+        fx.setFever(true);
+        fx.sync(chart, 1 / 120, false);
+        expect(count()).toBe(0);
+        const times = [1 / 60, 0.051 + 1 / 60, 0.081 + 1 / 60, 0.101 + 1 / 60, 0.131 + 1 / 60, 0.181 + 1 / 60];
         times.forEach((time, i) => {
           fx.sync(chart, time, false);
           expect(count()).toBe(counts[i]);
@@ -39,7 +47,7 @@ describe('Fever 原始非循环入场爆发', () => {
         fx.setFever(false);
         expect(count()).toBe(0);
         fx.setFever(true);
-        expect(count()).toBe(counts[0]);
+        expect(count()).toBe(0);
         for (let frame = 1; frame <= 720; frame++) {
           fx.sync(chart, 0.2 + frame / 60, false);
           fx.setFever(true);
