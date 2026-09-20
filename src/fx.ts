@@ -460,7 +460,12 @@ export class HitFx {
     if (this.mode === 'off' && !fever) return null;
     const src = this.specs.get(id);
     if (!src?.length || this.live.length > 64) return null;
-    const specs = src.map(s => ({ ...s, burstI: 0, rateAcc: 0, cycle: 0 }));
+    // FeverEffectStartAnimation 在 1/60 秒激活两侧入场根节点。
+    const delay = fever ? 1 / 60 : 0;
+    const specs = src.map(s => ({
+      ...s, bursts: s.bursts.map(b => ({ ...b, t: b.t + delay })),
+      burstI: 0, rateAcc: 0, cycle: 0,
+    }));
     const live: Live = {
       uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 1),
       loop, x, width, specs, sparks: [], abs, fever,
