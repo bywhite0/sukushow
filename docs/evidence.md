@@ -75,6 +75,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## Fever 特效核对
 
+- **拖尾宽度双常量**：直接读取 4.12.0 客户端 `data.unity3d` 的 level56 #543/#544，均为 `widthOverTrail.minMaxState=3`，minScalar=0.6999999881、scalar=0.3000000119，`sizeAffectsWidth=true`。客户端 `MinMaxCurve.Evaluate(time, lerpFactor) @0x8927DB4` 在 `0x8927DCC` 判断 mode=3，`0x8927DEC–0x8927E0C` 读取 +0x18/+0x1C 两常量，执行 `min + clamp01(lerpFactor) × (max−min)`，该分支不乘 curveMultiplier，也不使用 time。预览不再固定取 scalar=0.3；原生调用链已进一步定位：`libunity.so` getter `0x6A9FE0` 取粒子系统数据 +0x1158，经 `0x109A740 → 0x104B0C8` 转换宽度曲线；序列化函数 `0x1066244` 将 TrailModule +0x98 绑定为 widthOverTrail，setter `0x6AA16C` 使用相同偏移。渲染任务 `0x12A7394–0x12A73B0` 将宽度曲线指针存入上下文 +0xC08；`0x12A7EF8` 调用 `0x12AB17C`，其经 `0x10857E8` 取粒子结构，读取栈 +0x6C（结构起点 +8，即 Particle.m_RandomSeed +0x64），在 `0x12AB270–0x12AB2BC` 由 seed 派生宽度混合因子并存入上下文 +0x10。`0x12A86D8–0x12A86F8` 广播该因子并调用原生曲线采样 `0x122959C`；mode=3 分支 `0x12295D0–0x12295E8` 使用两常量插值。因子只依赖粒子 seed，不依赖帧时间；Fever 拖尾已按该整数混合公式派生宽度因子，包含 uint32 溢出、逻辑右移及 float32 转换/乘法，双常量结果在出生时缓存。预览 seed 仍由本地 Math.random 生成，不等同于客户端发射器的 seed 序列；其他随机模块尚未共用该 seed，跨模块相关性仍未对齐。宽度沿轨迹的曲线模式尚未完整实现。
+
 - **拖尾轨迹几何**：每段四边形现在连接实际历史位置，截面垂直于轨迹并朝向固定相机法线；不再用放在线段中点的竖直 billboard 代替斜向轨迹。零长度不绘制，沿视线方向退化时使用横向截面。尚未实现相邻段接缝、原版材质与沿长度渐变，仍非完整 Unity TrailModule。
 
 - **拖尾尺寸继承**：原始 #544 `TrailModule.sizeAffectsWidth=true`。预览拖尾宽度现在乘当前寿命相位的尺寸曲线，不再只乘出生尺寸；关闭该开关时保持独立宽度。现有拖尾宽度的 0.15 视觉系数及 ribbon 几何仍为近似，未宣称与原版绝对宽度一致。

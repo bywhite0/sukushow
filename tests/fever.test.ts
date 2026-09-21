@@ -1,5 +1,15 @@
+import { feverTrailWidthFactor } from '../src/fever';
 import { describe, expect, it } from 'vitest';
 import { feverLineRgba, feverMoveLocalY, feverMovePhase, feverMoveRgba, isFeverAt } from '../src/fever';
+
+it.each([
+  [0, 0.6408690810203552], [1, 0.07189155369997025],
+  [0xffffffff, 0.249790221452713], [0x80000000, 0.6413573622703552],
+  [0x12345678, 0.12887372076511383],
+])('原生拖尾 seed %s 的宽度因子', (seed, expected) => {
+  expect(feverTrailWidthFactor(seed)).toBe(expected);
+  expect(feverTrailWidthFactor(seed)).toBe(expected);
+});
 
 describe('显式 Fever 时段', () => {
   it('没有时段时始终关闭，不估算', () => {

@@ -1,5 +1,14 @@
 /** Fever 时段与边线颜色；几何仍为屏幕空间近似。 */
 
+/** libunity 0x12AB270–0x12AB2BC：uint32 混合后执行 float32 转换与乘法。 */
+export function feverTrailWidthFactor(seed: number): number {
+  let x = (seed + 0xfedc345b) >>> 0;
+  const y = (Math.imul(x, 0x6ab51b9d) + 0x714acb3f) >>> 0;
+  x = (x ^ (x << 11)) >>> 0;
+  const bits = ((y ^ x ^ (x >>> 8)) & 0x7fffff) ^ (y >>> 19);
+  return Math.fround(Math.fround(bits) * 1.1920930376163597e-7);
+}
+
 export type FeverWindow = { start: number; end: number };
 
 export function isFeverAt(time: number, win: FeverWindow | null | undefined): boolean {
