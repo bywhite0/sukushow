@@ -33,8 +33,8 @@ it.each([true, false])('Fever 拖尾宽度继承当前尺寸=%s', inherit => {
     const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
     expect(mesh.geometry.drawRange.count).toBeGreaterThan(60);
     const pos = mesh.geometry.getAttribute('position');
-    const xs = Array.from({ length: 6 }, (_, i) => pos.getX(60 + i));
-    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(inherit ? 0.075 : 0.15, 5);
+    const width = Math.hypot(pos.getX(61) - pos.getX(60), pos.getY(61) - pos.getY(60), pos.getZ(61) - pos.getZ(60));
+    expect(width).toBeCloseTo(inherit ? 0.075 : 0.15, 5);
   } finally { fx.dispose(); texture.dispose(); }
 });
 

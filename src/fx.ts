@@ -3,7 +3,7 @@ import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
 import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab } from './rgAssets';
 import { fxMaterial } from './shaders';
-import { PITCH, pushBillboard, pushLocalQuad } from './slice';
+import { PITCH, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
 
 const MAX_SPARKS = 2400;
 const SEEK = 0.5;
@@ -643,17 +643,15 @@ export class HitFx {
       const particleColor = s.trailInherit ? sparkGradient(s) : [1, 1, 1, 1];
       for (let i = 1; i < s.trail.length; i++) {
         const a = s.trail[i - 1], b = s.trail[i];
-        const midX = (a.x + b.x) * 0.5, midY = (a.y + b.y) * 0.5, midZ = (a.z + b.z) * 0.5;
         const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
         const g = s.trailGrad ? gradAt(s.trailGrad, Math.min(1, Math.max(0, u))) : [1, 1, 1, 1 - u];
         const color = s.trailInherit
           ? [s.r * particleColor[0] * g[0], s.g * particleColor[1] * g[1], s.b * particleColor[2] * g[2], s.a * particleColor[3] * g[3]]
           : [g[0], g[1], g[2], g[3]];
-        const seg = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
         const before = batch.n;
-        batch.n = pushBillboard(
+        batch.n = pushTrailSegment(
           batch.pos, batch.uv, batch.col, batch.n, batch.cap,
-          midX, midY, midZ, Math.max(0.001, tw * 0.15), Math.max(0.001, seg), color, 1, 1, 0,
+          [a.x, a.y, a.z], [b.x, b.y, b.z], Math.max(0.001, tw * 0.15), color,
         );
         for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
       }
