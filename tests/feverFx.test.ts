@@ -5,6 +5,41 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it('Fever 尺寸曲线使用原始关键帧切线', () => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  const ps = prefab.nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.life = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  ps.size = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  ps.size3d = false;
+  ps.rot = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.rotol = undefined;
+  ps.trail = undefined;
+  ps.sizeol = { en: true, curve: { k: 1, v: 1, lo: 1, hi: 1, mult: 1,
+    keys: [{ t: 0, v: 1, o: 0 }, { t: 1, v: 0, i: 0 }],
+  } };
+  ps.bursts = [{ ...ps.bursts![0], cycles: 1 }];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.25 + 1 / 60, false);
+    fx.draw();
+    const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    const pos = mesh.geometry.getAttribute('position');
+    // 零切线 Hermite：u=.25 时尺寸为 .84375，而非直线的 .75。
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < 6; i++) { min = Math.min(min, pos.getX(i)); max = Math.max(max, pos.getX(i)); }
+    expect(max - min).toBeCloseTo(0.84375, 5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it.each([true, false])('Fever 拖尾颜色继承开关=%s', inherit => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
   data.prefabs = [];
