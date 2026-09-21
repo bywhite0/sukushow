@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { HitFx } from '../src/fx';
+import { feverCorePrefab } from '../src/feverCore';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
@@ -299,6 +300,60 @@ it.each([[true, 0.2, 0], [false, 0, 0.2]])('Fever VelocityModule world=%s 使用
     const p = geometry.getAttribute('position');
     expect((p.getX(0) + p.getX(2)) / 2).toBeCloseTo(x, 6);
     expect((p.getY(0) + p.getY(2)) / 2).toBeCloseTo(y, 6);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
+it('Fever 局部入场粒子跟随动画节点并按关闭边界消失', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  const prefab = data.fever![0];
+  prefab.id = 'feverCoreLeft';
+  prefab.nodes = [prefab.nodes[0]];
+  const node = prefab.nodes[0];
+  node.px = node.py = node.pz = 0;
+  node.rx = node.ry = node.rz = 0; node.rw = 1;
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.local = true; ps.loop = false; ps.life = constant(2); ps.speed = constant(0);
+  ps.delay = constant(0); ps.shape = undefined; ps.limit = undefined; ps.trail = undefined; ps.grav = 0;
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  data.fever = [prefab];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false); fx.setFever(true);
+    fx.sync(chart, 0.2, false); fx.draw();
+    const mesh = fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    expect(mesh).toBeDefined();
+    const p = mesh.geometry.getAttribute('position');
+    expect((p.getX(0) + p.getX(2)) / 2).toBeCloseTo(-10.539998626708985, 5);
+    fx.sync(chart, 0.6333333253860474, false); fx.draw();
+    expect(fx.group.children.every(c => (c as THREE.Mesh).geometry.drawRange.count === 0)).toBe(true);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
+it('原始核心入场 prefab 在短周期中持续发射，并在关闭时清空', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [feverCorePrefab('left'), feverCorePrefab('right')];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false); fx.setFever(true);
+    for (const time of [0.05, 0.15, 0.35, 0.55]) {
+      fx.sync(chart, time, false); fx.draw();
+      const drawn = fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh[];
+      expect(drawn).toHaveLength(1);
+      expect(drawn[0].geometry.drawRange.count).toBe(12);
+      expect(drawn[0].renderOrder).toBe(640);
+      const p = drawn[0].geometry.getAttribute('position');
+      expect((p.getX(0) + p.getX(2)) / 2).toBeLessThan(0);
+      expect((p.getX(6) + p.getX(8)) / 2).toBeGreaterThan(0);
+    }
+    fx.sync(chart, 0.64, false); fx.draw();
+    expect(fx.group.children.every(c => (c as THREE.Mesh).geometry.drawRange.count === 0)).toBe(true);
   } finally { fx.dispose(); texture.dispose(); }
 });
 
