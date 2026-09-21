@@ -274,6 +274,34 @@ it('循环发射跨过多个周期不漏发，也不重复边界批次', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it.each([[true, 0.2, 0], [false, 0, 0.2]])('Fever VelocityModule world=%s 使用正确坐标空间', (world, x, y) => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  node.px = node.py = node.pz = 0;
+  node.rx = node.ry = 0;
+  node.rz = Math.SQRT1_2; node.rw = Math.SQRT1_2;
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.delay = constant(0); ps.life = constant(2); ps.speed = constant(0);
+  ps.shape = undefined; ps.limit = undefined; ps.trail = undefined; ps.grav = 0;
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  Object.assign(ps, { vel: { en: true, world, x: constant(1), y: constant(0), z: constant(0) } });
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false); fx.setFever(true);
+    fx.sync(chart, 0.2 + 1 / 60, false); fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    const p = geometry.getAttribute('position');
+    expect((p.getX(0) + p.getX(2)) / 2).toBeCloseTo(x, 6);
+    expect((p.getY(0) + p.getY(2)) / 2).toBeCloseTo(y, 6);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
