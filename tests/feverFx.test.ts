@@ -1,9 +1,40 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
+
+it('Fever TwoGradients 在两条渐变之间插值而非二选一', () => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  const ps = prefab.nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.trail = undefined;
+  ps.col = { en: true, mode: 3,
+    min: { rgb: [{ t: 0, r: 1, g: 0, b: 0 }], a: [{ t: 0, v: 1 }] },
+    max: { rgb: [{ t: 0, r: 0, g: 0, b: 1 }], a: [{ t: 0, v: 1 }] },
+  };
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.02, false);
+    fx.draw();
+    const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    expect(mesh).toBeDefined();
+    const color = mesh.geometry.getAttribute('tint');
+    expect(color.getX(0)).toBeCloseTo(0.5);
+    expect(color.getY(0)).toBeCloseTo(0);
+    expect(color.getZ(0)).toBeCloseTo(0.5);
+  } finally { random.mockRestore(); fx.dispose(); texture.dispose(); }
+});
 
 it('Fever 发射器延迟叠加在 Animator 激活之后', () => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;

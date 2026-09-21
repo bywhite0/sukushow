@@ -75,6 +75,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## Fever 特效核对
 
+- **双色渐变**：原始 #544 的 ColorModule 为 `minMaxState=3`（TwoGradients）。按 Unity `MinMaxGradient.Evaluate(time, lerpFactor)`，先在同一寿命相位采样两条渐变，再连续混合 RGBA；不能随机二选一。预览每个粒子出生时固定混合比例，随寿命推进采样，两条曲线的 alpha 同样参与插值。该修复适用于共用 HitFx 渲染器的所有 TwoGradients 节点。
+
 - 离线核对 4.12.0 `libil2cpp.so`：`FeverResolver.Process @0x4990098` 在开始边界设置逻辑状态，并由 `_isFeverEnabled` 门控 root 激活；结束边界无条件关闭 root。显示开关不改变逻辑 Fever。
 - `src/fever.ts` 的颜色改用原始 `level56` ParticleSystem #542（LineBase_Left）/#604（LineMove_Left）的 `ColorModule.gradient.maxGradient`，不再把重建工程 Play-mode 的屏幕 hue 当作源颜色。
 - 两层共用六个 RGB 色键，ctime 为 `[0,13107,26214,39321,52428,65535]`；RGB 与 alpha 独立线性插值。LineBase alpha 时间为 `[0,6554,33731,58982,65535]/65535`、值为 `[0,0.7058823704719543,1,0.7058823704719543,0]`；LineMove 时间为 `[0,13107,32768,52428,65535]/65535`、值为 `[0,0.47058823704719543,1,0.47058823704719543,0]`。

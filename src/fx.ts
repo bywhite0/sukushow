@@ -46,7 +46,7 @@ interface Spark {
   r: number; g: number; b: number; a: number; grav: number;
   align: number; mesh: number; slice: boolean; tex: string;
   pitchLocal: boolean; spin: number; followHead: boolean;
-  grad?: FxGrad; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
+  grad?: FxGrad; gradMin?: FxGrad; gradBlend?: number; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
   fever?: boolean;
   firstStep?: number;
@@ -392,7 +392,9 @@ export class HitFx {
       const rnd = Math.random(), rnd2 = Math.random();
       const sh = this.emitShape(spec, sized, rnd, rnd2);
       const speed = sample(spec.speed, rnd);
-      const grad = spec.gradTwo && spec.gradMin && Math.random() < 0.5 ? spec.gradMin : spec.grad;
+      const grad = spec.grad;
+      const gradMin = spec.gradTwo ? spec.gradMin : undefined;
+      const gradBlend = gradMin ? Math.random() : undefined;
       const spark: Spark = {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
@@ -403,7 +405,7 @@ export class HitFx {
         r: spec.col[0], g: spec.col[1], b: spec.col[2], a: spec.col[3], grav: spec.grav,
         align: spec.align, mesh: spec.mesh, slice: spec.slice, tex: spec.tex,
         pitchLocal, spin: sample(spec.rot, rnd), followHead: spec.followHead,
-        grad, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
+        grad, gradMin, gradBlend, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
         fever: !!live.fever,
         omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
@@ -590,6 +592,10 @@ export class HitFx {
       if (!batch) continue;
       const t = s.age / s.life;
       const g = gradAt(s.grad, t);
+      if (s.gradMin) {
+        const min = gradAt(s.gradMin, t);
+        for (let i = 0; i < 4; i++) g[i] = min[i] + (g[i] - min[i]) * s.gradBlend!;
+      }
       const mulX = s.sizeOl ? lerpKeys(s.sizeOl.keys, t) * (s.sizeOl.mult || 1) : 1;
       const mulY = s.sizeSep && s.sizeOlY
         ? lerpKeys(s.sizeOlY.keys, t) * (s.sizeOlY.mult || 1)
