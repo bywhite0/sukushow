@@ -1,3 +1,4 @@
+import { feverTrailWidthFactor } from './fever';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
@@ -29,7 +30,7 @@ interface Spec {
   sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: FxMM;
   rotOlEn: boolean; rotOl: FxMM;
-  trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
+  trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: FxMM;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
@@ -288,7 +289,7 @@ export class HitFx {
         trailEn: !!n.ps.trail?.en,
         trailLife: Math.max(0.05, (n.ps.trail?.life?.v ?? n.ps.trail?.life?.lo ?? 0.35) || 0.35),
         trailMinDist: n.ps.trail?.minVertexDist ?? 0.2,
-        trailWidth: Math.max(0.01, (n.ps.trail?.width?.v ?? n.ps.trail?.width?.lo ?? 1) || 1),
+        trailWidth: n.ps.trail?.width ?? { k: 0, v: 1, lo: 1, hi: 1, mult: 1 },
         trailSizeWidth: !!n.ps.trail?.sizeWidth,
         trailInherit: n.ps.trail?.inheritColor !== false,
         trailGrad: n.ps.trail?.en ? n.ps.trail.colMax : undefined,
@@ -411,6 +412,10 @@ export class HitFx {
       const grad = spec.grad;
       const gradMin = spec.gradTwo ? spec.gradMin : undefined;
       const gradBlend = gradMin ? Math.random() : undefined;
+      const trailRandom = spec.trailEn ? Math.random() : 0;
+      const trailFactor = live.fever
+        ? feverTrailWidthFactor(Math.floor(trailRandom * 0x100000000))
+        : trailRandom;
       const spark: Spark = {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
@@ -429,7 +434,7 @@ export class HitFx {
         // fever authoring trails always on when trail.en
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
-        trailWidth: spec.trailEn ? spec.trailWidth : 0.35,
+        trailWidth: spec.trailEn ? Math.max(0, sample(spec.trailWidth, trailFactor)) : 0.35,
         trailSizeWidth: spec.trailSizeWidth,
         trailInherit: spec.trailInherit,
         trailGrad: spec.trailGrad,

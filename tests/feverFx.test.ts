@@ -5,6 +5,36 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it('Fever 拖尾宽度按原始双常量范围采样', () => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  const ps = prefab.nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.trail!.sizeWidth = false;
+  ps.trail!.minVertexDist = 0;
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    random.mockReturnValue(0);
+    fx.draw();
+    const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    expect(mesh.geometry.drawRange.count).toBeGreaterThan(60);
+    const p = mesh.geometry.getAttribute('position');
+    const width = Math.hypot(p.getX(61) - p.getX(60), p.getY(61) - p.getY(60), p.getZ(61) - p.getZ(60));
+    // 固定随机输入 .5 生成 seed=0x80000000，原生宽度因子为 .6413573622703552。
+    expect(width).toBeCloseTo(0.06651855849354957, 5);
+  } finally { random.mockRestore(); fx.dispose(); texture.dispose(); }
+});
+
 it.each([true, false])('Fever 拖尾宽度继承当前尺寸=%s', inherit => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
   data.prefabs = [];
