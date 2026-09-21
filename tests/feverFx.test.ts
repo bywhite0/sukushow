@@ -5,8 +5,50 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
-it('Fever 拖尾宽度按原始双常量范围采样', () => {
+function loadFeverFixture(): FxFile {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  // 数值测试合并主体和拖尾批次；独立材质行为另行测试。
+  for (const prefab of data.fever || []) for (const node of prefab.nodes) {
+    if (node.rend) delete (node.rend as { trailMat?: string }).trailMat;
+  }
+  return data;
+}
+
+it.each(['独立材质', '缺失贴图', '旧数据'] as const)('Fever 拖尾材质：%s', mode => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  if (mode !== '旧数据') Object.assign(node.rend!, { trailMat: 'resources.assets:204' });
+  node.ps!.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  node.ps!.trail!.minVertexDist = 0;
+  const body = new THREE.Texture(), trail = new THREE.Texture();
+  const textures = Object.fromEntries(data.mats.map(m => [m.tex, body]));
+  textures.sc2_Particle_light02 = trail;
+  if (mode === '缺失贴图') delete textures.sc2_Particle_light02;
+  const fx = new HitFx(data, textures);
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    fx.draw();
+    const drawn = fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>[];
+    expect(drawn).toHaveLength(mode === '独立材质' ? 2 : 1);
+    const bodyMesh = drawn.find(m => m.material.uniforms.map.value === body)!;
+    expect(bodyMesh.geometry.drawRange.count).toBe(mode === '旧数据' ? 120 : 60);
+    if (mode === '独立材质') {
+      const trailMesh = drawn.find(m => m.material.uniforms.map.value === trail)!;
+      expect(trailMesh.geometry.drawRange.count).toBe(60);
+      expect(trailMesh.renderOrder).toBe(bodyMesh.renderOrder);
+    }
+  } finally { fx.dispose(); body.dispose(); trail.dispose(); }
+});
+
+it('Fever 拖尾宽度按原始双常量范围采样', () => {
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -36,7 +78,7 @@ it('Fever 拖尾宽度按原始双常量范围采样', () => {
 });
 
 it.each([true, false])('Fever 拖尾宽度继承当前尺寸=%s', inherit => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -69,7 +111,7 @@ it.each([true, false])('Fever 拖尾宽度继承当前尺寸=%s', inherit => {
 });
 
 it('Fever 尺寸曲线使用原始关键帧切线', () => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -104,7 +146,7 @@ it('Fever 尺寸曲线使用原始关键帧切线', () => {
 });
 
 it.each([true, false])('Fever 拖尾颜色继承开关=%s', inherit => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -146,7 +188,7 @@ it.each([
   [3, 0.2, 0.5362125039100647, 0.4637874960899353],
   [3, 0.3, 0.5362125039100647, 0.4637874960899353],
 ])('Fever 拖尾寿命颜色 mode=%s age=%s 按粒子年龄与固定 seed 采样', (mode, age, red, blue) => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   data.fever[0].nodes = [data.fever[0].nodes[0]];
@@ -182,7 +224,7 @@ it.each([
 });
 
 it('Fever 共用贴图的节点保留各自 sortingOrder', () => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   data.fever[0].nodes.forEach(n => {
@@ -203,7 +245,7 @@ it('Fever 共用贴图的节点保留各自 sortingOrder', () => {
 });
 
 it('Fever TwoGradients 在两条渐变之间插值而非二选一', () => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -234,7 +276,7 @@ it('Fever TwoGradients 在两条渐变之间插值而非二选一', () => {
 });
 
 it('Fever 发射器延迟叠加在 Animator 激活之后', () => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [data.fever![0]];
   const prefab = data.fever[0];
@@ -260,7 +302,7 @@ it('Fever 发射器延迟叠加在 Animator 激活之后', () => {
 describe('Fever 出生时间', () => {
   it('同一时刻的粒子位置不随跨越出生点的帧步长变化', () => {
     const positions = (times: number[]) => {
-      const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+      const data = loadFeverFixture();
       const prefab = data.fever![0];
       prefab.nodes = [prefab.nodes[0]];
       const ps = prefab.nodes[0].ps!;
@@ -303,7 +345,7 @@ describe('Fever 出生时间', () => {
 describe('Fever 原始非循环入场爆发', () => {
   it.each([['feverLeft', 10, 20, 30, 45, 55, 70], ['feverRight', 7, 14, 21, 33, 40, 52]] as const)(
     '%s 按原始时间表发出全部六批，不重复第零批', (id, ...counts) => {
-      const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+      const data = loadFeverFixture();
       const prefab = data.fever!.find(p => p.id === id)!;
       // 隔离根发射器；关闭拖尾，绘制顶点数直接对应存活粒子数。
       prefab.nodes = [prefab.nodes[0]];
@@ -355,7 +397,7 @@ describe('Fever 原始非循环入场爆发', () => {
 });
 
 it.each(['跳转', '关闭击中特效'] as const)('%s后 Fever 粒子继续绘制', action => {
-  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  const data = loadFeverFixture();
   const texture = new THREE.Texture();
   const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
   const chart = parseChart({ Notes: [], Bpms: [] });
