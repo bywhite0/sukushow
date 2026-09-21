@@ -1,5 +1,6 @@
 import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import feverTrailColors from './feverTrailColors.json';
+import { feverEntrance } from './feverAnimation';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
@@ -68,6 +69,7 @@ interface Spark {
 interface Live {
   uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
   abs?: boolean; fever?: boolean;
+  coreSide?: 'left' | 'right';
 }
 
 function lerpKeys(keys: { t: number; v: number; i?: number; o?: number }[] | undefined, t: number) {
@@ -503,7 +505,7 @@ export class HitFx {
         if (t > prevAge && t <= age) {
           const first = live.sparks.length;
           this.burst(live, spec, b.count);
-          if (live.fever) for (let i = first; i < live.sparks.length; i++) {
+          if (live.fever && age > 0) for (let i = first; i < live.sparks.length; i++) {
             live.sparks[i].firstStep = Math.max(0, age - t);
           }
         }
@@ -527,13 +529,16 @@ export class HitFx {
     // level56 #544/#543：入场爆发不循环，后续批次仍须推进。
     this.spawn('feverLeft', 0, 1, false, -200, true, true);
     this.spawn('feverRight', 0, 1, false, -201, true, true);
+    this.spawn('feverCoreLeft', 0, 1, true, -202, true, true);
+    this.spawn('feverCoreRight', 0, 1, true, -203, true, true);
   }
   spawn(id: string, x: number, width: number, loop = false, uid = -1, abs = false, fever = false) {
     if (this.mode === 'off' && !fever) return null;
     const src = this.specs.get(id);
     if (!src?.length || this.live.length > 64) return null;
     // FeverEffectStartAnimation 在 1/60 秒激活两侧入场根节点。
-    const delay = fever ? 1 / 60 : 0;
+    const coreSide = id === 'feverCoreLeft' ? 'left' : id === 'feverCoreRight' ? 'right' : undefined;
+    const delay = fever && !coreSide ? 1 / 60 : 0;
     const specs = src.map(s => {
       // 每个发射器每次启动只采样一次，所有批次共享其 startDelay。
       const startDelay = delay + (fever ? sample(s.delay, Math.random()) : 0);
@@ -544,7 +549,7 @@ export class HitFx {
     });
     const live: Live = {
       uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 1),
-      loop, x, width, specs, sparks: [], abs, fever,
+      loop, x, width, specs, sparks: [], abs, fever, coreSide,
     };
     // Fire bursts at t=0 immediately (most note FX bursts are at 0).
     for (const spec of specs) this.emitDue(live, spec, -1e-6, 0);
@@ -594,6 +599,7 @@ export class HitFx {
     for (const live of this.live) {
       const prev = live.age;
       live.age += dt;
+      if (live.coreSide && !feverEntrance(live.age).coreActive) continue;
       for (const spec of live.specs) {
         if (live.loop && spec.loop) this.emitDue(live, spec, prev, live.age);
         else if (!live.loop) this.emitDue(live, spec, prev, live.age);
@@ -659,16 +665,19 @@ export class HitFx {
         : mulX;
       const sx = Math.max(0.001, s.sx * mulX), sy = Math.max(0.001, s.sy * mulY);
       const color = [s.r * g[0], s.g * g[1], s.b * g[2], s.a * g[3]];
+      const entrance = live.coreSide ? feverEntrance(live.age) : undefined;
+      const offset = entrance ? (live.coreSide === 'left' ? entrance.leftCore : entrance.rightCore) : [0, 0, 0];
+      const x = s.x + offset[0], y = s.y + offset[1], z = s.z + offset[2];
       const before = batch.n;
       if (s.mesh === 2) {
         // PlaneEffectModel01: local upright, bottom pivot (impact light column).
-        batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, s.x, s.y, -s.z, sx, sy, color, PLANE_UV, true);
+        batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color, PLANE_UV, true);
       } else if (s.align === 2 && !s.pitchLocal) {
         // Local + identity ancestors → world-axis quad (Core / Coredirection).
-        batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, s.x, s.y, -s.z, sx, sy, color);
+        batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color);
       } else {
         // View billboard, or Local with Corehorizon pitch ≈ camera 33.2°.
-        batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, s.x, s.y, s.z, sx, sy, color, 1, 1, s.spin);
+        batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, z, sx, sy, color, 1, 1, s.spin);
       }
       // 9Slice shader wants pre-transform startSizeX (TexW units), not world size.
       const slice = s.slice ? s.sliceSize * mulX : 0;

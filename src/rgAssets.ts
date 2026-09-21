@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SpriteMeta } from './slice';
+import { feverCorePrefab } from './feverCore';
 
 export interface FxKey { t: number; v: number; i?: number; o?: number }
 export interface FxMM { k: number; v: number; lo: number; hi: number; mult: number; keys?: FxKey[]; minKeys?: FxKey[] }
@@ -101,6 +102,10 @@ export async function loadRgLibrary(): Promise<RgLibrary | null> {
           p00: f.p00 ?? -1,
           root: f.root ?? 0,
         }));
+        for (const side of ['left', 'right'] as const) {
+          const core = feverCorePrefab(side);
+          if (!fx.fever.some(f => f.id === core.id)) fx.fever.push(core);
+        }
       }
       const names = [...new Set((fx.mats || []).map(m => m.tex).filter(Boolean))];
       await Promise.all(names.map(async name => {
