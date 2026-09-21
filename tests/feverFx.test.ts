@@ -5,6 +5,30 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it('Fever 发射器延迟叠加在 Animator 激活之后', () => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  prefab.nodes[0].ps!.delay = { k: 0, v: 0.1, lo: 0.1, hi: 0.1, mult: 1 };
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  const count = () => {
+    fx.draw();
+    return fx.group.children.reduce((n, child) => n + (child as THREE.Mesh).geometry.drawRange.count, 0);
+  };
+  try {
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.11, false);
+    expect(count()).toBe(0);
+    fx.sync(chart, 0.12, false);
+    expect(count()).toBeGreaterThan(0);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 describe('Fever 出生时间', () => {
   it('同一时刻的粒子位置不随跨越出生点的帧步长变化', () => {
     const positions = (times: number[]) => {
@@ -12,6 +36,7 @@ describe('Fever 出生时间', () => {
       const prefab = data.fever![0];
       prefab.nodes = [prefab.nodes[0]];
       const ps = prefab.nodes[0].ps!;
+      ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
       ps.trail = undefined;
       ps.limit = undefined;
       ps.shape = undefined;
@@ -55,6 +80,7 @@ describe('Fever 原始非循环入场爆发', () => {
       // 隔离根发射器；关闭拖尾，绘制顶点数直接对应存活粒子数。
       prefab.nodes = [prefab.nodes[0]];
       prefab.nodes[0].ps!.trail = undefined;
+      prefab.nodes[0].ps!.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
       data.prefabs = [];
       data.fever = [prefab];
       const texture = new THREE.Texture();

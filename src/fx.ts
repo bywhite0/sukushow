@@ -32,6 +32,7 @@ interface Spec {
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
+  delay?: FxMM;
   rate: FxMM;
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
   role: 'core' | 'impact' | 'parr' | 'p2' | 'plain';
@@ -278,6 +279,7 @@ export class HitFx {
         bursts: (n.ps.bursts || []).map(b => ({
           t: b.t, count: b.count, cycles: Math.max(1, b.cycles || 1), interval: b.interval || 0,
         })),
+        delay: n.ps.delay,
         rate: n.ps.rate || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
         align: n.rend?.align || 0,
         mesh: n.rend?.mode === 4 ? (n.rend.mesh?.includes('Plane') ? 2 : 1) : 0,
@@ -470,10 +472,14 @@ export class HitFx {
     if (!src?.length || this.live.length > 64) return null;
     // FeverEffectStartAnimation 在 1/60 秒激活两侧入场根节点。
     const delay = fever ? 1 / 60 : 0;
-    const specs = src.map(s => ({
-      ...s, bursts: s.bursts.map(b => ({ ...b, t: b.t + delay })),
-      burstI: 0, rateAcc: 0, cycle: 0,
-    }));
+    const specs = src.map(s => {
+      // 每个发射器每次启动只采样一次，所有批次共享其 startDelay。
+      const startDelay = delay + (fever ? sample(s.delay, Math.random()) : 0);
+      return {
+        ...s, bursts: s.bursts.map(b => ({ ...b, t: b.t + startDelay })),
+        burstI: 0, rateAcc: 0, cycle: 0,
+      };
+    });
     const live: Live = {
       uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 1),
       loop, x, width, specs, sparks: [], abs, fever,
