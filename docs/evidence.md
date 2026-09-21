@@ -100,7 +100,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **LineMove 几何依据纠正**：#604/#570 的 `InitialModule.size3D=true`，X=0.1099999994、Y=120、Z=0.1000000015，`rotation3D=true`；Renderer 的 `m_RenderMode=0`，不是拉伸模式。不能仅以 X×`m_LengthScale`÷Shape.length 推导屏幕亮条长度。`ShapeModule.type=4` 的语义也不能沿用重建文档的 Edge 注释，须结合 Unity 序列化枚举核对。
 - **运动**：两侧 `startSpeed=1.2999999523`、寿命 0.8000000119；启用世界空间 VelocityModule，左 X=-0.3499999940、右 X=+0.3499999940，Y/Z=0。父级静态变换均为单位变换；没有从这些参数得到屏幕空间往返的依据。LineBase 的 VelocityModule 则为 disabled，不能采用其中残留的 +12/-20 值。
 - **入场状态机**：sharedassets56 #104 `FeverEffectAnimatorController` 只有一个默认非循环状态，引用 #92 `FeverEffectStartAnimation`。将绑定路径 CRC32 与 level56 层级对应后，曲线 18/19 控制左右爆发根节点：t=0 关闭、t=1/60 秒开启；预览将 Animator 的 1/60 秒激活延迟与每个发射器的 `startDelay` 相加；原始根发射器 #543/#544 为 0–0.1000000015 秒随机延迟，每次启动独立采样一次，所有批次共享该偏移。上述六批时间为发射器开始后的相对时间，不是 Fever 起点的绝对偏移。延迟期间关闭 Fever 会取消待发射批次，暂停不推进计时；跨过出生点的首帧仅推进出生后的实际时间。
-- **尚未接入的动画**：曲线 0–5 使 LineCoreMove 左右从 `(±18.46,-9.4,0)` 在 25/60 秒内移至 `(±1.96,6.9,25.8)`，38/60 秒关闭；曲线 12–17 将 LineMask 左右从 `(1,0,1)` / `(4,0,1)` 缩放至 `(40,68,1)`，26/60 秒结束。原始边线 Renderer `m_MaskInteraction=1`，后续需一起核对遮罩、材质与投影，不能只替换一条坐标公式。
+- **入场曲线采样（渲染接入待完成）**：`src/feverAnimation.ts` 已逐项使用 #92 streamed 原始系数与 float32 关键帧时间，覆盖起点、中间帧、终点保持、关闭边界和回跳；通过 `_rg_q.py` 核对层级，并以路径 CRC32 对应 genericBindings。曲线 0–5 使 LineCoreMove 左右从 `(±18.46,-9.4,0)` 在 25/60 秒内移至 `(±1.96,6.9,25.8)`，38/60 秒关闭；曲线 12–17 将 LineMask 左右从 `(1,0,1)` / `(4,0,1)` 缩放至 `(40,68,1)`，26/60 秒结束。原始边线 Renderer `m_MaskInteraction=1`，后续需一起核对遮罩、材质与投影，不能只替换一条坐标公式。
 
 ## HUD FX：两个环 + Combo/AP増加
 
