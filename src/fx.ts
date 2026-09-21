@@ -488,7 +488,7 @@ export class HitFx {
     const lastCycle = Number.isFinite(period) ? Math.floor(age / period) : 0;
     for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
       const base = Number.isFinite(period) ? cycle * period : 0;
-      this.emitBursts(live, spec, prevAge - base, age - base, period);
+      this.emitBursts(live, spec, prevAge - base, age - base, period, age > 0);
     }
     const rate = sample(spec.rate, Math.random());
     if (rate > 0) {
@@ -497,7 +497,7 @@ export class HitFx {
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
     }
   }
-  private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number) {
+  private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number, advancing: boolean) {
     for (const b of spec.bursts) {
       for (let c = 0; c < b.cycles; c++) {
         const t = b.t + c * (b.interval || 0);
@@ -505,7 +505,7 @@ export class HitFx {
         if (t > prevAge && t <= age) {
           const first = live.sparks.length;
           this.burst(live, spec, b.count);
-          if (live.fever && age > 0) for (let i = first; i < live.sparks.length; i++) {
+          if (live.fever && advancing) for (let i = first; i < live.sparks.length; i++) {
             live.sparks[i].firstStep = Math.max(0, age - t);
           }
         }
