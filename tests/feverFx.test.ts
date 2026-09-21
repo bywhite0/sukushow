@@ -5,6 +5,43 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it.each([true, false])('Fever 拖尾颜色继承开关=%s', inherit => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  const ps = prefab.nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.col = { en: true, mode: 1,
+    max: { rgb: [{ t: 0, r: 0, g: 1, b: 0 }], a: [{ t: 0, v: 0.5 }] },
+  };
+  ps.trail!.inheritColor = inherit;
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.colMax = { rgb: [{ t: 0, r: 1, g: 1, b: 1 }], a: [{ t: 0, v: 1 }] };
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    fx.draw();
+    const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    const geometry = mesh.geometry;
+    expect(geometry.drawRange.count).toBeGreaterThan(60);
+    const tint = geometry.getAttribute('tint');
+    for (let i = 0; i < geometry.drawRange.count; i++) {
+      const colored = i < 60 || inherit;
+      expect(tint.getX(i)).toBeCloseTo(colored ? 0 : 1);
+      expect(tint.getY(i)).toBeCloseTo(1);
+      expect(tint.getZ(i)).toBeCloseTo(colored ? 0 : 1);
+      expect(tint.getW(i)).toBeCloseTo(colored ? 0.5 : 1);
+    }
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 共用贴图的节点保留各自 sortingOrder', () => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
   data.prefabs = [];

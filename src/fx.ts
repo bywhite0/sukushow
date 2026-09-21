@@ -109,6 +109,16 @@ function gradAt(g: FxGrad | undefined, t: number) {
   }
   return [r, gc, b, al];
 }
+function sparkGradient(s: Spark) {
+  const t = s.age / s.life;
+  const g = gradAt(s.grad, t);
+  if (s.gradMin) {
+    const min = gradAt(s.gradMin, t);
+    for (let i = 0; i < 4; i++) g[i] = min[i] + (g[i] - min[i]) * s.gradBlend!;
+  }
+  return g;
+}
+
 function qrot(qx: number, qy: number, qz: number, qw: number, x: number, y: number, z: number) {
   const ix = qw * x + qy * z - qz * y, iy = qw * y + qz * x - qx * z, iz = qw * z + qx * y - qy * x, iw = -qx * x - qy * y - qz * z;
   return [ix * qw + iw * -qx + iy * -qz - iz * -qy, iy * qw + iw * -qy + iz * -qx - ix * -qz, iz * qw + iw * -qz + ix * -qy - iy * -qx];
@@ -592,11 +602,7 @@ export class HitFx {
       const batch = this.batches.get(s.tex);
       if (!batch) continue;
       const t = s.age / s.life;
-      const g = gradAt(s.grad, t);
-      if (s.gradMin) {
-        const min = gradAt(s.gradMin, t);
-        for (let i = 0; i < 4; i++) g[i] = min[i] + (g[i] - min[i]) * s.gradBlend!;
-      }
+      const g = sparkGradient(s);
       const mulX = s.sizeOl ? lerpKeys(s.sizeOl.keys, t) * (s.sizeOl.mult || 1) : 1;
       const mulY = s.sizeSep && s.sizeOlY
         ? lerpKeys(s.sizeOlY.keys, t) * (s.sizeOlY.mult || 1)
@@ -628,13 +634,14 @@ export class HitFx {
       const batch = this.batches.get(s.tex);
       if (!batch) continue;
       const tw = s.trailSizeWidth ? s.trailWidth * s.sx : s.trailWidth;
+      const particleColor = s.trailInherit ? sparkGradient(s) : [1, 1, 1, 1];
       for (let i = 1; i < s.trail.length; i++) {
         const a = s.trail[i - 1], b = s.trail[i];
         const midX = (a.x + b.x) * 0.5, midY = (a.y + b.y) * 0.5, midZ = (a.z + b.z) * 0.5;
         const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
         const g = s.trailGrad ? gradAt(s.trailGrad, Math.min(1, Math.max(0, u))) : [1, 1, 1, 1 - u];
         const color = s.trailInherit
-          ? [s.r * g[0], s.g * g[1], s.b * g[2], s.a * g[3]]
+          ? [s.r * particleColor[0] * g[0], s.g * particleColor[1] * g[1], s.b * particleColor[2] * g[2], s.a * particleColor[3] * g[3]]
           : [g[0], g[1], g[2], g[3]];
         const seg = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
         const before = batch.n;
