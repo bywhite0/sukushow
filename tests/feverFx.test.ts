@@ -242,6 +242,38 @@ it('Fever 沿长度颜色分别作用于头尾，不替代寿命颜色', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it('循环发射跨过多个周期不漏发，也不重复边界批次', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.loop = true;
+  ps.dur = 0.1;
+  ps.life = constant(2);
+  ps.trail = undefined;
+  ps.limit = undefined;
+  ps.rate = constant(0);
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.spawn('feverLeft', 0, 1, true);
+    const count = () => { fx.draw(); return fx.group.children.reduce((n, c) => n + (c as THREE.Mesh).geometry.drawRange.count / 6, 0); };
+    expect(count()).toBe(1);
+    fx.sync(chart, 0.35, false);
+    expect(count()).toBe(4);
+    fx.sync(chart, 0.4, false);
+    expect(count()).toBe(5);
+    fx.sync(chart, 0.4, false);
+    expect(count()).toBe(5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];

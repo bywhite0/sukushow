@@ -476,30 +476,32 @@ export class HitFx {
   }
   private emitDue(live: Live, spec: Spec, prevAge: number, age: number) {
     const period = live.loop && spec.loop ? spec.dur : Number.POSITIVE_INFINITY;
-    const localPrev = prevAge % period;
-    const localAge = age % period;
-    const wrapped = live.loop && spec.loop && localAge < localPrev;
-    for (const b of spec.bursts) {
-      for (let c = 0; c < b.cycles; c++) {
-        const t = b.t + c * (b.interval || 0);
-        const due = wrapped
-          ? (t >= localPrev || t <= localAge)
-          : (t > localPrev && t <= localAge) || (prevAge < 0 && t <= localAge);
-        if (due) {
-          const first = live.sparks.length;
-          this.burst(live, spec, b.count);
-          // 非循环 Fever 入场按出生时刻计算首帧年龄，不多积分整帧。
-          if (live.fever && !live.loop) for (let i = first; i < live.sparks.length; i++) {
-            live.sparks[i].firstStep = Math.max(0, age - t);
-          }
-        }
-      }
+    const firstCycle = Number.isFinite(period) ? Math.max(0, Math.floor(prevAge / period)) : 0;
+    const lastCycle = Number.isFinite(period) ? Math.floor(age / period) : 0;
+    for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
+      const base = Number.isFinite(period) ? cycle * period : 0;
+      this.emitBursts(live, spec, prevAge - base, age - base, period);
     }
     const rate = sample(spec.rate, Math.random());
     if (rate > 0) {
       spec.rateAcc += rate * Math.max(0, age - prevAge);
       const n = Math.floor(spec.rateAcc);
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
+    }
+  }
+  private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number) {
+    for (const b of spec.bursts) {
+      for (let c = 0; c < b.cycles; c++) {
+        const t = b.t + c * (b.interval || 0);
+        if (t >= period) break;
+        if (t > prevAge && t <= age) {
+          const first = live.sparks.length;
+          this.burst(live, spec, b.count);
+          if (live.fever) for (let i = first; i < live.sparks.length; i++) {
+            live.sparks[i].firstStep = Math.max(0, age - t);
+          }
+        }
+      }
     }
   }
   /** `off` | `current` 直冲天上(+rotol/拖尾) | `limited` 限速 | `full` 限速+rotol+拖尾. */
