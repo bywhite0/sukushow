@@ -28,6 +28,16 @@ describe('拖尾线段几何', () => {
       expect((b.pos[6 + axis] + b.pos[15 + axis]) / 2).toBeCloseTo(end[axis] * sign);
     }
   });
+  it('两端可独立变宽和着色，零宽末端收束为尖端', () => {
+    const b = buffers();
+    const n = pushTrailSegment(b.pos, b.uv, b.col, 0, b.cap,
+      [0, 0, 0], [0, 2, 0], 2, [1, 0, 0, 1], 0, [0, 0, 1, 0]);
+    expect(n).toBe(6);
+    expect(Math.abs(b.pos[3] - b.pos[0])).toBeCloseTo(2);
+    for (let axis = 0; axis < 3; axis++) expect(b.pos[6 + axis]).toBeCloseTo(b.pos[15 + axis]);
+    expect(Array.from(b.col.slice(0, 4))).toEqual([1, 0, 0, 1]);
+    expect(Array.from(b.col.slice(8, 12))).toEqual([0, 0, 1, 0]);
+  });
   it('零长度不产生几何，容量不足不写入', () => {
     const b = buffers(5);
     expect(pushTrailSegment(b.pos, b.uv, b.col, 0, 5, [0, 0, 0], [1, 0, 0], 1, [1, 1, 1, 1])).toBe(0);

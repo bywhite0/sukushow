@@ -124,21 +124,25 @@ export function pushSlicedNote(
 export function pushTrailSegment(
   pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
   a: number[], b: number[], width: number, color: number[],
+  endWidth = width, endColor = color,
 ) {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = a[2] - b[2];
-  if (Math.hypot(dx, dy, dz) < 1e-8 || width <= 0) return n;
+  if (Math.hypot(dx, dy, dz) < 1e-8 || (width <= 0 && endWidth <= 0) || n + 6 > cap) return n;
   // 轨迹方向与相机法线叉乘，得到朝向相机的带状截面。
   let sx = dy * UP_Y - dz * -UP_Z, sy = -dx * UP_Y, sz = dx * -UP_Z;
   const length = Math.hypot(sx, sy, sz);
   if (length < 1e-8) { sx = 1; sy = 0; sz = 0; }
-  const scale = width / (2 * (length < 1e-8 ? 1 : length));
+  const scale = 1 / (2 * (length < 1e-8 ? 1 : length));
   sx *= scale; sy *= scale; sz *= scale;
-  return pushQuad(pos, uv, col, n, cap, [
-    [a[0] - sx, a[1] - sy, -a[2] - sz],
-    [a[0] + sx, a[1] + sy, -a[2] + sz],
-    [b[0] + sx, b[1] + sy, -b[2] + sz],
-    [b[0] - sx, b[1] - sy, -b[2] - sz],
+  const start = Math.max(0, width), end = Math.max(0, endWidth);
+  const next = pushQuad(pos, uv, col, n, cap, [
+    [a[0] - sx * start, a[1] - sy * start, -a[2] - sz * start],
+    [a[0] + sx * start, a[1] + sy * start, -a[2] + sz * start],
+    [b[0] + sx * end, b[1] + sy * end, -b[2] + sz * end],
+    [b[0] - sx * end, b[1] - sy * end, -b[2] - sz * end],
   ], [[0, 0], [1, 0], [1, 1], [0, 1]], color);
+  for (const i of [2, 4, 5]) col.set(endColor, (n + i) * 4);
+  return next;
 }
 
 export function pushBillboard(

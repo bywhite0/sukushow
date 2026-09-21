@@ -57,6 +57,8 @@ interface Spark {
   trailTex?: string;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   trailGradBlend: number;
+  trailWidthCurve?: FxMM;
+  trailWidthFactor: number;
   trail: { x: number; y: number; z: number; t: number }[];
 }
 interface Live {
@@ -449,6 +451,8 @@ export class HitFx {
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
         trailWidth: spec.trailEn ? Math.max(0, sample(spec.trailWidth, trailFactor)) : 0.35,
+        trailWidthCurve: spec.trailEn && (spec.trailWidth.k === 1 || spec.trailWidth.k === 2) ? spec.trailWidth : undefined,
+        trailWidthFactor: trailFactor,
         trailSizeWidth: spec.trailSizeWidth,
         trailInherit: spec.trailInherit,
         trailGrad: spec.trailGrad,
@@ -669,9 +673,20 @@ export class HitFx {
         const min = gradAt(s.trailGradMin, s.age / s.life);
         for (let j = 0; j < 4; j++) lifetimeColor[j] = min[j] + (lifetimeColor[j] - min[j]) * s.trailGradBlend;
       }
+      const widthAt = (phase: number) => {
+        const curve = s.trailWidthCurve;
+        if (!curve) return Math.max(0.001, tw * 0.15);
+        const hi = lerpKeys(curve.keys, phase);
+        const lo = curve.k === 2 ? lerpKeys(curve.minKeys, phase) : hi;
+        const width = (lo + (hi - lo) * s.trailWidthFactor) * curve.mult;
+        return Math.max(0, width) * (s.trailSizeWidth ? s.sx * Math.max(0, size) : 1) * 0.15;
+      };
+      const last = s.trail[s.trail.length - 1];
+      const extraHead = Math.hypot(last.x - s.x, last.y - s.y, last.z - s.z) > 1e-8;
+      const segments = s.trail.length - 1 + (extraHead ? 1 : 0);
       // libunity 0x12A7DBC–0x12A7E18：历史轨迹之外，头部始终使用粒子当前位置。
       // 临时端点不写回历史，避免破坏 minVertexDistance 的采样间距。
-      for (let i = 1; i <= s.trail.length; i++) {
+      for (let i = 1; i <= segments; i++) {
         let a = s.trail[i - 1];
         const b = i < s.trail.length ? s.trail[i] : { x: s.x, y: s.y, z: s.z, t: s.age };
         const cut = s.age - s.trailLife;
@@ -688,7 +703,8 @@ export class HitFx {
         const before = batch.n;
         batch.n = pushTrailSegment(
           batch.pos, batch.uv, batch.col, batch.n, batch.cap,
-          [a.x, a.y, a.z], [b.x, b.y, b.z], Math.max(0.001, tw * 0.15), color,
+          [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(1 - (i - 1) / segments), color,
+          widthAt(1 - i / segments), color,
         );
         for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
       }

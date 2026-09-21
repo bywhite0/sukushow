@@ -130,6 +130,49 @@ it('Fever 拖尾过期端点按寿命边界插值，不整段跳删', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it.each([[1, 1, 0.15, 0.3], [2, 1, 0.19810180217027665, 0.3962036043405533], [1, 0, 0, 0]])(
+  'Fever 拖尾宽度曲线 mode=%s mult=%s 沿轨迹逐点采样', (mode, mult, middleWidth, headWidth) => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.delay = constant(0);
+  ps.life = constant(2);
+  ps.speed = constant(1);
+  ps.shape = undefined;
+  ps.limit = undefined;
+  ps.grav = 0;
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.life = constant(2);
+  ps.trail!.sizeWidth = false;
+  ps.trail!.width = { ...constant(1), k: mode, mult,
+    keys: [{ t: 0, v: mode === 2 ? 3 : 2 }, { t: 1, v: 0 }],
+    minKeys: [{ t: 0, v: 2 }, { t: 1, v: 0 }],
+  };
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    for (const age of [0.1, 0.2, 0.3]) fx.sync(chart, age + 1 / 60, false);
+    fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    expect(geometry.drawRange.count).toBe(mult === 0 ? 6 : 18);
+    if (mult === 0) return;
+    const p = geometry.getAttribute('position');
+    const width = (a: number, b: number) => Math.hypot(p.getX(a) - p.getX(b), p.getY(a) - p.getY(b), p.getZ(a) - p.getZ(b));
+    expect(width(6, 7)).toBeCloseTo(0, 6);
+    expect(width(8, 11)).toBeCloseTo(middleWidth, 6);
+    expect(width(14, 17)).toBeCloseTo(headWidth, 6);
+  } finally { random.mockRestore(); fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
