@@ -1,4 +1,5 @@
 import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
+import feverTrailColors from './feverTrailColors.json';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
@@ -32,6 +33,7 @@ interface Spec {
   rotOlEn: boolean; rotOl: FxMM;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: FxMM;
   trailTex?: string;
+  colorOverTrail?: FxGrad;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
@@ -55,6 +57,7 @@ interface Spark {
   omega: number;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
   trailTex?: string;
+  colorOverTrail?: FxGrad;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   trailGradBlend: number;
   trailWidthCurve?: FxMM;
@@ -268,6 +271,12 @@ export class HitFx {
       const shape = n.ps.shape;
       const tr = worldOf(prefab.nodes, i);
       const colMod = n.ps.col;
+      // 原始 level56 colorOverTrail 常量；旧 fx.json 尚未导出该字段。
+      const trailAlpha = prefab.id === 'feverLeft' || prefab.id === 'feverRight'
+        ? (feverTrailColors as Record<string, number>)[n.name] : undefined;
+      const colorOverTrail = n.ps.trail?.colorOverTrail ?? (trailAlpha === undefined ? undefined : {
+        rgb: [{ t: 0, r: 1, g: 1, b: 1 }], a: [{ t: 0, v: trailAlpha }],
+      });
       out.push({
         offset: [tr.x, tr.y, tr.z],
         scale: [tr.sx, tr.sy, tr.sz],
@@ -301,6 +310,7 @@ export class HitFx {
           ? ((n.ps.rotol.sep ? n.ps.rotol.x : n.ps.rotol.curve) || n.ps.rotol.curve)
           : undefined) || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
         trailTex,
+        colorOverTrail,
         trailEn: !!n.ps.trail?.en,
         trailLife: Math.max(0.05, (n.ps.trail?.life?.v ?? n.ps.trail?.life?.lo ?? 0.35) || 0.35),
         trailMinDist: n.ps.trail?.minVertexDist ?? 0.2,
@@ -448,6 +458,7 @@ export class HitFx {
         trailEn: spec.trailEn || ((this.mode === 'full' || this.mode === 'current') && spec.limitEn),
         // fever authoring trails always on when trail.en
         trailTex: spec.trailEn ? spec.trailTex : spec.tex,
+        colorOverTrail: spec.colorOverTrail,
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
         trailWidth: spec.trailEn ? Math.max(0, sample(spec.trailWidth, trailFactor)) : 0.35,
@@ -700,11 +711,14 @@ export class HitFx {
         const color = s.trailInherit
           ? [s.r * particleColor[0] * g[0], s.g * particleColor[1] * g[1], s.b * particleColor[2] * g[2], s.a * particleColor[3] * g[3]]
           : [g[0], g[1], g[2], g[3]];
+        const tailPhase = 1 - (i - 1) / segments, headPhase = 1 - i / segments;
+        const tailColor = gradAt(s.colorOverTrail, tailPhase).map((v, j) => v * color[j]);
+        const headColor = gradAt(s.colorOverTrail, headPhase).map((v, j) => v * color[j]);
         const before = batch.n;
         batch.n = pushTrailSegment(
           batch.pos, batch.uv, batch.col, batch.n, batch.cap,
-          [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(1 - (i - 1) / segments), color,
-          widthAt(1 - i / segments), color,
+          [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(tailPhase), tailColor,
+          widthAt(headPhase), headColor,
         );
         for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
       }

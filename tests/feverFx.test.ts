@@ -173,6 +173,75 @@ it.each([[1, 1, 0.15, 0.3], [2, 1, 0.19810180217027665, 0.3962036043405533], [1,
   } finally { random.mockRestore(); fx.dispose(); texture.dispose(); }
 });
 
+it.each([
+  ['Particle_Height_Left', 0.3843137323856354],
+  ['Particle_Start_Left', 0.2549019753932953],
+  ['Particle_Star_Left', 0.5607843399047852],
+])('Fever %s 消费原始 colorOverTrail 常量 alpha', (name, alpha) => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes.find(n => n.name === name)!;
+  node.parent = -1;
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.trail!.inheritColor = false;
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.colMode = 1;
+  ps.trail!.colMax = { rgb: [{ t: 0, r: 1, g: 1, b: 1 }], a: [{ t: 0, v: 1 }] };
+  ps.bursts = [{ t: 0, count: { k: 0, v: 1, lo: 1, hi: 1, mult: 1 }, cycles: 1, interval: 0, prob: 1 }];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    expect(geometry.drawRange.count).toBe(12);
+    expect(geometry.getAttribute('tint').getW(6)).toBeCloseTo(alpha, 6);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
+it('Fever 沿长度颜色分别作用于头尾，不替代寿命颜色', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.inheritColor = false;
+  ps.trail!.colMode = 1;
+  ps.trail!.colMax = { rgb: [{ t: 0, r: 1, g: 1, b: 1 }], a: [{ t: 0, v: 0.5 }] };
+  Object.assign(ps.trail!, { colorOverTrail: {
+    rgb: [{ t: 0, r: 1, g: 0, b: 0 }, { t: 1, r: 0, g: 0, b: 1 }],
+    a: [{ t: 0, v: 1 }, { t: 1, v: 0.25 }],
+  } });
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    const tint = geometry.getAttribute('tint');
+    expect(tint.getX(60)).toBeCloseTo(0);
+    expect(tint.getZ(60)).toBeCloseTo(1);
+    expect(tint.getW(60)).toBeCloseTo(0.125);
+    expect(tint.getX(62)).toBeCloseTo(1);
+    expect(tint.getZ(62)).toBeCloseTo(0);
+    expect(tint.getW(62)).toBeCloseTo(0.5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];

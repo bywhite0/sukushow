@@ -27,6 +27,7 @@ export interface FxNode {
       en: boolean; ratio: number; life?: FxMM; minVertexDist: number;
       sizeWidth?: boolean; inheritColor?: boolean; width?: FxMM;
       colMode?: number; colMax?: FxGrad; colMin?: FxGrad; colMaxA?: number;
+      colorOverTrail?: FxGrad;
     };
   };
   rend?: { off?: boolean; mode: number; align: number; mat?: string; trailMat?: string; mesh?: string; sortOrder?: number };
