@@ -94,6 +94,42 @@ it('Fever 拖尾头部跟随当前位置，未达到采样距离也不滞后', (
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it('Fever 拖尾过期端点按寿命边界插值，不整段跳删', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  node.rx = node.ry = node.rz = 0;
+  node.rw = 1;
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.delay = constant(0);
+  ps.life = constant(2);
+  ps.speed = constant(1);
+  ps.shape = undefined;
+  ps.limit = undefined;
+  ps.grav = 0;
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.life = constant(0.15);
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    for (const age of [0.1, 0.2, 0.3]) fx.sync(chart, age + 1 / 60, false);
+    fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    expect(geometry.drawRange.count).toBe(18);
+    const p = geometry.getAttribute('position');
+    const headZ = (p.getZ(14) + p.getZ(17)) / 2;
+    const tailZ = (p.getZ(6) + p.getZ(7)) / 2;
+    expect(tailZ - headZ).toBeCloseTo(0.15, 6);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
