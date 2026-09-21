@@ -357,6 +357,25 @@ it('原始核心入场 prefab 在短周期中持续发射，并在关闭时清�
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it('核心粒子恰好在周期边界出生时不多推进整帧', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  const core = feverCorePrefab('left');
+  core.nodes[0].ps!.dur = 0.1;
+  data.fever = [core];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false); fx.setFever(true);
+    fx.sync(chart, 0.1, false); fx.draw();
+    const geometry = (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    const p = geometry.getAttribute('position');
+    // 第二个粒子出生年龄为 0，其中心不应包含速度积分。
+    expect((p.getX(6) + p.getX(8)) / 2).toBeCloseTo(-14.49999885559082, 5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
