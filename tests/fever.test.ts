@@ -1,4 +1,4 @@
-import { feverTrailWidthFactor } from '../src/fever';
+import { feverTrailWidthFactor, feverTrailColorFactor } from '../src/fever';
 import { describe, expect, it } from 'vitest';
 import { feverLineRgba, feverMoveLocalY, feverMovePhase, feverMoveRgba, isFeverAt } from '../src/fever';
 
@@ -9,6 +9,14 @@ it.each([
 ])('原生拖尾 seed %s 的宽度因子', (seed, expected) => {
   expect(feverTrailWidthFactor(seed)).toBe(expected);
   expect(feverTrailWidthFactor(seed)).toBe(expected);
+});
+
+it.each([
+  [0, 0.4632992148399353], [1, 0.5367191433906555],
+  [0xffffffff, 0.861666202545166], [0x80000000, 0.4637874960899353],
+  [0x12345678, 0.4405774474143982],
+])('原生拖尾 seed %s 的寿命颜色因子', (seed, expected) => {
+  expect(feverTrailColorFactor(seed)).toBe(expected);
 });
 
 describe('显式 Fever 时段', () => {

@@ -115,6 +115,7 @@ it.each([true, false])('Fever 拖尾颜色继承开关=%s', inherit => {
     max: { rgb: [{ t: 0, r: 0, g: 1, b: 0 }], a: [{ t: 0, v: 0.5 }] },
   };
   ps.trail!.inheritColor = inherit;
+  ps.trail!.colMode = 1;
   ps.trail!.minVertexDist = 0;
   ps.trail!.colMax = { rgb: [{ t: 0, r: 1, g: 1, b: 1 }], a: [{ t: 0, v: 1 }] };
   const texture = new THREE.Texture();
@@ -138,6 +139,46 @@ it.each([true, false])('Fever 拖尾颜色继承开关=%s', inherit => {
       expect(tint.getW(i)).toBeCloseTo(colored ? 0.5 : 1);
     }
   } finally { fx.dispose(); texture.dispose(); }
+});
+
+it.each([
+  [1, 0.2, 0, 1], [1, 0.3, 0, 1],
+  [3, 0.2, 0.5362125039100647, 0.4637874960899353],
+  [3, 0.3, 0.5362125039100647, 0.4637874960899353],
+])('Fever 拖尾寿命颜色 mode=%s age=%s 按粒子年龄与固定 seed 采样', (mode, age, red, blue) => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  data.fever[0].nodes = [data.fever[0].nodes[0]];
+  const ps = data.fever[0].nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.life = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  ps.bursts = [{ ...ps.bursts![0], cycles: 1 }];
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.inheritColor = false;
+  ps.trail!.colMode = mode;
+  ps.trail!.colMin = { rgb: [{ t: 0, r: 1, g: 0, b: 0 }], a: [{ t: 0, v: 0 }, { t: 1, v: 1 }] };
+  ps.trail!.colMax = { rgb: [{ t: 0, r: 0, g: 0, b: 1 }], a: [{ t: 0, v: 0 }, { t: 1, v: 1 }] };
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.1 + 1 / 60, false);
+    fx.sync(chart, age + 1 / 60, false);
+    random.mockReturnValue(0);
+    fx.draw();
+    const geometry = (fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+    expect(geometry.drawRange.count).toBeGreaterThan(60);
+    const tint = geometry.getAttribute('tint');
+    for (let i = 60; i < geometry.drawRange.count; i++) {
+      expect(tint.getX(i)).toBeCloseTo(red, 6);
+      expect(tint.getZ(i)).toBeCloseTo(blue, 6);
+      expect(tint.getW(i)).toBeCloseTo(age, 6);
+    }
+  } finally { random.mockRestore(); fx.dispose(); texture.dispose(); }
 });
 
 it('Fever 共用贴图的节点保留各自 sortingOrder', () => {

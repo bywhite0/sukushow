@@ -1,4 +1,4 @@
-import { feverTrailWidthFactor } from './fever';
+import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
@@ -31,7 +31,7 @@ interface Spec {
   limitEn: boolean; limitDamp: number; limitSpeed: FxMM;
   rotOlEn: boolean; rotOl: FxMM;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: FxMM;
-  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
+  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
   rate: FxMM;
@@ -53,7 +53,8 @@ interface Spark {
   firstStep?: number;
   omega: number;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
-  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad;
+  trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
+  trailGradBlend: number;
   trail: { x: number; y: number; z: number; t: number }[];
 }
 interface Live {
@@ -293,6 +294,7 @@ export class HitFx {
         trailSizeWidth: !!n.ps.trail?.sizeWidth,
         trailInherit: n.ps.trail?.inheritColor !== false,
         trailGrad: n.ps.trail?.en ? n.ps.trail.colMax : undefined,
+        trailGradMin: n.ps.trail?.en && n.ps.trail.colMode === 3 ? n.ps.trail.colMin : undefined,
         bursts: (n.ps.bursts || []).map(b => ({
           t: b.t, count: b.count, cycles: Math.max(1, b.cycles || 1), interval: b.interval || 0,
         })),
@@ -413,9 +415,8 @@ export class HitFx {
       const gradMin = spec.gradTwo ? spec.gradMin : undefined;
       const gradBlend = gradMin ? Math.random() : undefined;
       const trailRandom = spec.trailEn ? Math.random() : 0;
-      const trailFactor = live.fever
-        ? feverTrailWidthFactor(Math.floor(trailRandom * 0x100000000))
-        : trailRandom;
+      const trailSeed = Math.floor(trailRandom * 0x100000000);
+      const trailFactor = live.fever ? feverTrailWidthFactor(trailSeed) : trailRandom;
       const spark: Spark = {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
@@ -438,6 +439,8 @@ export class HitFx {
         trailSizeWidth: spec.trailSizeWidth,
         trailInherit: spec.trailInherit,
         trailGrad: spec.trailGrad,
+        trailGradMin: spec.trailGradMin,
+        trailGradBlend: live.fever ? feverTrailColorFactor(trailSeed) : trailRandom,
         trail: [],
       };
       live.sparks.push(spark);
@@ -646,10 +649,16 @@ export class HitFx {
       const size = s.sizeOl ? lerpKeys(s.sizeOl.keys, s.age / s.life) * (s.sizeOl.mult || 1) : 1;
       const tw = s.trailSizeWidth ? s.trailWidth * s.sx * Math.max(0, size) : s.trailWidth;
       const particleColor = s.trailInherit ? sparkGradient(s) : [1, 1, 1, 1];
+      // colMax/colMin 来自 colorOverLifetime，按粒子年龄采样，不是历史顶点年龄。
+      const lifetimeColor = gradAt(s.trailGrad, s.age / s.life);
+      if (s.trailGradMin) {
+        const min = gradAt(s.trailGradMin, s.age / s.life);
+        for (let j = 0; j < 4; j++) lifetimeColor[j] = min[j] + (lifetimeColor[j] - min[j]) * s.trailGradBlend;
+      }
       for (let i = 1; i < s.trail.length; i++) {
         const a = s.trail[i - 1], b = s.trail[i];
         const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
-        const g = s.trailGrad ? gradAt(s.trailGrad, Math.min(1, Math.max(0, u))) : [1, 1, 1, 1 - u];
+        const g = s.trailGrad ? lifetimeColor : [1, 1, 1, 1 - u];
         const color = s.trailInherit
           ? [s.r * particleColor[0] * g[0], s.g * particleColor[1] * g[1], s.b * particleColor[2] * g[2], s.a * particleColor[3] * g[3]]
           : [g[0], g[1], g[2], g[3]];
