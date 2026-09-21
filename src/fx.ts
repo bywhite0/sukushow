@@ -20,6 +20,7 @@ interface Spec {
   scale: number[];
   qx: number; qy: number; qz: number; qw: number;
   life: FxMM; speed: FxMM; size: FxMM; sizeY: FxMM; rot: FxMM; grav: number;
+  velocity: number[];
   col: number[]; size3d: boolean; sizeY0: number;
   shape: {
     en: boolean; type: number; angle: number; radius: number;
@@ -271,6 +272,10 @@ export class HitFx {
       const shape = n.ps.shape;
       const tr = worldOf(prefab.nodes, i);
       const colMod = n.ps.col;
+      const vel = n.ps.vel;
+      const constantVelocity = vel?.en && [vel.x, vel.y, vel.z].every(v => v.k === 0);
+      let velocity = constantVelocity ? [vel.x.v, vel.y.v, vel.z.v] : [0, 0, 0];
+      if (constantVelocity && !vel.world) velocity = qrot(tr.qx, tr.qy, tr.qz, tr.qw, ...velocity as [number, number, number]);
       // 原始 level56 colorOverTrail 常量；旧 fx.json 尚未导出该字段。
       const trailAlpha = prefab.id === 'feverLeft' || prefab.id === 'feverRight'
         ? (feverTrailColors as Record<string, number>)[n.name] : undefined;
@@ -286,6 +291,7 @@ export class HitFx {
         size: n.ps.size || { k: 0, v: 1, lo: 0, hi: 0, mult: 1 },
         sizeY: n.ps.sizeY || { k: 0, v: 1, lo: 0, hi: 0, mult: 1 },
         rot: n.ps.rot || { k: 0, v: 0, lo: 0, hi: 0, mult: 1 },
+        velocity,
         grav: n.ps.grav || 0,
         col: [n.ps.col0R, n.ps.col0G, n.ps.col0B, n.ps.col0A],
         size3d: !!n.ps.size3d, sizeY0: n.ps.sizeY?.v ?? 1,
@@ -445,7 +451,7 @@ export class HitFx {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
         z: (live.abs ? 0 : BORDER) + spec.offset[2] + sh.oz,
-        vx: sh.dx * speed, vy: sh.dy * speed, vz: sh.dz * speed,
+        vx: sh.dx * speed + spec.velocity[0], vy: sh.dy * speed + spec.velocity[1], vz: sh.dz * speed + spec.velocity[2],
         age: 0, life: Math.max(0.016, sample(spec.life, rnd)),
         sx: sized.drawX, sy: sized.drawY, sliceSize: sized.sliceSize,
         r: spec.col[0], g: spec.col[1], b: spec.col[2], a: spec.col[3], grav: spec.grav,
