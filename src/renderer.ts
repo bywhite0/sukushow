@@ -417,9 +417,9 @@ export class PreviewRenderer {
     for (const batch of this.sheets.values()) batch.reset();
     this.drawTrack(slope.spawn);
     this.lines.reset();
-    this.fx?.setFever(this.feverOn);
     this.paintFeverOutline(time);
     this.fx?.sync(chart, time, mirror);
+    this.fx?.setFever(this.feverOn, time - this.feverStart);
     let visible = 0;
     for (const root of chart.roots) {
       if (root.type !== 1) { visible += this.drawSprite(root, time, slope, mirror, lib); continue; }

@@ -376,6 +376,28 @@ it('核心粒子恰好在周期边界出生时不多推进整帧', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it('核心入场以歌曲 Fever 起点为准，跳转到入场之后不重播', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [feverCorePrefab('left'), feverCorePrefab('right')];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 10, false);
+    fx.setFever(true, 1);
+    fx.sync(chart, 10.05, false); fx.draw();
+    expect(fx.group.children.every(c => (c as THREE.Mesh).geometry.drawRange.count === 0)).toBe(true);
+    fx.setFever(false);
+    fx.setFever(true, 0.2);
+    fx.sync(chart, 10.1, false); fx.draw();
+    const mesh = fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    expect(mesh).toBeDefined();
+    const p = mesh.geometry.getAttribute('position');
+    expect((p.getX(0) + p.getX(2)) / 2).toBeCloseTo(-8.374998509883881, 5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];

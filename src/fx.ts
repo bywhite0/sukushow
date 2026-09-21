@@ -519,7 +519,7 @@ export class HitFx {
     if (mode === 'off') this.live = this.live.filter(fx => fx.fever);
   }
   /** Screen-side fever FX (feverLeft/Right). Independent of hitEffect off. */
-  setFever(on: boolean) {
+  setFever(on: boolean, elapsed = 0) {
     if (on === this.feverOn) return;
     this.feverOn = on;
     if (!on) {
@@ -529,8 +529,16 @@ export class HitFx {
     // level56 #544/#543：入场爆发不循环，后续批次仍须推进。
     this.spawn('feverLeft', 0, 1, false, -200, true, true);
     this.spawn('feverRight', 0, 1, false, -201, true, true);
-    this.spawn('feverCoreLeft', 0, 1, true, -202, true, true);
-    this.spawn('feverCoreRight', 0, 1, true, -203, true, true);
+    const coreAge = Math.max(0, elapsed);
+    if (!feverEntrance(coreAge).coreActive) return;
+    for (const [id, uid] of [['feverCoreLeft', -202], ['feverCoreRight', -203]] as const) {
+      const live = this.spawn(id, 0, 1, true, uid, true, true);
+      if (!live || coreAge === 0) continue;
+      live.age = coreAge;
+      live.sparks = [];
+      for (const spec of live.specs) this.emitDue(live, spec, -1e-6, coreAge);
+    }
+    if (coreAge > 0) this.step(0);
   }
   spawn(id: string, x: number, width: number, loop = false, uid = -1, abs = false, fever = false) {
     if (this.mode === 'off' && !fever) return null;
