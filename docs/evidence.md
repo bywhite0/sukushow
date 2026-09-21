@@ -75,6 +75,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## Fever 特效核对
 
+- **拖尾尺寸继承**：原始 #544 `TrailModule.sizeAffectsWidth=true`。预览拖尾宽度现在乘当前寿命相位的尺寸曲线，不再只乘出生尺寸；关闭该开关时保持独立宽度。现有拖尾宽度的 0.15 视觉系数及 ribbon 几何仍为近似，未宣称与原版绝对宽度一致。
+
 - **粒子数值曲线**：原始 #544 SizeModule 包含非零入／出切线。HitFx 对已导出的 `FxKey.i/o` 使用非加权三次 Hermite 插值，切线乘关键帧时间跨度；缺少切线的旧数据保持线性回退。影响共用采样器的尺寸等数值曲线，不改变 Gradient 的 RGB/alpha 线性插值；加权切线尚未支持。
 
 - **拖尾颜色继承**：原始 #544 `TrailModule.inheritParticleColor=true`。拖尾现在使用粒子当前寿命相位的颜色（含 TwoGradients 混合与 alpha）再乘拖尾渐变，不再只继承出生颜色；关闭继承时仍只使用拖尾颜色。拖尾几何和沿长度着色仍属预览近似。

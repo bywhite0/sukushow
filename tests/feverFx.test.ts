@@ -5,6 +5,39 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it.each([true, false])('Fever 拖尾宽度继承当前尺寸=%s', inherit => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const prefab = data.fever[0];
+  prefab.nodes = [prefab.nodes[0]];
+  const ps = prefab.nodes[0].ps!;
+  ps.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  ps.life = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  ps.size = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  ps.sizeol = { en: true, curve: { k: 1, v: 1, lo: 1, hi: 1, mult: 1,
+    keys: [{ t: 0, v: 0.5 }, { t: 1, v: 0.5 }],
+  } };
+  ps.trail!.sizeWidth = inherit;
+  ps.trail!.minVertexDist = 0;
+  ps.trail!.width = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.03, false);
+    fx.sync(chart, 0.04, false);
+    fx.draw();
+    const mesh = fx.group.children.find(child => (child as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
+    expect(mesh.geometry.drawRange.count).toBeGreaterThan(60);
+    const pos = mesh.geometry.getAttribute('position');
+    const xs = Array.from({ length: 6 }, (_, i) => pos.getX(60 + i));
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(inherit ? 0.075 : 0.15, 5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 尺寸曲线使用原始关键帧切线', () => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
   data.prefabs = [];
