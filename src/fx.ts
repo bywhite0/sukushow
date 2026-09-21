@@ -60,7 +60,7 @@ interface Live {
   abs?: boolean; fever?: boolean;
 }
 
-function lerpKeys(keys: { t: number; v: number }[] | undefined, t: number) {
+function lerpKeys(keys: { t: number; v: number; i?: number; o?: number }[] | undefined, t: number) {
   if (!keys?.length) return 1;
   if (t <= keys[0].t) return keys[0].v;
   const last = keys[keys.length - 1];
@@ -69,7 +69,12 @@ function lerpKeys(keys: { t: number; v: number }[] | undefined, t: number) {
     if (t > keys[i].t) continue;
     const span = keys[i].t - keys[i - 1].t;
     const k = span > 0 ? (t - keys[i - 1].t) / span : 0;
-    return keys[i - 1].v + (keys[i].v - keys[i - 1].v) * k;
+    const from = keys[i - 1], to = keys[i];
+    if (from.o === undefined || to.i === undefined) return from.v + (to.v - from.v) * k;
+    if (!Number.isFinite(from.o) || !Number.isFinite(to.i)) return from.v;
+    const k2 = k * k, k3 = k2 * k;
+    return (2 * k3 - 3 * k2 + 1) * from.v + (k3 - 2 * k2 + k) * span * from.o
+      + (-2 * k3 + 3 * k2) * to.v + (k3 - k2) * span * to.i;
   }
   return last.v;
 }

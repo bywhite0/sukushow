@@ -75,6 +75,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## Fever 特效核对
 
+- **粒子数值曲线**：原始 #544 SizeModule 包含非零入／出切线。HitFx 对已导出的 `FxKey.i/o` 使用非加权三次 Hermite 插值，切线乘关键帧时间跨度；缺少切线的旧数据保持线性回退。影响共用采样器的尺寸等数值曲线，不改变 Gradient 的 RGB/alpha 线性插值；加权切线尚未支持。
+
 - **拖尾颜色继承**：原始 #544 `TrailModule.inheritParticleColor=true`。拖尾现在使用粒子当前寿命相位的颜色（含 TwoGradients 混合与 alpha）再乘拖尾渐变，不再只继承出生颜色；关闭继承时仍只使用拖尾颜色。拖尾几何和沿长度着色仍属预览近似。
 
 - **粒子排序**：共用贴图和 shader 不代表共用排序层。Fever 的 Particle_Height / Particle_Height_02 分别为 20/19；Particle_Start / Particle_Closs 分别为 23/20。HitFx 批次键包含 `sortingOrder`，避免后创建节点继承第一个节点的排序。预览仍保留统一的 +40 渲染层偏移。
