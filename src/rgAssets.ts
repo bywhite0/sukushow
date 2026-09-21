@@ -29,7 +29,7 @@ export interface FxNode {
       colMode?: number; colMax?: FxGrad; colMin?: FxGrad; colMaxA?: number;
     };
   };
-  rend?: { off?: boolean; mode: number; align: number; mat?: string; mesh?: string; sortOrder?: number };
+  rend?: { off?: boolean; mode: number; align: number; mat?: string; trailMat?: string; mesh?: string; sortOrder?: number };
 }
 export interface FxPrefab {
   id: string; nodes: FxNode[]; root: number;

@@ -2,7 +2,7 @@ import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
-import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab } from './rgAssets';
+import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab, FxMat } from './rgAssets';
 import { fxMaterial } from './shaders';
 import { PITCH, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
 
@@ -31,6 +31,7 @@ interface Spec {
   limitEn: boolean; limitDamp: number; limitSpeed: FxMM;
   rotOlEn: boolean; rotOl: FxMM;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: FxMM;
+  trailTex?: string;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
@@ -53,6 +54,7 @@ interface Spark {
   firstStep?: number;
   omega: number;
   trailEn: boolean; trailLife: number; trailMinDist: number; trailWidth: number;
+  trailTex?: string;
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   trailGradBlend: number;
   trail: { x: number; y: number; z: number; t: number }[];
@@ -231,6 +233,18 @@ export class HitFx {
     for (const prefab of fx.prefabs) this.specs.set(prefab.id, this.compile(prefab, mats));
     for (const prefab of fx.fever || []) this.specs.set(prefab.id, this.compile(prefab, mats));
   }
+  private batchFor(mat: FxMat | undefined, order: number): string | undefined {
+    if (!mat || !this.tex[mat.tex]) return undefined;
+    const shader = mat.shader || '';
+    const key = JSON.stringify([mat.tex, shader, order]);
+    if (!this.batches.has(key)) {
+      const material = fxMaterial(this.tex[mat.tex], shader.includes('9Slice') ? 0.495 : 0, 256, shader.includes('Num Combo'));
+      const batch = new FxBatch(16000, material, 40 + order);
+      this.batches.set(key, batch);
+      this.group.add(batch.mesh);
+    }
+    return key;
+  }
   private compile(prefab: FxPrefab, mats: Map<string, FxFile['mats'][number]>) {
     const cores = new Map((prefab.coreUnits || []).map(c => [c.node, c.baseSize]));
     const parr = new Set([...(prefab.pArr || []), prefab.p00].filter(i => i >= 0));
@@ -244,14 +258,11 @@ export class HitFx {
       const slice = shader.includes('9Slice');
       const combo = shader.includes('Num Combo');
       const role = i === prefab.impact ? 'impact' : cores.has(i) ? 'core' : parr.has(i) ? 'parr' : p2.has(i) ? 'p2' : 'plain';
-      const batchKey = JSON.stringify([mat.tex, shader, n.rend?.sortOrder ?? 0]);
-      if (!this.batches.has(batchKey)) {
-        // materials 194/195: _BorderW 0.495, _TexW 256 (assets.json)
-        const material = fxMaterial(this.tex[mat.tex], slice ? 0.495 : 0, 256, combo);
-        const batch = new FxBatch(16000, material, 40 + (n.rend?.sortOrder || 0));
-        this.batches.set(batchKey, batch);
-        this.group.add(batch.mesh);
-      }
+      const order = n.rend?.sortOrder ?? 0;
+      const batchKey = this.batchFor(mat, order)!;
+      // 旧导出未提供拖尾材质时保留兼容路径；显式缺失资源不冒用主体贴图。
+      const trailTex = n.rend?.trailMat === undefined ? batchKey
+        : this.batchFor(mats.get(n.rend.trailMat), order);
       const shape = n.ps.shape;
       const tr = worldOf(prefab.nodes, i);
       const colMod = n.ps.col;
@@ -287,6 +298,7 @@ export class HitFx {
         rotOl: (n.ps.rotol?.en
           ? ((n.ps.rotol.sep ? n.ps.rotol.x : n.ps.rotol.curve) || n.ps.rotol.curve)
           : undefined) || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+        trailTex,
         trailEn: !!n.ps.trail?.en,
         trailLife: Math.max(0.05, (n.ps.trail?.life?.v ?? n.ps.trail?.life?.lo ?? 0.35) || 0.35),
         trailMinDist: n.ps.trail?.minVertexDist ?? 0.2,
@@ -433,6 +445,7 @@ export class HitFx {
         omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
         trailEn: spec.trailEn || ((this.mode === 'full' || this.mode === 'current') && spec.limitEn),
         // fever authoring trails always on when trail.en
+        trailTex: spec.trailEn ? spec.trailTex : spec.tex,
         trailLife: spec.trailEn ? spec.trailLife : 0.18,
         trailMinDist: spec.trailEn ? spec.trailMinDist : 0.08,
         trailWidth: spec.trailEn ? Math.max(0, sample(spec.trailWidth, trailFactor)) : 0.35,
@@ -643,8 +656,8 @@ export class HitFx {
   /** Ribbon approx: authoring trail.en, or soft streak in current/full for limit-enabled sprays. */
   private drawTrails() {
     for (const live of this.live) for (const s of live.sparks) {
-      if (!s.trailEn || s.trail.length < 2) continue;
-      const batch = this.batches.get(s.tex);
+      if (!s.trailEn || !s.trailTex || s.trail.length < 2) continue;
+      const batch = this.batches.get(s.trailTex);
       if (!batch) continue;
       const size = s.sizeOl ? lerpKeys(s.sizeOl.keys, s.age / s.life) * (s.sizeOl.mult || 1) : 1;
       const tw = s.trailSizeWidth ? s.trailWidth * s.sx * Math.max(0, size) : s.trailWidth;
