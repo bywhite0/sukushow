@@ -638,7 +638,8 @@ export class HitFx {
       if (!s.trailEn || s.trail.length < 2) continue;
       const batch = this.batches.get(s.tex);
       if (!batch) continue;
-      const tw = s.trailSizeWidth ? s.trailWidth * s.sx : s.trailWidth;
+      const size = s.sizeOl ? lerpKeys(s.sizeOl.keys, s.age / s.life) * (s.sizeOl.mult || 1) : 1;
+      const tw = s.trailSizeWidth ? s.trailWidth * s.sx * Math.max(0, size) : s.trailWidth;
       const particleColor = s.trailInherit ? sparkGradient(s) : [1, 1, 1, 1];
       for (let i = 1; i < s.trail.length; i++) {
         const a = s.trail[i - 1], b = s.trail[i];
