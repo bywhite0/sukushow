@@ -1,12 +1,22 @@
 /** Fever 时段与边线颜色；几何仍为屏幕空间近似。 */
 
-/** libunity 0x12AB270–0x12AB2BC：uint32 混合后执行 float32 转换与乘法。 */
-export function feverTrailWidthFactor(seed: number): number {
-  let x = (seed + 0xfedc345b) >>> 0;
+/** libunity：模块使用同一粒子 seed、不同偏移，整数混合后执行 float32 转换。 */
+function trailSeedFactor(seed: number, offset: number): number {
+  let x = (seed + offset) >>> 0;
   const y = (Math.imul(x, 0x6ab51b9d) + 0x714acb3f) >>> 0;
   x = (x ^ (x << 11)) >>> 0;
   const bits = ((y ^ x ^ (x >>> 8)) & 0x7fffff) ^ (y >>> 19);
   return Math.fround(Math.fround(bits) * 1.1920930376163597e-7);
+}
+
+/** libunity 0x12AB270–0x12AB2BC。 */
+export function feverTrailWidthFactor(seed: number): number {
+  return trailSeedFactor(seed, 0xfedc345b);
+}
+
+/** libunity 0x12AB338–0x12AB388：colorOverLifetime 的独立 seed 偏移。 */
+export function feverTrailColorFactor(seed: number): number {
+  return trailSeedFactor(seed, 0x591bc05c);
 }
 
 export type FeverWindow = { start: number; end: number };
