@@ -601,7 +601,8 @@ export class HitFx {
           const dist = last ? Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) : 1e9;
           if (dist >= s.trailMinDist) s.trail.push({ x: s.x, y: s.y, z: s.z, t: s.age });
           const cut = s.age - s.trailLife;
-          while (s.trail.length && s.trail[0].t < cut) s.trail.shift();
+          // 保留跨越寿命边界的一段，绘制时插值尾端而不是整段跳删。
+          while (s.trail.length > 1 && s.trail[1].t <= cut) s.trail.shift();
         }
         sparks.push(s);
         this.sparks++;
@@ -671,8 +672,14 @@ export class HitFx {
       // libunity 0x12A7DBC–0x12A7E18：历史轨迹之外，头部始终使用粒子当前位置。
       // 临时端点不写回历史，避免破坏 minVertexDistance 的采样间距。
       for (let i = 1; i <= s.trail.length; i++) {
-        const a = s.trail[i - 1];
+        let a = s.trail[i - 1];
         const b = i < s.trail.length ? s.trail[i] : { x: s.x, y: s.y, z: s.z, t: s.age };
+        const cut = s.age - s.trailLife;
+        if (b.t <= cut) continue;
+        if (a.t < cut) {
+          const u = (cut - a.t) / (b.t - a.t);
+          a = { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: a.z + (b.z - a.z) * u, t: cut };
+        }
         const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
         const g = s.trailGrad ? lifetimeColor : [1, 1, 1, 1 - u];
         const color = s.trailInherit
