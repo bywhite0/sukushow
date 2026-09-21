@@ -227,11 +227,12 @@ export class HitFx {
       const slice = shader.includes('9Slice');
       const combo = shader.includes('Num Combo');
       const role = i === prefab.impact ? 'impact' : cores.has(i) ? 'core' : parr.has(i) ? 'parr' : p2.has(i) ? 'p2' : 'plain';
-      if (!this.batches.has(mat.tex + shader)) {
+      const batchKey = JSON.stringify([mat.tex, shader, n.rend?.sortOrder ?? 0]);
+      if (!this.batches.has(batchKey)) {
         // materials 194/195: _BorderW 0.495, _TexW 256 (assets.json)
         const material = fxMaterial(this.tex[mat.tex], slice ? 0.495 : 0, 256, combo);
         const batch = new FxBatch(16000, material, 40 + (n.rend?.sortOrder || 0));
-        this.batches.set(mat.tex + shader, batch);
+        this.batches.set(batchKey, batch);
         this.group.add(batch.mesh);
       }
       const shape = n.ps.shape;
@@ -283,7 +284,7 @@ export class HitFx {
         rate: n.ps.rate || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
         align: n.rend?.align || 0,
         mesh: n.rend?.mode === 4 ? (n.rend.mesh?.includes('Plane') ? 2 : 1) : 0,
-        slice, combo, tex: mat.tex + shader, role, base: cores.get(i) || 0,
+        slice, combo, tex: batchKey, role, base: cores.get(i) || 0,
         loop: !!n.ps.loop, dur: Math.max(0.05, n.ps.dur || 1),
         // Hold 核心贴住当前头部；飞散粒子仍保留世界坐标。
         followHead: prefab.id === 'holdLoop' && (role === 'core' || n.name === 'Core'),

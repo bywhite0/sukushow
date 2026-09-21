@@ -75,6 +75,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## Fever 特效核对
 
+- **粒子排序**：共用贴图和 shader 不代表共用排序层。Fever 的 Particle_Height / Particle_Height_02 分别为 20/19；Particle_Start / Particle_Closs 分别为 23/20。HitFx 批次键包含 `sortingOrder`，避免后创建节点继承第一个节点的排序。预览仍保留统一的 +40 渲染层偏移。
+
 - **双色渐变**：原始 #544 的 ColorModule 为 `minMaxState=3`（TwoGradients）。按 Unity `MinMaxGradient.Evaluate(time, lerpFactor)`，先在同一寿命相位采样两条渐变，再连续混合 RGBA；不能随机二选一。预览每个粒子出生时固定混合比例，随寿命推进采样，两条曲线的 alpha 同样参与插值。该修复适用于共用 HitFx 渲染器的所有 TwoGradients 节点。
 
 - 离线核对 4.12.0 `libil2cpp.so`：`FeverResolver.Process @0x4990098` 在开始边界设置逻辑状态，并由 `_isFeverEnabled` 门控 root 激活；结束边界无条件关闭 root。显示开关不改变逻辑 Fever。
