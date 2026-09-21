@@ -47,6 +47,53 @@ it.each(['独立材质', '缺失贴图', '旧数据'] as const)('Fever 拖尾材
   } finally { fx.dispose(); body.dispose(); trail.dispose(); }
 });
 
+it('Fever 拖尾头部跟随当前位置，未达到采样距离也不滞后', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.delay = constant(0);
+  ps.life = constant(2);
+  ps.speed = constant(1);
+  ps.size = constant(1);
+  ps.size3d = false;
+  ps.shape = undefined;
+  ps.limit = undefined;
+  ps.grav = 0;
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 1, interval: 0, prob: 1 }];
+  ps.trail!.minVertexDist = 1;
+  ps.trail!.life = constant(2);
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  const positions = () => {
+    fx.draw();
+    return (fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh).geometry;
+  };
+  try {
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.1 + 1 / 60, false);
+    expect(positions().drawRange.count).toBe(6);
+    fx.sync(chart, 0.2 + 1 / 60, false);
+    const geometry = positions();
+    expect(geometry.drawRange.count).toBe(12);
+    const p = geometry.getAttribute('position');
+    // 顶点 0/2 是粒子对角，拖尾后端截面的两个顶点为 8/11。
+    const centerZ = (p.getZ(0) + p.getZ(2)) / 2;
+    expect((p.getZ(8) + p.getZ(11)) / 2).toBeCloseTo(centerZ, 6);
+    expect(positions().drawRange.count).toBe(12);
+    fx.sync(chart, 0.3 + 1 / 60, false);
+    expect(positions().drawRange.count).toBe(12);
+    fx.setFever(false);
+    fx.draw();
+    expect(fx.group.children.every(c => (c as THREE.Mesh).geometry.drawRange.count === 0)).toBe(true);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever 拖尾宽度按原始双常量范围采样', () => {
   const data = loadFeverFixture();
   data.prefabs = [];

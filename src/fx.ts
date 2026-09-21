@@ -656,7 +656,7 @@ export class HitFx {
   /** Ribbon approx: authoring trail.en, or soft streak in current/full for limit-enabled sprays. */
   private drawTrails() {
     for (const live of this.live) for (const s of live.sparks) {
-      if (!s.trailEn || !s.trailTex || s.trail.length < 2) continue;
+      if (!s.trailEn || !s.trailTex || s.trail.length === 0) continue;
       const batch = this.batches.get(s.trailTex);
       if (!batch) continue;
       const size = s.sizeOl ? lerpKeys(s.sizeOl.keys, s.age / s.life) * (s.sizeOl.mult || 1) : 1;
@@ -668,8 +668,11 @@ export class HitFx {
         const min = gradAt(s.trailGradMin, s.age / s.life);
         for (let j = 0; j < 4; j++) lifetimeColor[j] = min[j] + (lifetimeColor[j] - min[j]) * s.trailGradBlend;
       }
-      for (let i = 1; i < s.trail.length; i++) {
-        const a = s.trail[i - 1], b = s.trail[i];
+      // libunity 0x12A7DBC–0x12A7E18：历史轨迹之外，头部始终使用粒子当前位置。
+      // 临时端点不写回历史，避免破坏 minVertexDistance 的采样间距。
+      for (let i = 1; i <= s.trail.length; i++) {
+        const a = s.trail[i - 1];
+        const b = i < s.trail.length ? s.trail[i] : { x: s.x, y: s.y, z: s.z, t: s.age };
         const u = (s.age - b.t) / Math.max(1e-4, s.trailLife);
         const g = s.trailGrad ? lifetimeColor : [1, 1, 1, 1 - u];
         const color = s.trailInherit
