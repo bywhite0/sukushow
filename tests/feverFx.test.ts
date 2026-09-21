@@ -5,6 +5,27 @@ import { HitFx } from '../src/fx';
 import { parseChart } from '../src/chart';
 import type { FxFile } from '../src/rgAssets';
 
+it('Fever 共用贴图的节点保留各自 sortingOrder', () => {
+  const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  data.fever[0].nodes.forEach(n => {
+    n.active = ['Particle_Height_Left', 'Particle_Height_Left_02'].includes(n.name);
+  });
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.2, false);
+    fx.draw();
+    const orders = fx.group.children.filter(child => (child as THREE.Mesh).geometry.drawRange.count > 0)
+      .map(child => child.renderOrder).sort((a, b) => a - b);
+    expect(orders).toEqual([59, 60]);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('Fever TwoGradients 在两条渐变之间插值而非二选一', () => {
   const data = JSON.parse(readFileSync(new URL('../public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
   data.prefabs = [];
