@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   pushSlicedNote,
+  pushTrailSegment,
   sliceCaps,
   worldDepth,
   worldWidthOf,
@@ -15,6 +16,25 @@ function buffers(cap = 64) {
     cap,
   };
 }
+
+describe('拖尾线段几何', () => {
+  it.each([[0, 0, 0, 4, 0, 0], [1, 2, 3, -2, 5, 7]])('两端截面中心对应真实轨迹端点 %s', (...coords) => {
+    const b = buffers();
+    const a = coords.slice(0, 3), end = coords.slice(3);
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 0, b.cap, a, end, 0.2, [1, 1, 1, 1])).toBe(6);
+    for (let axis = 0; axis < 3; axis++) {
+      const sign = axis === 2 ? -1 : 1;
+      expect((b.pos[axis] + b.pos[3 + axis]) / 2).toBeCloseTo(a[axis] * sign);
+      expect((b.pos[6 + axis] + b.pos[15 + axis]) / 2).toBeCloseTo(end[axis] * sign);
+    }
+  });
+  it('零长度不产生几何，容量不足不写入', () => {
+    const b = buffers(5);
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 0, 5, [0, 0, 0], [1, 0, 0], 1, [1, 1, 1, 1])).toBe(0);
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 0, 5, [0, 0, 0], [0, 0, 0], 1, [1, 1, 1, 1])).toBe(0);
+    expect(b.pos.every(v => v === 0)).toBe(true);
+  });
+});
 
 const tapLine: SpriteMeta = {
   border: [81, 0, 81, 0],
