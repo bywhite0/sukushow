@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "vite-plugin-pwa/client", "node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.mjs"]
 }

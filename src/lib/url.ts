@@ -114,14 +114,15 @@ function parseConfigPayload(url: URL): ConfigPayload | null {
 export function parseUrlPreviewParams(url: URL): UrlPreviewParams {
   const config = parseConfigPayload(url)
   const customInfo = config ? asObject(config.info) ?? asObject(config.i) : null
-  const sus =
-    (config ? pickFirstNonEmptyFromConfig(config, ['s', 'sus']) : null) ??
-    url.searchParams.get('sus')
+  // llll 原生谱面（{Notes, Bpms}）作为首选；customScoreJson 保留为兼容旧链接。
+  const chart =
+    (config ? pickFirstNonEmptyFromConfig(config, ['chart', 'llll', 'llllChart']) : null) ??
+    pickFirstNonEmptyParam(url, ['chart', 'llll', 'llllChart'])
   const customScoreJson =
     (config ? pickFirstNonEmptyFromConfig(config, ['j', 'json', 'customScoreJson', 'scoreJson']) : null) ??
     pickFirstNonEmptyParam(url, ['json', 'customScoreJson', 'scoreJson'])
-  if (!sus && !customScoreJson) {
-    throw new Error('Missing required `sus`/`json` query parameter.')
+  if (!chart && !customScoreJson) {
+    throw new Error('Missing required `chart`/`json` query parameter.')
   }
 
   const offsetText =
@@ -146,7 +147,7 @@ export function parseUrlPreviewParams(url: URL): UrlPreviewParams {
     pickFirstNonEmptyParam(url, ['scoreCreator', 'chartCreator', 'author'])
 
   return {
-    sus: sus ?? '',
+    chart: chart ?? '',
     customScoreJson,
     bgm:
       (config ? pickFirstNonEmptyFromConfig(config, ['b', 'bgm']) : null) ??
@@ -191,20 +192,14 @@ export function parseUrlPreviewParams(url: URL): UrlPreviewParams {
   }
 }
 
-export function extractSusWaveOffsetMs(susText: string) {
-  const match = susText.match(/^#WAVEOFFSET\s+([+-]?\d+(?:\.\d+)?)/im)
-  if (!match) {
+/**
+ * llll 谱面的音频偏移由 `offset` 参数（毫秒）显式给出。
+ * 原 SUS 路线会去读 `#WAVEOFFSET`，llll 原生格式没有这个概念——
+ * 它的 `Offset` 字段是秒，且由适配层交给播放器，不在这里反推。
+ */
+export function normalizeOffsetMs(rawOffsetMs: number | null): number {
+  if (rawOffsetMs === null) {
     return 0
   }
-
-  const seconds = Number.parseFloat(match[1])
-  return Number.isFinite(seconds) ? seconds * 1000 : 0
-}
-
-export function normalizeOffsetMs(rawOffsetMs: number | null, susText: string) {
-  if (rawOffsetMs !== null) {
-    return -rawOffsetMs
-  }
-
-  return extractSusWaveOffsetMs(susText)
+  return -rawOffsetMs
 }

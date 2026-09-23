@@ -17,7 +17,7 @@ export type PreviewRuntimeConfig = {
 }
 
 export type UrlPreviewParams = {
-  sus: string
+  chart: string
   customScoreJson: string | null
   bgm: string | null
   cover: string | null
@@ -36,7 +36,13 @@ export type UrlPreviewParams = {
   extra: string | null
 }
 
-export type ScoreTextFormat = 'sus' | 'custom-score-json'
+/**
+ * 谱面文本格式：
+ *   - `llll`：llll 原生谱面（{Notes, Bpms}），本项目主路线
+ *   - `custom-score-json`：wasm 直接消费的 MusicScoreMakerData（适配层产物）
+ *   - `sus`：参考项目遗留格式，本仓库不支持（保留类型以免下游断言炸掉）
+ */
+export type ScoreTextFormat = 'llll' | 'custom-score-json' | 'sus'
 
 export type TransportState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'error'
 
