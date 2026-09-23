@@ -44,7 +44,13 @@ namespace MikuMikuWorld::Effect
 		if (flip)
 			lane = MAX_LANE - lane - width + 1;
 		// 60 轨：中心由 6 变 30，且结果须折算回 12 轨等效空间（见 EFFECT_LANE_SCALE）。
-		return (lane - MAX_LANE / 2 + width / 2.f) * EFFECT_LANE_SCALE * EFFECT_WIDTH_RATIO;
+		//
+		// 这里必须用 NUM_LANES / 2（= 30），不能用 MAX_LANE / 2：
+		// MAX_LANE = 59 是「最大轨道下标」，59 / 2 整数除法得 29，
+		// 会让 lane 光柱整体右偏 1 条轨（≈ 屏幕 1.1%，约 20px），
+		// 与背景轨道面的边标记错位。音符坐标系的中心是 laneToLeft(lane)
+		// = lane - 30，故此处取 30 才与音符同基准。
+		return (lane - NUM_LANES / 2 + width / 2.f) * EFFECT_LANE_SCALE * EFFECT_WIDTH_RATIO;
 	}
 
 	/**

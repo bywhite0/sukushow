@@ -92,6 +92,12 @@ namespace
     constexpr float STAGE_HEIGHT_RATIO = STAGE_ZOOM * STAGE_LANE_HEIGHT / STAGE_TEX_HEIGHT;
     constexpr float STAGE_TOP_RATIO = 0.5f + STAGE_ZOOM * STAGE_LANE_TOP / STAGE_TEX_HEIGHT;
 
+    // 轨道面宽度：纹理全宽 STAGE_TEX_WIDTH 映射到
+    //   (STAGE_TEX_WIDTH / STAGE_LANE_WIDTH) × STAGE_NUM_LANES 个 world 单位。
+    // 纹理里「可玩轨道区」宽 STAGE_LANE_WIDTH（stage.png 判定线行
+    // 灰色跑道 1422px ≈ 1420），故轨道区恰好等于 STAGE_NUM_LANES 个 world
+    // 单位，与音符坐标 laneToLeft(lane) = lane - 30 的 60 单位跨度一致。
+    // 两侧的透明边距属于纹理本身，不属于轨道。
     constexpr float WORLD_STAGE_WIDTH = (STAGE_TEX_WIDTH / STAGE_LANE_WIDTH) * STAGE_NUM_LANES;
     constexpr float WORLD_STAGE_LEFT = -WORLD_STAGE_WIDTH / 2.0f;
     constexpr float WORLD_STAGE_TOP = STAGE_LANE_TOP / STAGE_LANE_HEIGHT;
