@@ -260,6 +260,7 @@ async function loadChart(
   label: string,
   sourceOffsetMs = 0,
   assets: { bgmUrl?: string | null; coverUrl?: string | null } = {},
+  difficulty: string | null = null,
 ) {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
@@ -289,7 +290,9 @@ async function loadChart(
       composer: null,
       arranger: null,
       vocal: null,
-      difficulty: null,
+      // 难度走独立字段：wasm 侧据此在曲绘旁绘制彩色难度徽章，
+      // 不拼进曲名。
+      difficulty,
       customScoreInfo: false,
       scoreTitle: label,
       scoreCreator: null,
@@ -303,12 +306,14 @@ async function loadChart(
   player.renderFrame()
   const snapshot = player.getStateSnapshot()
   setDuration(Math.max(chart.duration, snapshot.durationSec))
-  el('chart-name').textContent = label
+  // 页面 UI 保留难度信息（HUD 上的曲名不带难度，难度走独立徽章）。
+  const uiLabel = difficulty ? `${label}　[${difficulty}]` : label
+  el('chart-name').textContent = uiLabel
   const parts = [`音符 ${score.NoteList.length} 个（Hold 展开后）`, `最大轨道 ${maxLane}`]
   parts.push(bgmBytes ? 'BGM ✓' : 'BGM —')
   parts.push(coverBytes ? '曲绘 ✓' : '曲绘 —')
   el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
-  message(`${label}　${parts.join('　')}`)
+  message(`${uiLabel}　${parts.join('　')}`)
 }
 
 /** 按曲目 Id 打开：加载谱面 + BGM + 曲绘。 */
@@ -328,8 +333,8 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
   }
   // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
   const chart = decodeChart(new Uint8Array(await response.arrayBuffer()))
-  const label = `${song.title}　[${difficulty}]`
-  await loadChart(chart, label, sourceOffsetMs, songAssets(song))
+  // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
+  await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty)
 }
 
 /** 60 轨全域演示谱：覆盖 Single / Flick / Hold / Trace 与最宽音符。 */

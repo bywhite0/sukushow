@@ -52,8 +52,23 @@ main {
 .section-label { font-size: 10px; color: var(--shell-muted); }
 #chart-name { margin: 4px 0 0; font-size: 16px; line-height: 1.4; letter-spacing: 0; font-weight: 600; overflow-wrap: anywhere; }
 .file-name { color: var(--shell-muted); font-size: 11px; max-width: 40%; overflow-wrap: anywhere; }
-.stage-shell { min-height: 0; min-width: 0; padding: 0 24px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.stage { width: 100%; height: 100%; min-height: 0; border-radius: 8px; }
+.stage-shell { min-height: 0; min-width: 0; padding: 0 24px; display: flex; align-items: center; justify-content: center; overflow: hidden; container-type: size; }
+/* 画布锁定 16:9。
+   原因：HUD 按 1920x1080 设计坐标绘制（buildUiTransform 用
+   scale = min(w/1920, h/1080) 等比缩放），画布一旦不是 16:9，
+   HUD 就会缩成中间一条、与铺满画布的 3D 场景脱节。
+   写法：用容器查询单位直接算「容器内最大内接 16:9 的宽度」——
+   取 min(容器宽, 容器高×16/9)，高度再交给 aspect-ratio。
+   不能只写 width:100% + max-height：宽度是确定值时浏览器不会
+   因高度被钳制而回缩宽度，比例会失控（1600x700 下会变成 2.22）。 */
+.stage {
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  /* 显式重置 height：style.css 有 height:clamp(320px,48vw,640px)，
+     显式 height 会让 aspect-ratio 失效。 */
+  height: auto;
+  aspect-ratio: 16 / 9;
+  min-height: 0; border-radius: 8px;
+}
 .viewer-status, #message.viewer-status {
   padding: 12px 24px; min-height: 40px; background: var(--shell-bg);
   color: var(--shell-muted); font-size: 11px; line-height: 1.5;
@@ -97,7 +112,8 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 .viewer:fullscreen { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; background: var(--shell-bg); }
 .viewer:fullscreen .preview-heading { display: none; }
 .viewer:fullscreen .stage-shell { padding: 0; }
-.viewer:fullscreen .stage { height: 100%; border-radius: 0; }
+/* 全屏同样保持 16:9（不覆盖 aspect-ratio 定的高）。 */
+.viewer:fullscreen .stage { border-radius: 0; }
 @media (max-width: 1000px) {
   #app { height: auto; min-height: 100dvh; }
   .workspace-header { flex-wrap: wrap; gap: 12px 24px; }
