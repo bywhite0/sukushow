@@ -420,10 +420,15 @@ namespace MikuMikuWorld::Effect
 
 		controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, xPos * EFFECT_WIDTH_RATIO);
 		controller.worldOffset.rotation = DirectX::XMVectorSetZ(controller.worldOffset.rotation, zRot);
-		// 60 轨折算：效果资源的世界尺寸按 12 轨标定，而音符已改用 60 轨坐标。
-		// 若效果尺寸不折算，相对 1/5 宽的音符会显得过大（实测 FX/音符 面积比 65:1）。
-		controller.worldOffset.scale = DirectX::XMVectorSet(
-			EFFECT_LANE_SCALE, EFFECT_LANE_SCALE, EFFECT_LANE_SCALE, 1.0f);
+		// 注意：这里**不**折算世界尺寸。
+		//
+		// 60 轨改造时曾在此乘 EFFECT_LANE_SCALE，结果音符击中特效（fx_note_*_gen，
+		// 资源 name = "base"）被缩成 1/5，明显过小——已回退。
+		//
+		// 位置与尺寸是两回事：位置必须折算（否则轨道 0/59 的效果中心会飞到
+		// NDC ±3.6，见 getEffectXPos），但尺寸由效果资源自带的世界大小决定，
+		// 与轨数无关。上游原本也从不在此设 scale——音符特效的视觉大小
+		// 不该随轨道数变化。
 		controller.play(note, start, end);
 	}
 

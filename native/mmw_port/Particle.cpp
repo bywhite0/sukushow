@@ -487,11 +487,17 @@ namespace MikuMikuWorld::Effect
 		DirectX::XMVECTOR pivot = DirectX::XMVectorSet(ref.pivot.x, ref.pivot.y, ref.pivot.z, 1.f);
 
 		DirectX::XMMATRIX worldOffset = DirectX::XMMatrixIdentity();
-		// 60 轨改造：原实现只在 ref.name == "aura" 时应用 worldTransform.scale，
-		// 导致 EffectView 为 lane / note 类效果设置的缩放被静默忽略
-		// （这类效果的 name 是 "white" / "base"，不是 "aura"）。
-		// 改为对全部效果生效——EffectView 侧统一按 60 轨折算世界尺寸。
-		worldOffset *= DirectX::XMMatrixScalingFromVector(worldTransform.scale);
+		// 与上游一致：只有 aura 类效果吃 worldTransform.scale。
+		//
+		// 60 轨改造时曾把此开关对所有效果打开（为了让 EffectView 侧设置的
+		// 折算尺寸生效），但那同时把音符击中特效（name = "base"）缩成了 1/5。
+		// 现已回退：尺寸折算本身就不该做，故这里也恢复上游的 aura-only 语义。
+		//
+		// 目前全仓唯一的 scale 设置点是 EffectView::updateEffects 里对
+		// fx_note_hold_aura / fx_note_critical_long_hold_gen_aura 的 X 轴拉伸，
+		// 而这两个资源的 name 正是 "aura"，因此行为与上游一致。
+		if (ref.name == "aura")
+			worldOffset *= DirectX::XMMatrixScalingFromVector(worldTransform.scale);
 		worldOffset *= DirectX::XMMatrixRotationQuaternion(qShift);
 		worldOffset *= DirectX::XMMatrixTranslationFromVector(worldTransform.position);
 
