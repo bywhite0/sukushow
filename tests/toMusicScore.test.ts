@@ -1,0 +1,174 @@
+/**
+ * llll → MusicScoreMakerData 适配层测试。
+ *
+ * 重点验证「不压缩坐标」这一核心决策：llll 的 0–59 轨道必须原样出现在
+ * laneStart/laneEnd 里，而不是被压到 0–11。
+ */
+import { describe, expect, it } from 'vitest'
+import { parseChart } from '../src/llll/chart'
+import { chartToMusicScore, isLlllNativeChart, TICKS_PER_BEAT } from '../src/llll/toMusicScore'
+
+/** 按 llll Flags 位域拼一个音符：type 4bit / r 6bit / r2 6bit / l 6bit / l2 6bit。 */
+function flags(type: number, l: number, r: number, l2 = 0, r2 = 0): number {
+  return (type & 15) | ((r & 63) << 4) | ((r2 & 63) << 10) | ((l & 63) << 16) | ((l2 & 63) << 22)
+}
+
+function makeChart(notes: unknown[], bpms: unknown[] = [{ Time: 0, Bpm: 120 }]) {
+  return parseChart({ Notes: notes, Bpms: bpms })
+}
+
+describe('llll 原生谱面识别', () => {
+  it('认得 {Notes, Bpms} 结构', () => {
+    expect(isLlllNativeChart({ Notes: [], Bpms: [] })).toBe(true)
+    expect(isLlllNativeChart({ NoteList: [] })).toBe(false)
+    expect(isLlllNativeChart(null)).toBe(false)
+  })
+})
+
+describe('轨道坐标不压缩（本项目核心决策）', () => {
+  it('60 轨全域坐标原样保留', () => {
+    // l=0 r=59 是 60 轨谱面的最宽音符，l=59 是最后一轨。
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 59) },
+      { Uid: 2, just: '2.0', holds: [], Flags: flags(0, 59, 59) },
+      { Uid: 3, just: '3.0', holds: [], Flags: flags(0, 30, 30) },
+    ])
+    const score = chartToMusicScore(chart)
+    const sorted = [...score.NoteList].sort((a, b) => a.ticks - b.ticks)
+
+    // 1 秒 @120bpm = 2 拍 = 960 ticks
+    expect(sorted[0].laneStart).toBe(0)
+    expect(sorted[0].laneEnd).toBe(59)
+
+    expect(sorted[1].laneStart).toBe(59)
+    expect(sorted[1].laneEnd).toBe(59)
+
+    expect(sorted[2].laneStart).toBe(30)
+    expect(sorted[2].laneEnd).toBe(30)
+  })
+
+  it('轨道号不会被压到 0–11 区间', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 20, 40) },
+    ])
+    const score = chartToMusicScore(chart)
+    // 若误用 llll-chart2sus 的 (l/59)*12 压缩，这里会变成 4 和 8。
+    expect(score.NoteList[0].laneStart).toBe(20)
+    expect(score.NoteList[0].laneEnd).toBe(40)
+    expect(score.NoteList[0].laneStart).not.toBe(Math.floor((20 / 59) * 12))
+  })
+})
+
+describe('音符种类映射', () => {
+  it('Single / Flick / Trace 映射到 custom_score_json.h 可识别的谓词', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 1) },
+      { Uid: 2, just: '2.0', holds: [], Flags: flags(2, 2, 3) },
+      { Uid: 3, just: '3.0', holds: [], Flags: flags(3, 4, 5) },
+    ])
+    const score = chartToMusicScore(chart)
+    const sorted = [...score.NoteList].sort((a, b) => a.ticks - b.ticks)
+
+    // SINGLE → (0,1)：既非 flick 也非 trace
+    expect(sorted[0].category).toBe(0)
+    expect(sorted[0].noteBaseType).toBe(1)
+
+    // FLICK → (3,3)：命中 isFlickNote（base==3）
+    expect(sorted[1].category).toBe(3)
+    expect(sorted[1].noteBaseType).toBe(3)
+
+    // TRACE → (4,11)：命中 isTraceNote（base==11）
+    expect(sorted[2].category).toBe(4)
+    expect(sorted[2].noteBaseType).toBe(11)
+  })
+})
+
+describe('Hold 串链', () => {
+  it('单段 Hold 产出首尾两个节点并互连', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 12, 20, 22) },
+    ])
+    const score = chartToMusicScore(chart)
+    const holds = score.NoteList.filter((n) => !n.IsSingle)
+    expect(holds).toHaveLength(2)
+
+    const [head, tail] = holds.sort((a, b) => a.ticks - b.ticks)
+    expect(head.IsConnectedFirst).toBe(true)
+    expect(head.IsConnectedLast).toBe(false)
+    expect(head.nextConnectionId).toBe(tail.id)
+    expect(head.previousConnectionId).toBe(-1)
+    // 首节点用 (1,2)，尾节点用 (1,1)
+    expect([head.category, head.noteBaseType]).toEqual([1, 2])
+    expect([tail.category, tail.noteBaseType]).toEqual([1, 1])
+    expect(tail.previousConnectionId).toBe(head.id)
+    expect(tail.nextConnectionId).toBe(-1)
+
+    // 端点坐标：头 l/r、尾 l2/r2，均不压缩
+    expect([head.laneStart, head.laneEnd]).toEqual([10, 12])
+    expect([tail.laneStart, tail.laneEnd]).toEqual([20, 22])
+  })
+
+  it('多段 Hold 中段是 relay 节点 (13,6)', () => {
+    // 链：Uid1 (10..12 → 20..22) 接 Uid2 (20..22 → 30..32)
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 12, 20, 22) },
+      { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 20, 22, 30, 32) },
+    ])
+    const score = chartToMusicScore(chart)
+    const holds = score.NoteList.filter((n) => !n.IsSingle).sort((a, b) => a.ticks - b.ticks)
+    expect(holds).toHaveLength(3)
+    expect([holds[1].category, holds[1].noteBaseType]).toEqual([13, 6])
+    expect(holds[1].IsConnectedFirst).toBe(false)
+    expect(holds[1].IsConnectedLast).toBe(false)
+  })
+})
+
+describe('BPM 与 tick 换算', () => {
+  it('单 BPM 下 1 秒 = 2 拍 = 960 ticks（120 BPM）', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 1) },
+    ])
+    const score = chartToMusicScore(chart)
+    expect(score.NoteList[0].ticks).toBe(2 * TICKS_PER_BEAT)
+  })
+
+  it('BPM 变化按分段积分', () => {
+    // 0–1s @120bpm（2 拍），1s 起 @240bpm（1s = 4 拍）
+    const chart = makeChart(
+      [{ Uid: 1, just: '2.0', holds: [], Flags: flags(0, 0, 1) }],
+      [{ Time: 0, Bpm: 120 }, { Time: 1, Bpm: 240 }],
+    )
+    const score = chartToMusicScore(chart)
+    // 2 拍 + 4 拍 = 6 拍
+    expect(score.NoteList[0].ticks).toBe(6 * TICKS_PER_BEAT)
+  })
+
+  it('头部固定事件齐全（BPM / 拍号 / HiSpeed / SE）', () => {
+    const chart = makeChart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 1) }])
+    const score = chartToMusicScore(chart)
+    const types = new Set(score.MusicScoreEventDataList.map((e) => e.eventType))
+    expect(types.has(0)).toBe(true) // BPM
+    expect(types.has(1)).toBe(true) // HiSpeed
+    expect(types.has(2)).toBe(true) // SE 音量
+    expect(types.has(3)).toBe(true) // 拍号
+  })
+})
+
+describe('空谱与边界', () => {
+  it('空谱不抛错且 ticksMax 为 0', () => {
+    const chart = makeChart([])
+    const score = chartToMusicScore(chart)
+    expect(score.NoteList).toHaveLength(0)
+    expect(score.MusicScoreTicksMax).toBe(0)
+  })
+
+  it('轨道 0 与 59 两端都能表达', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 0) },
+      { Uid: 2, just: '2.0', holds: [], Flags: flags(0, 59, 59) },
+    ])
+    const score = chartToMusicScore(chart)
+    const lanes = score.NoteList.map((n) => n.laneStart).sort((a, b) => a - b)
+    expect(lanes).toEqual([0, 59])
+  })
+})
