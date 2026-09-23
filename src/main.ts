@@ -21,6 +21,7 @@ import { parseChart, decodeChart, type Chart } from './llll/chart'
 import { chartToMusicScore } from './llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './settingsPersist'
 import { parseUrlPreviewParams } from './lib/url'
+import { findSong, songAssets, fetchBytes, loadSongList } from './llll/songAssets'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -29,7 +30,7 @@ if (!app) {
 }
 
 app.innerHTML = `
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll × PJSK 预览首页"><span class="brand-mark" aria-hidden="true">llll</span><span>渲染预览<small>PJSK PIPELINE · 60 LANES</small></span></a><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
+<header class="workspace-header"><a class="brand" href="./" aria-label="llll × PJSK 预览首页"><span class="brand-mark" aria-hidden="true">llll</span><span>渲染预览<small>PJSK PIPELINE · 60 LANES</small></span></a><div class="song-picker" aria-label="选择曲目"><label class="sr-only" for="song-select">曲目</label><select id="song-select" class="song-select"><option value="">选择曲目…</option></select><label class="sr-only" for="song-difficulty">难度</label><select id="song-difficulty" class="song-difficulty"></select></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -248,16 +249,40 @@ async function preloadAll(onProgress: (text: string) => void) {
   }
 }
 
-async function loadChart(chart: Chart, label: string, sourceOffsetMs = 0) {
+/** 当前曲目的 BGM / 曲绘 URL（供「添加音频」与曲目切换复用）。 */
+let currentSongAssets: { bgmUrl: string | null; coverUrl: string | null } = {
+  bgmUrl: null,
+  coverUrl: null,
+}
+
+async function loadChart(
+  chart: Chart,
+  label: string,
+  sourceOffsetMs = 0,
+  assets: { bgmUrl?: string | null; coverUrl?: string | null } = {},
+) {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
+
+  // BGM 与曲绘缺失不该阻断渲染：失败一律退回 null。
+  const bgmUrl = assets.bgmUrl ?? currentSongAssets.bgmUrl
+  const coverUrl = assets.coverUrl ?? currentSongAssets.coverUrl
+  if (bgmUrl || coverUrl) {
+    message('正在加载曲目资源…')
+  }
+  const [bgmBytes, coverBytes] = await Promise.all([
+    fetchBytes(bgmUrl),
+    fetchBytes(coverUrl),
+  ])
+  currentSongAssets = { bgmUrl, coverUrl }
+
   await player.loadSession({
     scoreText: JSON.stringify(score),
     scoreFormat: 'custom-score-json',
     sourceOffsetMs,
     effectiveLeadInMs: Math.max(sourceOffsetMs, 9000),
-    bgmBytes: null,
-    coverBytes: null,
+    bgmBytes,
+    coverBytes,
     metadata: {
       title: label,
       lyricist: null,
@@ -279,7 +304,32 @@ async function loadChart(chart: Chart, label: string, sourceOffsetMs = 0) {
   const snapshot = player.getStateSnapshot()
   setDuration(Math.max(chart.duration, snapshot.durationSec))
   el('chart-name').textContent = label
-  message(`${label}　音符 ${score.NoteList.length} 个（Hold 展开后）　最大轨道 ${maxLane}`)
+  const parts = [`音符 ${score.NoteList.length} 个（Hold 展开后）`, `最大轨道 ${maxLane}`]
+  parts.push(bgmBytes ? 'BGM ✓' : 'BGM —')
+  parts.push(coverBytes ? '曲绘 ✓' : '曲绘 —')
+  el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
+  message(`${label}　${parts.join('　')}`)
+}
+
+/** 按曲目 Id 打开：加载谱面 + BGM + 曲绘。 */
+async function loadSongById(songId: string, difficulty: string, sourceOffsetMs = 0) {
+  const song = await findSong(songId)
+  if (!song) {
+    throw new Error(`曲目列表里没有 Id ${songId}`)
+  }
+  const chartFile = song.charts[difficulty]
+  if (!chartFile) {
+    throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`)
+  }
+  message(`正在下载谱面 ${chartFile}…`)
+  const response = await fetch(`/assets/chart/${chartFile}`)
+  if (!response.ok) {
+    throw new Error(`谱面下载失败（${response.status}）：${chartFile}`)
+  }
+  // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
+  const chart = decodeChart(new Uint8Array(await response.arrayBuffer()))
+  const label = `${song.title}　[${difficulty}]`
+  await loadChart(chart, label, sourceOffsetMs, songAssets(song))
 }
 
 /** 60 轨全域演示谱：覆盖 Single / Flick / Hold / Trace 与最宽音符。 */
@@ -365,6 +415,30 @@ async function boot() {
   await preloadAll((text) => message(text))
   message('渲染器就绪。')
 
+  // 曲目选择器：列表加载失败不该阻断渲染。
+  let songPicker: Awaited<ReturnType<typeof initSongPicker>> | null = null
+  try {
+    songPicker = await initSongPicker()
+  } catch (error) {
+    console.warn('[llll-pjsk] 曲目列表加载失败：', error)
+  }
+
+  // 优先级：?song= > ?chart= > 演示谱。
+  const search = new URLSearchParams(location.search)
+  const songId = search.get('song')
+  if (songId && songPicker) {
+    const difficulty = search.get('difficulty') ?? 'MASTER'
+    songPicker.picker.value = songId
+    songPicker.syncDifficulties()
+    try {
+      await loadSongById(songId, difficulty, Number(search.get('offset') ?? 0))
+      renderLoop()
+      return
+    } catch (error) {
+      message(`曲目 ${songId} 加载失败：${String(error)}。已回落到演示谱。`, true)
+    }
+  }
+
   // 有 URL 参数就用它，否则回落到演示谱。
   try {
     if (await loadFromUrlParams()) {
@@ -437,15 +511,111 @@ input('chart-file').onchange = async () => {
   }
 }
 
-input('audio-file').onchange = () => {
-  // BGM 注入依赖 wasm 侧的音频路径，留待后续阶段。
-  message('音频注入尚未接入，当前为无声预览。', true)
-  input('audio-file').value = ''
+input('audio-file').onchange = async () => {
+  const file = input('audio-file').files?.[0]
+  if (!file) return
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    // 音频走同一条注入链路：重新 loadSession，BGM 缺失时静默退回无声预览。
+    await player.loadSession({
+      scoreText: JSON.stringify(chartToMusicScore(currentChart ?? demoChart())),
+      scoreFormat: 'custom-score-json',
+      sourceOffsetMs: 0,
+      effectiveLeadInMs: 9000,
+      bgmBytes: bytes,
+      coverBytes: await fetchBytes(currentSongAssets.coverUrl),
+      metadata: {
+        title: el('chart-name').textContent ?? '本地音频',
+        lyricist: null,
+        composer: null,
+        arranger: null,
+        vocal: null,
+        difficulty: null,
+        customScoreInfo: false,
+        scoreTitle: el('chart-name').textContent ?? '本地音频',
+        scoreCreator: null,
+      },
+    })
+    const config = readRuntimeConfig()
+    player.setPreviewConfig(config)
+    player.setAudioVolumes(config.bgmVolume, config.soundVolume)
+    el('audio-name').textContent = `本地音频：${file.name}`
+    message(`已注入音频 ${file.name}（${(bytes.length / 1024 / 1024).toFixed(1)} MB）`)
+  } catch (error) {
+    message(`音频读取失败：${String(error)}`, true)
+  } finally {
+    input('audio-file').value = ''
+  }
 }
 
 el('demo').onclick = async () => {
   await loadChart(demoChart(), '演示谱面')
   el('audio-name').textContent = '未加载音频 · 可以无声预览'
+}
+
+/* ── 曲目选择器：按曲目 Id + 难度直接打开（谱面 / BGM / 曲绘一并加载） ── */
+
+async function initSongPicker() {
+  const list = await loadSongList()
+  const picker = el<HTMLSelectElement>('song-select')
+  const difficulty = el<HTMLSelectElement>('song-difficulty')
+
+  const byCategory = new Map<string, typeof list.songs>()
+  for (const song of list.songs) {
+    const bucket = byCategory.get(song.category) ?? []
+    bucket.push(song)
+    byCategory.set(song.category, bucket)
+  }
+  for (const [category, songs] of byCategory) {
+    const group = document.createElement('optgroup')
+    group.label = category
+    for (const song of songs) {
+      const option = document.createElement('option')
+      option.value = song.id
+      option.textContent = song.hasChart ? song.title : `${song.title}（无谱面）`
+      option.disabled = !song.hasChart
+      group.append(option)
+    }
+    picker.append(group)
+  }
+
+  // 难度下拉跟着所选曲目变化。
+  const syncDifficulties = () => {
+    const song = list.songs.find((item) => item.id === picker.value)
+    difficulty.replaceChildren()
+    for (const name of song?.difficulties ?? []) {
+      const option = document.createElement('option')
+      option.value = name
+      option.textContent = name
+      difficulty.append(option)
+    }
+    if (difficulty.options.length > 0) {
+      difficulty.value = difficulty.options[difficulty.options.length - 1].value
+    }
+  }
+  syncDifficulties()
+
+  const open = async () => {
+    if (!picker.value) return
+    try {
+      await loadSongById(picker.value, difficulty.value)
+      const url = new URL(location.href)
+      url.searchParams.set('song', picker.value)
+      url.searchParams.set('difficulty', difficulty.value)
+      url.searchParams.delete('chart')
+      history.replaceState(null, '', url)
+    } catch (error) {
+      message(`曲目加载失败：${String(error)}`, true)
+    }
+  }
+  difficulty.onchange = open
+  // 换曲目时先刷新难度列表（默认落到最高难度），再加载。
+  picker.onchange = async () => {
+    syncDifficulties()
+    await open()
+  }
+
+  return { picker, difficulty, syncDifficulties }
 }
 
 el('fullscreen').onclick = async () => {

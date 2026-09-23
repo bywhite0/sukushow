@@ -265,3 +265,10 @@
 @keyframes hud-ap-burst-particles{0%{opacity:1;transform:translate(-50%,-50%) scale(.65)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)}}
 @keyframes hud-ap-burst-glitter{0%{opacity:1;transform:translate(-50%,-50%) rotate(0) scale(.75)}100%{opacity:0;transform:translate(-50%,-50%) rotate(28deg) scale(1.35)}}
 
+
+/* 曲目选择器（header 内） */
+.song-picker{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;max-width:520px}
+.song-select{flex:1 1 auto;min-width:0;padding:8px 12px;border:1px solid #cbd4e1;border-radius:8px;background:#fff;font:inherit;font-size:12px;color:#263044}
+.song-difficulty{flex:0 0 auto;padding:8px 12px;border:1px solid #cbd4e1;border-radius:8px;background:#fff;font:inherit;font-size:12px;color:#263044}
+.song-select:focus-visible,.song-difficulty:focus-visible{outline:3px solid #147e99;outline-offset:2px}
+@media(max-width:900px){.song-picker{order:3;flex-basis:100%;max-width:none;margin-top:12px}}
