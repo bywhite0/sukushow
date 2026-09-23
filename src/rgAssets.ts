@@ -107,7 +107,8 @@ export async function loadRgLibrary(): Promise<RgLibrary | null> {
           if (!fx.fever.some(f => f.id === core.id)) fx.fever.push(core);
         }
       }
-      const names = [...new Set((fx.mats || []).map(m => m.tex).filter(Boolean))];
+      const names = [...new Set([...(fx.mats || []).map(m => m.tex).filter(Boolean),
+        'sc2_feverLine01', 'sc2_NotesEffectCircle_007', 'fever_mask'])];
       await Promise.all(names.map(async name => {
         const tex = await optionalTexture(`/rg/fx/tex/${name}.png`);
         if (tex) {
