@@ -8,6 +8,14 @@ namespace MikuMikuWorld::Effect
 {
 	constexpr int UNDER_NOTE_ORDER_THRESHOLD = 5;
 	constexpr float EFFECT_WIDTH_RATIO = 0.84f;
+	// 60 轨改造：效果（FX）的世界坐标尺度是按 PJSK 的 12 轨标定的
+	// （效果相机 setFov(50) + 固定 position，不像音符投影那样随轨数补偿）。
+	// 音符系统已改用 60 轨坐标，若把 0..59 的轨道号直接喂给效果，
+	// 位置会外扩 5 倍——最左/最右轨的效果中心会飞到 NDC ±3.6（可视范围 ±1）。
+	// 故效果侧一律把车道坐标折算回 12 轨等效空间：
+	//   12 轨：laneToLeft(0) = -6  → -6 * 1   = -6
+	//   60 轨：laneToLeft(0) = -30 → -30 * 0.2 = -6
+	constexpr float EFFECT_LANE_SCALE = 12.0f / 60.0f;
 
 	// 60 轨改造：lane 效果池按轨道总数开池。
 	// addLaneEffect 用「轨道号」直接索引 pool[i]（i = lane..lane+width-1），
@@ -35,8 +43,41 @@ namespace MikuMikuWorld::Effect
 	{
 		if (flip)
 			lane = MAX_LANE - lane - width + 1;
-		// 60 轨：中心由 6 变 30。
-		return (lane - MAX_LANE / 2 + width / 2.f) * EFFECT_WIDTH_RATIO;
+		// 60 轨：中心由 6 变 30，且结果须折算回 12 轨等效空间（见 EFFECT_LANE_SCALE）。
+		return (lane - MAX_LANE / 2 + width / 2.f) * EFFECT_LANE_SCALE * EFFECT_WIDTH_RATIO;
+	}
+
+	/**
+	 * 按「PJSK 等效轨」遍历一条音符覆盖的车道，回调 (等效轨号, 效果世界 X)。
+	 *
+	 * 为什么需要这个：lane 光柱（fx_lane_*）在 12 轨时代是「每条轨道一个」，
+	 * 60 轨下若仍逐轨生成，数量直接涨 5 倍——FX 覆盖面积达屏幕的 7.5 倍，
+	 * FX/音符 面积比 172:1，观感就是「特效糊满屏幕」。
+	 *
+	 * 而 PJSK 的 lane 效果池本就按 12 轨设计（池大小、光柱间距都是 12 轨标定），
+	 * 故这里按 5 条 llll 轨 = 1 条 PJSK 轨做分组：每条音符最多产生 12 个光柱，
+	 * 与 12 轨时代的数量上限一致。
+	 *
+	 * 注意：光柱的**宽度**不需要另做缩放。它由效果资源自带的世界尺寸决定
+	 * （约 1 个世界单位），而效果空间里整条舞台宽 12 单位，故单柱恰为 1/12 舞台宽，
+	 * 与 PJSK 的 1 条轨道对齐。若再乘 EFFECT_LANE_SCALE 会缩成 1/5 过窄。
+	 */
+	template <typename Fn>
+	static void forEachLaneEffect(const Note& note, Fn&& callback)
+	{
+		constexpr int LANES_PER_EFFECT = static_cast<int>(1.0f / EFFECT_LANE_SCALE); // 5
+		const int firstLane = note.lane;
+		const int lastLane = note.lane + note.width - 1;
+		const int firstGroup = firstLane / LANES_PER_EFFECT;
+		const int lastGroup = lastLane / LANES_PER_EFFECT;
+
+		for (int group = firstGroup; group <= lastGroup; ++group)
+		{
+			// 用该组的 llll 轨道区间求效果位置，再折算回 12 轨等效空间。
+			const int groupLane = group * LANES_PER_EFFECT;
+			const float xPos = getEffectXPos(groupLane, LANES_PER_EFFECT, config.pvMirrorScore);
+			callback(group, xPos);
+		}
 	}
 
 	static float getEffectNoteCenter(const Note& note, bool flip)
@@ -44,12 +85,14 @@ namespace MikuMikuWorld::Effect
 		float lane = note.lane;
 		if (flip)
 			lane = MAX_LANE - lane - note.width + 1;
-		return Engine::laneToLeft(lane) + note.width / 2.f;
+		return (Engine::laneToLeft(lane) + note.width / 2.f) * EFFECT_LANE_SCALE;
 	}
 
 	static std::pair<float, float> getNoteBound(const Note& note, bool flip)
 	{
-		float left = Engine::laneToLeft(note.lane), right = left + note.width;
+		// 注意：返回值是「效果世界坐标」，已折算回 12 轨等效空间。
+		float left = Engine::laneToLeft(note.lane) * EFFECT_LANE_SCALE;
+		float right = left + note.width * EFFECT_LANE_SCALE;
 		if (flip)
 			std::swap(left *= -1, right *= -1);
 		return std::make_pair(left, right);
@@ -377,6 +420,10 @@ namespace MikuMikuWorld::Effect
 
 		controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, xPos * EFFECT_WIDTH_RATIO);
 		controller.worldOffset.rotation = DirectX::XMVectorSetZ(controller.worldOffset.rotation, zRot);
+		// 60 轨折算：效果资源的世界尺寸按 12 轨标定，而音符已改用 60 轨坐标。
+		// 若效果尺寸不折算，相对 1/5 宽的音符会显得过大（实测 FX/音符 面积比 65:1）。
+		controller.worldOffset.scale = DirectX::XMVectorSet(
+			EFFECT_LANE_SCALE, EFFECT_LANE_SCALE, EFFECT_LANE_SCALE, 1.0f);
 		controller.play(note, start, end);
 	}
 
@@ -394,30 +441,33 @@ namespace MikuMikuWorld::Effect
 			std::tie(noteLeft, noteRight) = getHoldSegmentBound(note, context.score, context.currentTick);
 
 			ParticleController& controller = effectPools[effect].getNext();
-			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, noteLeft + (noteRight - noteLeft) / 2);
+			// noteLeft/noteRight 来自 getHoldSegmentBound，已是折算后的效果坐标；
+			// 此处与 updateEffects 的写法保持一致，补上 EFFECT_WIDTH_RATIO。
+			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, (noteLeft + (noteRight - noteLeft) / 2) * EFFECT_WIDTH_RATIO);
 			controller.play(note, start, end);
 
 			return;
 		}
 
 		EffectPool& pool = effectPools[effect];
-		for (int i = note.lane; i < note.lane + note.width; i++)
-		{
+		forEachLaneEffect(note, [&](int laneIndex, float xPos) {
 			ParticleController& controller = pool.getNext();
-			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, getEffectXPos(i, 1, config.pvMirrorScore));
+			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, xPos);
 			controller.play(note, time, -1);
-		}
+			(void)laneIndex;
+		});
 	}
 
 	void EffectView::addLaneEffect(EffectType effect, const Note& note, const ScoreContext& context, float time)
 	{
+		(void)context;
 		EffectPool& pool = effectPools[effect];
-		for (int i = note.lane; i < note.lane + note.width; i++)
-		{
-			ParticleController& controller = pool.pool[i];
-			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, getEffectXPos(i, 1, config.pvMirrorScore));
+		forEachLaneEffect(note, [&](int laneIndex, float xPos) {
+			// 池按轨道号索引，故这里的 laneIndex 必须是 PJSK 等效轨（0..11）。
+			ParticleController& controller = pool.pool[laneIndex];
+			controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, xPos);
 			controller.play(note, time, -1);
-		}
+		});
 	}
 
 	void EffectView::updateEffects(const ScoreContext& context, const Camera& camera, float time)
@@ -447,9 +497,10 @@ namespace MikuMikuWorld::Effect
 				if (static_cast<EffectType>(i) == fx_note_hold_aura ||
 					static_cast<EffectType>(i) == fx_note_critical_long_hold_gen_aura)
 				{
-					controller.worldOffset.scale = DirectX::XMVectorSetX(controller.worldOffset.scale, (noteRight - noteLeft) * 0.95f);
+				controller.worldOffset.scale = DirectX::XMVectorSetX(controller.worldOffset.scale, (noteRight - noteLeft) * 0.95f);
 				}
 
+				// noteLeft/noteRight 已是折算后的效果坐标，直接用。
 				controller.worldOffset.position = DirectX::XMVectorSetX(controller.worldOffset.position, (noteLeft + (noteRight - noteLeft) / 2) * EFFECT_WIDTH_RATIO);
 				controller.effectRoot.update(time, controller.worldOffset, camera);
 			}

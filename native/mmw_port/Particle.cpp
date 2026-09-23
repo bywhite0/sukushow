@@ -487,8 +487,11 @@ namespace MikuMikuWorld::Effect
 		DirectX::XMVECTOR pivot = DirectX::XMVectorSet(ref.pivot.x, ref.pivot.y, ref.pivot.z, 1.f);
 
 		DirectX::XMMATRIX worldOffset = DirectX::XMMatrixIdentity();
-		if (ref.name == "aura")
-			worldOffset *= DirectX::XMMatrixScalingFromVector(worldTransform.scale);
+		// 60 轨改造：原实现只在 ref.name == "aura" 时应用 worldTransform.scale，
+		// 导致 EffectView 为 lane / note 类效果设置的缩放被静默忽略
+		// （这类效果的 name 是 "white" / "base"，不是 "aura"）。
+		// 改为对全部效果生效——EffectView 侧统一按 60 轨折算世界尺寸。
+		worldOffset *= DirectX::XMMatrixScalingFromVector(worldTransform.scale);
 		worldOffset *= DirectX::XMMatrixRotationQuaternion(qShift);
 		worldOffset *= DirectX::XMMatrixTranslationFromVector(worldTransform.position);
 
