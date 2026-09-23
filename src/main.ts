@@ -21,7 +21,7 @@ import { parseChart, decodeChart, type Chart } from './llll/chart'
 import { chartToMusicScore } from './llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './settingsPersist'
 import { parseUrlPreviewParams } from './lib/url'
-import { findSong, songAssets, fetchBytes, loadSongList } from './llll/songAssets'
+import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from './llll/songAssets'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -261,6 +261,7 @@ async function loadChart(
   sourceOffsetMs = 0,
   assets: { bgmUrl?: string | null; coverUrl?: string | null } = {},
   difficulty: string | null = null,
+  credits: { lyricist: string | null; composer: string | null; arranger: string | null; vocal: string | null } | null = null,
 ) {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
@@ -286,10 +287,11 @@ async function loadChart(
     coverBytes,
     metadata: {
       title: label,
-      lyricist: null,
-      composer: null,
-      arranger: null,
-      vocal: null,
+      // 词曲编来自 wikiwiki，vocal 来自 masterdata（center + singer）。
+      lyricist: credits?.lyricist ?? null,
+      composer: credits?.composer ?? null,
+      arranger: credits?.arranger ?? null,
+      vocal: credits?.vocal ?? null,
       // 难度走独立字段：wasm 侧据此在曲绘旁绘制彩色难度徽章，
       // 不拼进曲名。
       difficulty,
@@ -333,8 +335,15 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
   }
   // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
   const chart = decodeChart(new Uint8Array(await response.arrayBuffer()))
+  // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
+  let credits = null
+  try {
+    credits = creditsToMetadata(await findSongCredits(songId))
+  } catch (error) {
+    console.warn('[llll-pjsk] 曲目详情加载失败：', error)
+  }
   // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
-  await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty)
+  await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
 }
 
 /** 60 轨全域演示谱：覆盖 Single / Flick / Hold / Trace 与最宽音符。 */

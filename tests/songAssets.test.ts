@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { songAssets, findSong, loadSongList, fetchBytes, type SongEntry } from '../src/llll/songAssets'
+import { songAssets, findSong, loadSongList, fetchBytes, creditsToMetadata, type SongEntry } from '../src/llll/songAssets'
 
 const baseSong: SongEntry = {
   id: '103103',
@@ -86,5 +86,34 @@ describe('fetchBytes', () => {
     const bytes = await fetchBytes('/assets/audio/bgm_10310301.ogg')
     expect(bytes).toBeInstanceOf(Uint8Array)
     expect(Array.from(bytes!)).toEqual([1, 2, 3])
+  })
+})
+
+describe('creditsToMetadata', () => {
+  const base = {
+    id: '103103', title: 'フォーチュンムービー',
+    lyricist: 'ケリー', composer: '桃宇アリサ、めんま',
+    arranger: 'めんま', stringsArranger: null,
+    center: '日野下花帆', singer: ['乙宗梢'], support: [],
+    vocal: ['日野下花帆', '乙宗梢'], vocalCount: 2, wikiPage: null,
+  }
+
+  it('credits 为 null 时全部返回 null', () => {
+    expect(creditsToMetadata(null)).toEqual({
+      lyricist: null, composer: null, arranger: null, vocal: null,
+    })
+  })
+
+  it('vocal 用顿号拼接（含 C 位）', () => {
+    expect(creditsToMetadata(base).vocal).toBe('日野下花帆、乙宗梢')
+  })
+
+  it('编曲缺失时退回弦编曲', () => {
+    const credits = { ...base, arranger: null, stringsArranger: '渡辺拓也、真部 裕' }
+    expect(creditsToMetadata(credits).arranger).toBe('渡辺拓也、真部 裕')
+  })
+
+  it('vocal 为空数组时返回 null', () => {
+    expect(creditsToMetadata({ ...base, vocal: [] }).vocal).toBeNull()
   })
 })
