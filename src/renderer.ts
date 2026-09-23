@@ -3,6 +3,7 @@ import type { Chart, Note } from './chart';
 import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';
+import { FeverLayers } from './feverLayers';
 import {
   FEVER_MOVE_LENGTH,
   feverLineRgba,
@@ -113,6 +114,7 @@ export class PreviewRenderer {
   private gridCountOpt = 0;
   private laneDarknessOpt = 80;
   private fx: HitFx | null = null;
+  private feverLayers: FeverLayers | null = null;
   private hitEffectMode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private feverOn = false;
   private feverStart = 0;
@@ -125,7 +127,7 @@ export class PreviewRenderer {
   private observer: ResizeObserver;
   private disposed = false;
   constructor(private canvas: HTMLCanvasElement) {
-    this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true });
     this.gl.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.gl.setClearColor(0x000000, 0);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -153,6 +155,13 @@ export class PreviewRenderer {
       this.fx = new HitFx(lib.fx, lib.fxTex);
       this.fx.setMode(this.hitEffectMode);
       this.notes.add(this.fx.group);
+      const base = lib.fxTex.sc2_NotesEffectCircle_007;
+      const move = lib.fxTex.sc2_feverLine01;
+      const mask = lib.fxTex.fever_mask;
+      if (base && move && mask) {
+        this.feverLayers = new FeverLayers(base, move, mask);
+        this.notes.add(this.feverLayers.group);
+      }
     }
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.mesh.visible = false;
   }
@@ -457,7 +466,7 @@ export class PreviewRenderer {
     for (const batch of this.sheets.values()) batch.flush();
     this.lines.flush();
     this.gl.autoClear = false;
-    this.gl.clear(true, true, false);
+    this.gl.clear(true, true, true);
     this.gl.render(this.field, this.camera);
     this.gl.clearDepth();
     this.gl.render(this.ui, this.uiCam);
@@ -550,6 +559,12 @@ export class PreviewRenderer {
   }
 
   private paintFeverOutline(time: number) {
+    if (this.feverLayers) {
+      if (this.feverOutline) this.feverOutline.visible = false;
+      if (this.feverMove) this.feverMove.visible = false;
+      this.feverLayers.update(this.feverOn, time - this.feverStart);
+      return;
+    }
     const mesh = this.feverOutline;
     const col = this.feverOutlineCol;
     if (!mesh || !col) return;
@@ -612,6 +627,7 @@ export class PreviewRenderer {
     this.ribbon?.dispose();
     for (const batch of this.sheets.values()) batch.dispose();
     this.fx?.dispose();
+    this.feverLayers?.dispose();
     this.white.dispose();
     this.gl.dispose();
   }
