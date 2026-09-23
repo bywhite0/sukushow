@@ -15,8 +15,9 @@
     {
       "id": "103107",
       "title": "Kawaii no susume",
-      "masterdata": "乙宗梢",
-      "wiki": "日野下花帆"
+      "value": "乙宗梢",
+      "wikiSays": "日野下花帆",
+      "authority": "masterdata"
     }
   ],
   "songs": [

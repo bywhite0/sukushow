@@ -89,7 +89,16 @@ export type SongCredits = {
 type SongCreditsFile = {
   total: number
   coverage: Record<string, number>
-  centerConflicts: { id: string; title: string; masterdata: string; wiki: string }[]
+  /** wiki 与 masterdata 的 center 差异。center 一律以 masterdata 为准（游戏读它）。 */
+  centerConflicts: {
+    id: string
+    title: string
+    /** 采用值，即 masterdata 的 C 位。 */
+    value: string
+    /** wiki 的不同说法，仅存档备查。 */
+    wikiSays: string
+    authority: 'masterdata'
+  }[]
   songs: SongCredits[]
 }
 
