@@ -148,9 +148,17 @@ interface HoldPoint {
  * **同 tick 折叠**：源谱面允许相邻航点的真实时间差小于一个 tick（实测全语料
  * 696 处，最小 0.00018 s；如 203117_04 有 78 处）。PJSK 的 ticks 是整数，
  * 无法表示同 tick 的两个节点；若原样输出，会产生零长度长条段，3D 里表现为
- * 长条在同一时刻横向跳变。故按原版渲染语义折叠：同 tick 只保留最后一个航点。
+ * 长条在同一时刻横向跳变。
  *
- * 折叠须在 tick 量化之后判断，故这里先量化再合并，返回 (tick, l, r) 三元组。
+ * 折叠规则：
+ * - **链首必须原样保留**。链首是玩家点击的位置（`l1/r1`），绝不能被后面的航点
+ *   顶掉，否则长条起点会整体漂移（实测 304202_04 / 405304_04 共 7 处，如
+ *   `0-11` 被换成 `4-15`，起点横移 4 轨）。
+ * - **与链首同 tick 的后续航点直接丢弃**。它们无法折叠进链首（链首不可动），
+ *   若原样保留就会与链首构成同 tick 相邻节点（零长度段）。该段时间上退化，
+ *   丢弃不影响可见几何。
+ * - 链首之后的同 tick 连续航点折叠为**最后一个**，因为中间的退化段不可见，
+ *   可见几何由后续段决定。
  */
 function collectHoldPoints(root: Note, ticks: TickConverter): { tick: number; l: number; r: number }[] {
   const raw: HoldPoint[] = [{ time: root.time, l: root.l, r: root.r }]
@@ -165,6 +173,10 @@ function collectHoldPoints(root: Note, ticks: TickConverter): { tick: number; l:
   for (const point of raw) {
     const tick = ticks.at(point.time)
     if (out.length && tick <= out[out.length - 1].tick) {
+      if (out.length === 1) {
+        // 与链首同 tick：丢弃（链首是点击位置，不可被覆盖）
+        continue
+      }
       // 同 tick：保留后到的航点（该段退化，可见几何由后续段决定）
       out[out.length - 1] = { tick, l: point.l, r: point.r }
       continue

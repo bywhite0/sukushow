@@ -265,3 +265,54 @@ describe('Hold 亚 tick 折叠', () => {
   })
 })
 
+
+describe('Hold 链首不可被折叠覆盖', () => {
+  it('链首与次航点同 tick 时，保留链首位置并丢弃次航点', () => {
+    // 源谱面存在「链首与紧随的航点落在同一 tick」的情形
+    // （实测 304202_04 / 405304_04 共 7 处）。
+    // 链首是玩家点击的位置（l1/r1），若被后一个航点顶掉，长条起点会整体漂移。
+    // BPM 60 下 1 tick = 1/480 s ≈ 0.00208 s，故 1.0 与 1.0005 同 tick。
+    const chart = makeChart(
+      [
+        // 链首 lane 0-11，end 1.0005（同 tick）；次成员 lane 4-15
+        { Uid: 1, just: '1.0', holds: ['1.0005'], Flags: flags(1, 0, 11, 4, 15) },
+        { Uid: 2, just: '1.0005', holds: ['1.5'], Flags: flags(1, 4, 15, 8, 19) },
+      ],
+      [{ Time: 0, Bpm: 60 }],
+    )
+    const score = chartToMusicScore(chart)
+    const head = score.NoteList.find((n) => n.IsConnectedFirst)!
+
+    // 链首必须仍是 0-11（点击位置），不能被换成 4-15
+    expect([head.laneStart, head.laneEnd]).toEqual([0, 11])
+    expect(head.ticks).toBe(480)
+    expect(head.category).toBe(1)
+    expect(head.noteBaseType).toBe(2)
+
+    // 链上节点 tick 严格递增（无同 tick 孪生）
+    const byId = new Map(score.NoteList.map((n) => [n.id, n]))
+    let cursor = head
+    let guard = 0
+    while (cursor.nextConnectionId !== -1 && guard++ < 1000) {
+      const next = byId.get(cursor.nextConnectionId)!
+      expect(next.ticks).toBeGreaterThan(cursor.ticks)
+      cursor = next
+    }
+    // 链尾应落在最后一个真实航点
+    expect(cursor.IsConnectedLast).toBe(true)
+  })
+
+  it('链首未被折叠时位置也不变（对照组）', () => {
+    // 链首与次航点不同 tick：链首照常保留
+    const chart = makeChart(
+      [
+        { Uid: 1, just: '1.0', holds: ['1.1'], Flags: flags(1, 20, 28, 22, 30) },
+        { Uid: 2, just: '1.1', holds: ['1.5'], Flags: flags(1, 22, 30, 24, 32) },
+      ],
+      [{ Time: 0, Bpm: 60 }],
+    )
+    const score = chartToMusicScore(chart)
+    const head = score.NoteList.find((n) => n.IsConnectedFirst)!
+    expect([head.laneStart, head.laneEnd]).toEqual([20, 28])
+  })
+})
