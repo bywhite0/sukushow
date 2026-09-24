@@ -143,22 +143,22 @@ interface HoldPoint {
 }
 
 /**
- * 沿 next 链收集一条 Hold 的所有端点（首节点的 l/r，后续各节点的 l2/r2）。
+ * 沿 next 链收集一条 Hold 的所有端点（首节点的 l/r，后续各节点的 l2/r2），
+ * **全部保留**，只去重完全重复的节点。
  *
- * **同 tick 折叠**：源谱面允许相邻航点的真实时间差小于一个 tick（实测全语料
- * 696 处，最小 0.00018 s；如 203117_04 有 78 处）。PJSK 的 ticks 是整数，
- * 无法表示同 tick 的两个节点；若原样输出，会产生零长度长条段，3D 里表现为
- * 长条在同一时刻横向跳变。
+ * 关于同 tick 节点（全语料 696 处，最小真实间隔 0.00018 s）：
+ * PJSK 的 ticks 是整数，源谱面里相邻航点可能量化到同一 tick。这**不是**要消除
+ * 的异常——渲染侧 `sortHoldSteps`（mmw_preview.cpp）明确支持同 tick：
  *
- * 折叠规则：
- * - **链首必须原样保留**。链首是玩家点击的位置（`l1/r1`），绝不能被后面的航点
- *   顶掉，否则长条起点会整体漂移（实测 304202_04 / 405304_04 共 7 处，如
- *   `0-11` 被换成 `4-15`，起点横移 4 轨）。
- * - **与链首同 tick 的后续航点直接丢弃**。它们无法折叠进链首（链首不可动），
- *   若原样保留就会与链首构成同 tick 相邻节点（零长度段）。该段时间上退化，
- *   丢弃不影响可见几何。
- * - 链首之后的同 tick 连续航点折叠为**最后一个**，因为中间的退化段不可见，
- *   可见几何由后续段决定。
+ *     n1.tick == n2.tick ? n1.lane < n2.lane : n1.tick < n2.tick
+ *
+ * 同 tick 的两个节点按 lane 排序，正是「长条在同一时刻横向瞬移」的表达方式
+ * （源谱 203117_04 root=125 即为典型：长条停在 39-50，随后瞬间跳到 20-31）。
+ * **丢掉中间航点会把瞬移改成斜移**，全语料最大几何偏差 39.4 轨（半个舞台），
+ * 18 条链偏差 >2 轨——因此绝不折叠。
+ *
+ * 唯一需要处理的是**完全重复节点**（同 tick 且同 lane，6 处）：几何上
+ * 无意义且会让连接链退化，直接跳过。
  */
 function collectHoldPoints(root: Note, ticks: TickConverter): { tick: number; l: number; r: number }[] {
   const raw: HoldPoint[] = [{ time: root.time, l: root.l, r: root.r }]
@@ -172,13 +172,9 @@ function collectHoldPoints(root: Note, ticks: TickConverter): { tick: number; l:
   const out: { tick: number; l: number; r: number }[] = []
   for (const point of raw) {
     const tick = ticks.at(point.time)
-    if (out.length && tick <= out[out.length - 1].tick) {
-      if (out.length === 1) {
-        // 与链首同 tick：丢弃（链首是点击位置，不可被覆盖）
-        continue
-      }
-      // 同 tick：保留后到的航点（该段退化，可见几何由后续段决定）
-      out[out.length - 1] = { tick, l: point.l, r: point.r }
+    const last = out[out.length - 1]
+    if (last && tick === last.tick && point.l === last.l && point.r === last.r) {
+      // 同 tick 同 lane：完全重复，跳过
       continue
     }
     out.push({ tick, l: point.l, r: point.r })

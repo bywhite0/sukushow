@@ -212,69 +212,36 @@ describe('Hold 串链容差（原版 float32 域）', () => {
   })
 })
 
-describe('Hold 亚 tick 折叠', () => {
-  it('相邻链成员落在同 tick 时折叠，不产生零长度段', () => {
-    // collectHoldPoints 逐链成员取 cursor.end（该 unit 的 holds 末项）：
-    //   uid1 (just 1.0,  end 1.0005) → uid2 (just 1.0005, end 1.001) → uid3 (just 1.001, end 1.5)
-    // BPM 60 下 1 tick = 1/480 ≈ 0.00208 s，故 1.0 / 1.0005 / 1.001 全部同 tick（480）。
-    // 不折叠会产生 3 个同 tick 节点；折叠后只留最后航点，再接 1.5（tick 720）。
+describe('Hold 同 tick 节点（横向瞬移）', () => {
+  it('同 tick 且不同 lane 的节点全部保留（这是瞬移，不是错误）', () => {
+    // 源谱 203117_04 root=125 的典型形态：长条停在 39-50，随后在 0.0002 s 内
+    // 瞬移到 20-31。渲染侧 sortHoldSteps 明确按 lane 排序同 tick 节点：
+    //   n1.tick == n2.tick ? n1.lane < n2.lane : n1.tick < n2.tick
+    // 丢掉中间航点会把瞬移改成斜移（最大几何偏差 39.4 轨），故必须保留。
     const chart = makeChart(
       [
-        { Uid: 1, just: '1.0', holds: ['1.0005'], Flags: flags(1, 10, 12, 20, 22) },
-        { Uid: 2, just: '1.0005', holds: ['1.001'], Flags: flags(1, 20, 22, 30, 32) },
-        { Uid: 3, just: '1.001', holds: ['1.5'], Flags: flags(1, 30, 32, 40, 42) },
+        { Uid: 1, just: '1.0', holds: ['1.0002'], Flags: flags(1, 39, 50, 20, 31) },
+        { Uid: 2, just: '1.0002', holds: ['1.5'], Flags: flags(1, 20, 31, 20, 31) },
       ],
       [{ Time: 0, Bpm: 60 }],
     )
     const score = chartToMusicScore(chart)
     const holds = score.NoteList.filter((n) => !n.IsSingle).sort((a, b) => a.ticks - b.ticks)
 
-    // 前两个航点同 tick 折叠 → 节点数从 4 降到 2
-    expect(holds).toHaveLength(2)
-    expect(holds.map((n) => n.ticks)).toEqual([480, 720])
-
-    const [head, tail] = holds
-    expect(head.IsConnectedFirst).toBe(true)
-    expect(head.IsConnectedLast).toBe(false)
-    expect(tail.IsConnectedFirst).toBe(false)
-    expect(tail.IsConnectedLast).toBe(true)
-    expect(head.nextConnectionId).toBe(tail.id)
-    expect(tail.previousConnectionId).toBe(head.id)
+    // 三个航点全部保留（同 tick 的 39-50 与 20-31 都在）
+    expect(holds).toHaveLength(3)
+    expect(holds.map((n) => [n.laneStart, n.laneEnd])).toEqual([
+      [39, 50],
+      [20, 31],
+      [20, 31],
+    ])
+    expect(holds[0].ticks).toBe(holds[1].ticks)
+    expect(holds[2].ticks).toBeGreaterThan(holds[1].ticks)
   })
 
-  it('折叠后链上节点 tick 严格递增', () => {
+  it('链首是点击位置，任何情况下都保持源起点', () => {
     const chart = makeChart(
       [
-        { Uid: 1, just: '1.0', holds: ['1.0002'], Flags: flags(1, 10, 12, 20, 22) },
-        { Uid: 2, just: '1.0002', holds: ['1.0004'], Flags: flags(1, 20, 22, 30, 32) },
-        { Uid: 3, just: '1.0004', holds: ['1.0006'], Flags: flags(1, 30, 32, 40, 42) },
-        { Uid: 4, just: '1.0006', holds: ['1.5'], Flags: flags(1, 40, 42, 50, 52) },
-      ],
-      [{ Time: 0, Bpm: 60 }],
-    )
-    const score = chartToMusicScore(chart)
-    const byId = new Map(score.NoteList.map((n) => [n.id, n]))
-    const head = score.NoteList.find((n) => n.IsConnectedFirst)!
-    let cursor = head
-    let guard = 0
-    while (cursor.nextConnectionId !== -1 && guard++ < 1000) {
-      const next = byId.get(cursor.nextConnectionId)!
-      expect(next.ticks).toBeGreaterThan(cursor.ticks)
-      cursor = next
-    }
-  })
-})
-
-
-describe('Hold 链首不可被折叠覆盖', () => {
-  it('链首与次航点同 tick 时，保留链首位置并丢弃次航点', () => {
-    // 源谱面存在「链首与紧随的航点落在同一 tick」的情形
-    // （实测 304202_04 / 405304_04 共 7 处）。
-    // 链首是玩家点击的位置（l1/r1），若被后一个航点顶掉，长条起点会整体漂移。
-    // BPM 60 下 1 tick = 1/480 s ≈ 0.00208 s，故 1.0 与 1.0005 同 tick。
-    const chart = makeChart(
-      [
-        // 链首 lane 0-11，end 1.0005（同 tick）；次成员 lane 4-15
         { Uid: 1, just: '1.0', holds: ['1.0005'], Flags: flags(1, 0, 11, 4, 15) },
         { Uid: 2, just: '1.0005', holds: ['1.5'], Flags: flags(1, 4, 15, 8, 19) },
       ],
@@ -282,37 +249,21 @@ describe('Hold 链首不可被折叠覆盖', () => {
     )
     const score = chartToMusicScore(chart)
     const head = score.NoteList.find((n) => n.IsConnectedFirst)!
-
-    // 链首必须仍是 0-11（点击位置），不能被换成 4-15
     expect([head.laneStart, head.laneEnd]).toEqual([0, 11])
     expect(head.ticks).toBe(480)
-    expect(head.category).toBe(1)
-    expect(head.noteBaseType).toBe(2)
-
-    // 链上节点 tick 严格递增（无同 tick 孪生）
-    const byId = new Map(score.NoteList.map((n) => [n.id, n]))
-    let cursor = head
-    let guard = 0
-    while (cursor.nextConnectionId !== -1 && guard++ < 1000) {
-      const next = byId.get(cursor.nextConnectionId)!
-      expect(next.ticks).toBeGreaterThan(cursor.ticks)
-      cursor = next
-    }
-    // 链尾应落在最后一个真实航点
-    expect(cursor.IsConnectedLast).toBe(true)
   })
 
-  it('链首未被折叠时位置也不变（对照组）', () => {
-    // 链首与次航点不同 tick：链首照常保留
+  it('完全重复的节点（同 tick 同 lane）被去重', () => {
     const chart = makeChart(
       [
-        { Uid: 1, just: '1.0', holds: ['1.1'], Flags: flags(1, 20, 28, 22, 30) },
-        { Uid: 2, just: '1.1', holds: ['1.5'], Flags: flags(1, 22, 30, 24, 32) },
+        { Uid: 1, just: '1.0', holds: ['1.0002'], Flags: flags(1, 2, 15, 2, 15) },
+        { Uid: 2, just: '1.0002', holds: ['1.5'], Flags: flags(1, 2, 15, 2, 15) },
       ],
       [{ Time: 0, Bpm: 60 }],
     )
     const score = chartToMusicScore(chart)
-    const head = score.NoteList.find((n) => n.IsConnectedFirst)!
-    expect([head.laneStart, head.laneEnd]).toEqual([20, 28])
+    const holds = score.NoteList.filter((n) => !n.IsSingle)
+    // 首个 2-15 与重复的 2-15 合并，剩 2 个节点
+    expect(holds).toHaveLength(2)
   })
 })
