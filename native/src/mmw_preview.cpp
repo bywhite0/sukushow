@@ -42,6 +42,14 @@ namespace mmw_preview
     constexpr int MAX_FLICK_SPRITES = 6;
     constexpr int NOTE_SIDE_WIDTH = 91;
     constexpr int NOTE_SIDE_PAD = 10;
+    // 端帽世界宽（原版 12 轨口径）与轨数放大系数。
+    //
+    // 上游 MMW 的 drawNoteBase 用的是 12 轨坐标系（noteLeft ∈ ±6），
+    // llll 是 60 轨（±30），故需按 60/12 = 5 放大帽宽，才能让端帽占屏幕的
+    // 比例与 12 轨原版一致。
+    constexpr float NOTE_CAP_WIDTH_LEFT = 0.25f;
+    constexpr float NOTE_CAP_WIDTH_RIGHT = 0.30f;
+    constexpr float NOTE_CAP_LANE_SCALE = 5.0f;
     constexpr int HOLD_XCUTOFF = 36;
     constexpr int GUIDE_XCUTOFF = 3;
     constexpr int GUIDE_Y_TOP_CUTOFF = -41;
@@ -1553,13 +1561,33 @@ namespace mmw_preview
 
         const int zIndex = getZIndex(!note.friction ? SpriteLayer::BASE_NOTE : SpriteLayer::TICK_NOTE, noteLeft + (noteRight - noteLeft) / 2.0f, y * zScalar);
 
-        auto middle = scaleQuad(applyTransform(TransformNoteMiddle, perspectiveQuadvPos(noteLeft + 0.25f, noteRight - 0.3f, noteTop, noteBottom)), y);
+        // 端帽世界宽 = 原版 12 轨的 0.25 / 0.30 × NOTE_CAP_LANE_SCALE。
+        //
+        // llll 是 60 轨（原版 MMW 是 12 轨），沿用 0.25 会让端帽只占屏幕
+        // 1/5 的宽度、圆角显得又小又尖；乘轨数比后端帽占屏幕的比例与 12 轨
+        // 原版一致，观感回到原版。
+        //
+        // UV 窗口保持原版值不变（跨度 81 texel）：端帽的圆角形状由「采样多少
+        // 纹素」决定 —— 窗口不变则纹素数不变，把 quad 拉宽只会等比放大圆角。
+        float capLeft = NOTE_CAP_WIDTH_LEFT * NOTE_CAP_LANE_SCALE;
+        float capRight = NOTE_CAP_WIDTH_RIGHT * NOTE_CAP_LANE_SCALE;
+
+        // 保护：极窄音符（全语料仅 2 个宽 1 的音符）比两帽合计还窄时按比例
+        // 收缩，避免中段宽度变负导致 quad 翻转。
+        const float capTotal = capLeft + capRight;
+        if (noteRight - noteLeft < capTotal && capTotal > 0.0f) {
+            const float shrink = (noteRight - noteLeft) / capTotal;
+            capLeft *= shrink;
+            capRight *= shrink;
+        }
+
+        auto middle = scaleQuad(applyTransform(TransformNoteMiddle, perspectiveQuadvPos(noteLeft + capLeft, noteRight - capRight, noteTop, noteBottom)), y);
         pushQuad(middle, makeUvRect(sprite.x1 + NOTE_SIDE_WIDTH, sprite.x2 - NOTE_SIDE_WIDTH, sprite.y1, sprite.y2), TextureId::Notes, 1.0f, 1.0f, 1.0f, 1.0f, zIndex);
 
-        auto left = scaleQuad(applyTransform(TransformNoteLeft, perspectiveQuadvPos(noteLeft, noteLeft + 0.25f, noteTop, noteBottom)), y);
+        auto left = scaleQuad(applyTransform(TransformNoteLeft, perspectiveQuadvPos(noteLeft, noteLeft + capLeft, noteTop, noteBottom)), y);
         pushQuad(left, makeUvRect(sprite.x1 + NOTE_SIDE_PAD, sprite.x1 + NOTE_SIDE_WIDTH, sprite.y1, sprite.y2), TextureId::Notes, 1.0f, 1.0f, 1.0f, 1.0f, zIndex);
 
-        auto right = scaleQuad(applyTransform(TransformNoteRight, perspectiveQuadvPos(noteRight - 0.3f, noteRight, noteTop, noteBottom)), y);
+        auto right = scaleQuad(applyTransform(TransformNoteRight, perspectiveQuadvPos(noteRight - capRight, noteRight, noteTop, noteBottom)), y);
         pushQuad(right, makeUvRect(sprite.x2 - NOTE_SIDE_WIDTH, sprite.x2 - NOTE_SIDE_PAD, sprite.y1, sprite.y2), TextureId::Notes, 1.0f, 1.0f, 1.0f, 1.0f, zIndex);
     }
 
