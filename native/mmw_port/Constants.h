@@ -16,7 +16,6 @@ namespace MikuMikuWorld
 	constexpr float MIN_BPM							= 10;
 	constexpr float MAX_BPM							= 10000;
 
-	constexpr const char* SUS_EXTENSION			= ".sus";
 	constexpr const char* MMWS_EXTENSION		= ".mmws";
 	constexpr const char* JSON_EXTENSION		= ".json";
 	constexpr const char* GZ_JSON_EXTENSION		= ".json.gz";
