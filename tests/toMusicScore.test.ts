@@ -172,3 +172,42 @@ describe('空谱与边界', () => {
     expect(lanes).toEqual([0, 59])
   })
 })
+
+describe('Hold 串链容差（原版 float32 域）', () => {
+  it('亚容差浮点对必须连上（double 域会漏连）', () => {
+    // holds[^1]=101.8751 vs just=101.875：
+    //   double  域 |Δ| = 1.0000000033e-4 ≥ 1e-4        ⇒ 不连（旧行为）
+    //   float32 域 |Δ| = 9.9182e-5 < 0.0001f = 9.9999997e-5 ⇒ 连（原版行为）
+    // 全语料 129 处此类漏连。
+    const chart = makeChart([
+      { Uid: 1, just: '100.0', holds: ['101.8751'], Flags: flags(1, 20, 28, 20, 28) },
+      { Uid: 2, just: '101.875', holds: ['102.5'], Flags: flags(1, 20, 28, 20, 28) },
+    ])
+    // 连上后是一条 2 段链：Uid1 的尾就是 Uid2 的头，故 Uid2 不是根。
+    expect(chart.roots.map((n) => n.uid)).toEqual([1])
+    expect(chart.roots[0].next?.uid).toBe(2)
+  })
+
+  it('超出容差的浮点对不得连上', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: ['1.995'], Flags: flags(1, 20, 28, 20, 28) },
+      { Uid: 2, just: '2.0', holds: ['2.4'], Flags: flags(1, 20, 28, 20, 28) },
+    ])
+    expect(chart.roots.map((n) => n.uid)).toEqual([1, 2])
+    expect(chart.roots[0].next).toBeUndefined()
+  })
+
+  it('允许汇合：一个节点可被多条前驱指向', () => {
+    // 原版对每个 unit 独立求 FirstOrDefault，目标不被独占。
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 20, 28, 20, 28) },
+      { Uid: 2, just: '1.2', holds: ['2.0'], Flags: flags(1, 6, 14, 20, 28) },
+      { Uid: 3, just: '2.0', holds: ['2.4'], Flags: flags(1, 20, 28, 20, 28) },
+    ])
+    const byUid = new Map(chart.notes.map((n) => [n.uid, n]))
+    expect(byUid.get(1)!.next?.uid).toBe(3)
+    expect(byUid.get(2)!.next?.uid).toBe(3)
+    // 目标被指到即非根；两条前驱各自是根。
+    expect(chart.roots.map((n) => n.uid).sort()).toEqual([1, 2])
+  })
+})
