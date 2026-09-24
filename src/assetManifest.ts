@@ -66,7 +66,8 @@ export const FONT_FILES = [
   'font/NotoSansCJKSC-Black.ttf',
 ]
 
-/** 音效 key 与 native 侧 SE_NAMES（mmw_port/Note.h）一一对应。 */
+/** 音效 key 与 native 侧 SE_NAMES（mmw_port/Note.h）一一对应。
+ *  allPerfect 是曲终 AP 结算音（native 侧在 apStartSec 触发），素材在 overlay/ap-native/。 */
 export const SOUND_FILES: Record<string, string> = {
   perfect: 'sound/se_live_perfect.mp3',
   criticalTap: 'sound/se_live_critical.mp3',
@@ -78,6 +79,7 @@ export const SOUND_FILES: Record<string, string> = {
   tickCritical: 'sound/se_live_connect_critical.mp3',
   holdLoop: 'sound/se_live_long.mp3',
   holdLoopCritical: 'sound/se_live_long_critical.mp3',
+  allPerfect: 'overlay/ap-native/all-perfect.m4a',
 }
 
 /** 生成完整清单（含程序化展开的段位 / 数字 / combo 贴图）。 */
