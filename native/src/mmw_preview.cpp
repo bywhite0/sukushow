@@ -1307,12 +1307,18 @@ namespace mmw_preview
     }
 
 
+    // 按 tick 稳定排序，**同 tick 时保留谱面里的源顺序**。
+    //
+    // llll 谱面会用「同一 tick 内连续折返的航点」画复杂几何（如 203117_04 的爱心），
+    // 路径语义完全由 steps 的数组顺序表达。因此这里不能按 lane 二次排序——
+    // 那会把同 tick 的航点重排成 lane 升序，折返路径被打乱、几何走形。
+    // steps 的顺序即语义，渲染端（drawHoldCurves / drawHoldTicks）按数组顺序消费。
     void sortHoldSteps(const Score& score, HoldNote& hold)
     {
         std::stable_sort(hold.steps.begin(), hold.steps.end(), [&score](const HoldStep& lhs, const HoldStep& rhs) {
             const auto& left = score.notes.at(lhs.ID);
             const auto& right = score.notes.at(rhs.ID);
-            return left.tick == right.tick ? left.lane < right.lane : left.tick < right.tick;
+            return left.tick < right.tick;
         });
     }
 

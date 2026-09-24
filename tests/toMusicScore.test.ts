@@ -215,8 +215,9 @@ describe('Hold 串链容差（原版 float32 域）', () => {
 describe('Hold 同 tick 节点（横向瞬移）', () => {
   it('同 tick 且不同 lane 的节点全部保留（这是瞬移，不是错误）', () => {
     // 源谱 203117_04 root=125 的典型形态：长条停在 39-50，随后在 0.0002 s 内
-    // 瞬移到 20-31。渲染侧 sortHoldSteps 明确按 lane 排序同 tick 节点：
-    //   n1.tick == n2.tick ? n1.lane < n2.lane : n1.tick < n2.tick
+    // 瞬移到 20-31。渲染侧 sortHoldSteps 只按 tick 稳定排序、同 tick 保留源顺序，
+    // 因此折返路径（如爱心）能原样还原：
+    //   stable_sort by tick only
     // 丢掉中间航点会把瞬移改成斜移（最大几何偏差 39.4 轨），故必须保留。
     const chart = makeChart(
       [
@@ -265,5 +266,40 @@ describe('Hold 同 tick 节点（横向瞬移）', () => {
     const holds = score.NoteList.filter((n) => !n.IsSingle)
     // 首个 2-15 与重复的 2-15 合并，剩 2 个节点
     expect(holds).toHaveLength(2)
+  })
+
+  it('链内顺序 = 源连接顺序（渲染器据此还原折返几何）', () => {
+    // 渲染侧 sortHoldSteps 已改为「只按 tick 稳定排序」，同 tick 保留 steps 的数组顺序。
+    // 因此 TS 侧必须让同 tick 航点按源连接顺序排布，否则爱心这类折返曲线会走形。
+    //
+    // 航点序列 = [首节点起点] + [各节点终点(l2/r2)]，故同 tick 折返要求
+    // 相邻两个节点的「终点时刻」落在同一 tick。
+    // BPM 60 → 480 ticks/秒，1.0005 与 1.0010 同属 tick 480。
+    const chart = makeChart(
+      [
+        { Uid: 1, just: '1.0', holds: ['1.0005'], Flags: flags(1, 10, 21, 20, 31) },
+        { Uid: 2, just: '1.0005', holds: ['1.0010'], Flags: flags(1, 20, 31, 50, 59) },
+        { Uid: 3, just: '1.0010', holds: ['1.5'], Flags: flags(1, 50, 59, 5, 16) },
+      ],
+      [{ Time: 0, Bpm: 60 }],
+    )
+    const score = chartToMusicScore(chart)
+    const holds = score.NoteList.filter((n) => !n.IsSingle)
+
+    // 航点：10-21 → 20-31 → 50-59（顶点）→ 5-16（折返落点）
+    expect(holds.map((n) => [n.laneStart, n.laneEnd])).toEqual([
+      [10, 21],
+      [20, 31],
+      [50, 59],
+      [5, 16],
+    ])
+    // 折返发生在同一 tick 内（20-31 → 50-59），顺序必须保持「先到顶点、再折回」
+    expect(holds[1].ticks).toBe(holds[2].ticks)
+    expect(holds[1].laneStart).not.toBe(holds[2].laneStart)
+    // 连接指针必须沿源顺序串成一条链
+    for (let i = 0; i < holds.length - 1; i++) {
+      expect(holds[i].nextConnectionId).toBe(holds[i + 1].id)
+      expect(holds[i + 1].previousConnectionId).toBe(holds[i].id)
+    }
   })
 })
