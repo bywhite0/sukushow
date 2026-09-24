@@ -22,6 +22,7 @@ import { chartToMusicScore } from './llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './settingsPersist'
 import { parseUrlPreviewParams } from './lib/url'
 import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from './llll/songAssets'
+import { createSongPicker } from './ui/songPicker'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -30,7 +31,7 @@ if (!app) {
 }
 
 app.innerHTML = `
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll × PJSK 预览首页"><span class="brand-mark" aria-hidden="true">llll</span><span>渲染预览<small>PJSK PIPELINE · 60 LANES</small></span></a><div class="song-picker" aria-label="选择曲目"><label class="sr-only" for="song-select">曲目</label><select id="song-select" class="song-select"><option value="">选择曲目…</option></select><label class="sr-only" for="song-difficulty">难度</label><select id="song-difficulty" class="song-difficulty"></select></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
+<header class="workspace-header"><a class="brand" href="./" aria-label="llll × PJSK 预览首页"><span class="brand-mark" aria-hidden="true">llll</span><span>渲染预览<small>PJSK PIPELINE · 60 LANES</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -442,10 +443,10 @@ async function boot() {
   const songId = search.get('song')
   if (songId && songPicker) {
     const difficulty = search.get('difficulty') ?? 'MASTER'
-    songPicker.picker.value = songId
-    songPicker.syncDifficulties()
+    // select 不触发 onChange，由这里自己 await，保证 URL 进来时不会重复加载。
+    songPicker.select(songId, difficulty, false)
     try {
-      await loadSongById(songId, difficulty, Number(search.get('offset') ?? 0))
+      await loadSongById(songId, songPicker.currentDifficulty() ?? difficulty, Number(search.get('offset') ?? 0))
       renderLoop()
       return
     } catch (error) {
@@ -567,69 +568,37 @@ el('demo').onclick = async () => {
   el('audio-name').textContent = '未加载音频 · 可以无声预览'
 }
 
-/* ── 曲目选择器：按曲目 Id + 难度直接打开（谱面 / BGM / 曲绘一并加载） ── */
+/* ── 曲目选择器：可搜索下拉框 + 难度徽章（谱面 / BGM / 曲绘一并加载） ── */
 
 async function initSongPicker() {
   const list = await loadSongList()
-  const picker = el<HTMLSelectElement>('song-select')
-  const difficulty = el<HTMLSelectElement>('song-difficulty')
+  const mount = el('song-picker-mount')
 
-  const byCategory = new Map<string, typeof list.songs>()
-  for (const song of list.songs) {
-    const bucket = byCategory.get(song.category) ?? []
-    bucket.push(song)
-    byCategory.set(song.category, bucket)
-  }
-  for (const [category, songs] of byCategory) {
-    const group = document.createElement('optgroup')
-    group.label = category
-    for (const song of songs) {
-      const option = document.createElement('option')
-      option.value = song.id
-      option.textContent = song.hasChart ? song.title : `${song.title}（无谱面）`
-      option.disabled = !song.hasChart
-      group.append(option)
-    }
-    picker.append(group)
-  }
+  const picker = createSongPicker({
+    list,
+    onChange: (songId, difficulty) => {
+      void openSong(songId, difficulty)
+    },
+  })
+  picker.setDisabled(true)
+  mount.replaceChildren(picker.root)
 
-  // 难度下拉跟着所选曲目变化。
-  const syncDifficulties = () => {
-    const song = list.songs.find((item) => item.id === picker.value)
-    difficulty.replaceChildren()
-    for (const name of song?.difficulties ?? []) {
-      const option = document.createElement('option')
-      option.value = name
-      option.textContent = name
-      difficulty.append(option)
-    }
-    if (difficulty.options.length > 0) {
-      difficulty.value = difficulty.options[difficulty.options.length - 1].value
-    }
-  }
-  syncDifficulties()
-
-  const open = async () => {
-    if (!picker.value) return
+  // 由 URL 参数进来时不重复触发 onChange（boot 会自己 await 加载）。
+  const openSong = async (songId: string, difficulty: string) => {
     try {
-      await loadSongById(picker.value, difficulty.value)
+      await loadSongById(songId, difficulty)
       const url = new URL(location.href)
-      url.searchParams.set('song', picker.value)
-      url.searchParams.set('difficulty', difficulty.value)
+      url.searchParams.set('song', songId)
+      url.searchParams.set('difficulty', difficulty)
       url.searchParams.delete('chart')
       history.replaceState(null, '', url)
     } catch (error) {
       message(`曲目加载失败：${String(error)}`, true)
     }
   }
-  difficulty.onchange = open
-  // 换曲目时先刷新难度列表（默认落到最高难度），再加载。
-  picker.onchange = async () => {
-    syncDifficulties()
-    await open()
-  }
 
-  return { picker, difficulty, syncDifficulties }
+  picker.setDisabled(false)
+  return picker
 }
 
 el('fullscreen').onclick = async () => {

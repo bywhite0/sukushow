@@ -29,6 +29,10 @@ export type SongEntry = {
   hasJacket: boolean
   charts: Record<string, string>
   difficulties: string[]
+  /** 难度 → 等级，取自 masterdata/MusicScores.yaml（游戏读它）。 */
+  levels?: Record<string, number>
+  /** 难度 → 最大连击数，同上。 */
+  maxCombos?: Record<string, number>
   hasChart: boolean
   soundId: string
   songTime: number
