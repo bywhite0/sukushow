@@ -211,3 +211,57 @@ describe('Hold 串链容差（原版 float32 域）', () => {
     expect(chart.roots.map((n) => n.uid).sort()).toEqual([1, 2])
   })
 })
+
+describe('Hold 亚 tick 折叠', () => {
+  it('相邻链成员落在同 tick 时折叠，不产生零长度段', () => {
+    // collectHoldPoints 逐链成员取 cursor.end（该 unit 的 holds 末项）：
+    //   uid1 (just 1.0,  end 1.0005) → uid2 (just 1.0005, end 1.001) → uid3 (just 1.001, end 1.5)
+    // BPM 60 下 1 tick = 1/480 ≈ 0.00208 s，故 1.0 / 1.0005 / 1.001 全部同 tick（480）。
+    // 不折叠会产生 3 个同 tick 节点；折叠后只留最后航点，再接 1.5（tick 720）。
+    const chart = makeChart(
+      [
+        { Uid: 1, just: '1.0', holds: ['1.0005'], Flags: flags(1, 10, 12, 20, 22) },
+        { Uid: 2, just: '1.0005', holds: ['1.001'], Flags: flags(1, 20, 22, 30, 32) },
+        { Uid: 3, just: '1.001', holds: ['1.5'], Flags: flags(1, 30, 32, 40, 42) },
+      ],
+      [{ Time: 0, Bpm: 60 }],
+    )
+    const score = chartToMusicScore(chart)
+    const holds = score.NoteList.filter((n) => !n.IsSingle).sort((a, b) => a.ticks - b.ticks)
+
+    // 前两个航点同 tick 折叠 → 节点数从 4 降到 2
+    expect(holds).toHaveLength(2)
+    expect(holds.map((n) => n.ticks)).toEqual([480, 720])
+
+    const [head, tail] = holds
+    expect(head.IsConnectedFirst).toBe(true)
+    expect(head.IsConnectedLast).toBe(false)
+    expect(tail.IsConnectedFirst).toBe(false)
+    expect(tail.IsConnectedLast).toBe(true)
+    expect(head.nextConnectionId).toBe(tail.id)
+    expect(tail.previousConnectionId).toBe(head.id)
+  })
+
+  it('折叠后链上节点 tick 严格递增', () => {
+    const chart = makeChart(
+      [
+        { Uid: 1, just: '1.0', holds: ['1.0002'], Flags: flags(1, 10, 12, 20, 22) },
+        { Uid: 2, just: '1.0002', holds: ['1.0004'], Flags: flags(1, 20, 22, 30, 32) },
+        { Uid: 3, just: '1.0004', holds: ['1.0006'], Flags: flags(1, 30, 32, 40, 42) },
+        { Uid: 4, just: '1.0006', holds: ['1.5'], Flags: flags(1, 40, 42, 50, 52) },
+      ],
+      [{ Time: 0, Bpm: 60 }],
+    )
+    const score = chartToMusicScore(chart)
+    const byId = new Map(score.NoteList.map((n) => [n.id, n]))
+    const head = score.NoteList.find((n) => n.IsConnectedFirst)!
+    let cursor = head
+    let guard = 0
+    while (cursor.nextConnectionId !== -1 && guard++ < 1000) {
+      const next = byId.get(cursor.nextConnectionId)!
+      expect(next.ticks).toBeGreaterThan(cursor.ticks)
+      cursor = next
+    }
+  })
+})
+

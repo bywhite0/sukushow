@@ -142,16 +142,36 @@ interface HoldPoint {
   r: number
 }
 
-/** 沿 next 链收集一条 Hold 的所有端点（首节点的 l/r，后续各节点的 l2/r2）。 */
-function collectHoldPoints(root: Note): HoldPoint[] {
-  const points: HoldPoint[] = [{ time: root.time, l: root.l, r: root.r }]
+/**
+ * 沿 next 链收集一条 Hold 的所有端点（首节点的 l/r，后续各节点的 l2/r2）。
+ *
+ * **同 tick 折叠**：源谱面允许相邻航点的真实时间差小于一个 tick（实测全语料
+ * 696 处，最小 0.00018 s；如 203117_04 有 78 处）。PJSK 的 ticks 是整数，
+ * 无法表示同 tick 的两个节点；若原样输出，会产生零长度长条段，3D 里表现为
+ * 长条在同一时刻横向跳变。故按原版渲染语义折叠：同 tick 只保留最后一个航点。
+ *
+ * 折叠须在 tick 量化之后判断，故这里先量化再合并，返回 (tick, l, r) 三元组。
+ */
+function collectHoldPoints(root: Note, ticks: TickConverter): { tick: number; l: number; r: number }[] {
+  const raw: HoldPoint[] = [{ time: root.time, l: root.l, r: root.r }]
   let cursor: Note | undefined = root
   let guard = 0
   while (cursor && guard++ < 4096) {
-    points.push({ time: cursor.end, l: cursor.l2, r: cursor.r2 })
+    raw.push({ time: cursor.end, l: cursor.l2, r: cursor.r2 })
     cursor = cursor.next
   }
-  return points
+
+  const out: { tick: number; l: number; r: number }[] = []
+  for (const point of raw) {
+    const tick = ticks.at(point.time)
+    if (out.length && tick <= out[out.length - 1].tick) {
+      // 同 tick：保留后到的航点（该段退化，可见几何由后续段决定）
+      out[out.length - 1] = { tick, l: point.l, r: point.r }
+      continue
+    }
+    out.push({ tick, l: point.l, r: point.r })
+  }
+  return out
 }
 
 function makeNote(
@@ -253,14 +273,13 @@ export function chartToMusicScore(chart: Chart, options: ConvertOptions = {}): M
     .sort((a, b) => (a.time === b.time ? a.uid - b.uid : a.time - b.time))
 
   for (const root of holdRoots) {
-    const points = collectHoldPoints(root)
+    const points = collectHoldPoints(root, ticks)
     const baseId = nextId()
     points.forEach((point, index) => {
-      const tick = ticks.at(point.time)
       const isFirst = index === 0
       const isLast = index === points.length - 1
       const [category, noteBaseType] = isLast ? HOLD_END : isFirst ? HOLD_START : HOLD_RELAY
-      const item = makeNote(baseId + index, tick, point.l, point.r, category, noteBaseType)
+      const item = makeNote(baseId + index, point.tick, point.l, point.r, category, noteBaseType)
       item.previousConnectionId = isFirst ? -1 : baseId + index - 1
       item.nextConnectionId = isLast ? -1 : baseId + index + 1
       item.IsSingle = false
