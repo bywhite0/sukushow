@@ -84,12 +84,17 @@ export function parseChart(input:unknown):Chart {
   const notes=data.Notes.map(parseNote), ids=new Set<number>();
   for (const n of notes) { if(ids.has(n.uid)) throw new Error(`重复 Uid：${n.uid}`); ids.add(n.uid); }
   const bpms=data.Bpms.map(v=>{const b=object(v),time=number(b.Time,'BPM 时间'),bpm=number(b.Bpm,'BPM');if(Math.abs(time)>86400||bpm<=0||bpm>10000)throw new Error('BPM 无效');return {time,bpm};}).sort((a,b)=>a.time-b.time);
-  // 按原始顺序选首个满足 UID、时间及两侧边缘条件的后继。
+  // 原版谓词（ChartResolver.Prepare Pass1）在 C# float 域比较：just/holds 是 float，
+  // 容差 LooseEquals 也是 0.0001f。JS 全是 double，故两边都压回 float32 再比。
+  // 实测：用 double 容差会漏连 129 处（如 holds[^1]=101.8751 vs just=101.875，
+  // double 域 |Δ|=1.0000000033e-4 判不中，float32 域 |Δ|=9.9182e-5 < 9.9999997e-5 判中）。
+  const HOLD_LINK_EPSILON = Math.fround(0.0001);
   const starts=new Map<string,Note[]>();
   for(const n of notes) {if(n.type!==1)continue; const key=`${n.l}/${n.r}`;const bucket=starts.get(key)??[];bucket.push(n);starts.set(key,bucket);}
   for(const n of notes) {
     if(n.type!==1)continue;
-    const next=starts.get(`${n.l2}/${n.r2}`)?.find(x=>x.uid>n.uid&&Math.abs(x.time-n.end)<0.0001);
+    const end=Math.fround(n.end);
+    const next=starts.get(`${n.l2}/${n.r2}`)?.find(x=>x.uid>n.uid&&Math.abs(Math.fround(x.time)-end)<HOLD_LINK_EPSILON);
     // 原始谱面允许汇合，Prev 仅作为非根标记，不拒绝共享后继。
     if(next){n.next=next;next.prev=n;}
   }
