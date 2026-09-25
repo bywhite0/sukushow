@@ -18,6 +18,11 @@ describe('原格式解析',()=>{
  it('拒绝越界格和未知类型',()=>{expect(()=>parseChart(source([note(1,'2',flags(0,0,63))]))).toThrow();expect(()=>parseChart(source([note(1,'2',4)]))).toThrow();});
  it('拒绝倒序 Hold',()=>expect(()=>parseChart(source([note(1,'2',flags(1,0,5,0,5),['1'])]))).toThrow());
  it('按时间、UID 和边缘串链，保留本段终点',()=>{const c=parseChart(source([note(1,'2',flags(1,0,5,10,15),['3']),note(2,'3',flags(1,10,15,20,25),['4'])]));expect(c.roots).toHaveLength(1);expect(c.notes[0].next).toBe(c.notes[1]);expect(c.notes[0].end).toBe(3);});
+ // 原版谓词在 C# float 域比较（just/holds 是 float，容差 LooseEquals 也是 0.0001f）。
+ // JS 是 double：不压回 float32 的话，|101.875 − 101.8751| = 1.0000000033e-4 会判不中，
+ // 而原版 float32 域 |Δ| = 9.9182e-5 < 9.9999997e-5 判得中。实测全谱面差 129 处链接。
+ it('Hold 链接容差在 float32 域比较，而非 double',()=>{const c=parseChart(source([note(1,'2',flags(1,0,5,10,15),['101.8751']),note(2,'101.875',flags(1,10,15,20,25),['102'])]));expect(c.notes[0].next).toBe(c.notes[1]);});
+ it('超出 float32 容差的 Hold 不链接',()=>{const c=parseChart(source([note(1,'2',flags(1,0,5,10,15),['101.8752']),note(2,'101.875',flags(1,10,15,20,25),['102'])]));expect(c.notes[0].next).toBeUndefined();});
  it('同时押采用首组 4ms 容差而非传递合并',()=>{const c=parseChart(source([note(1,'2'),note(2,'2.003'),note(3,'2.006')]));expect(c.lines).toHaveLength(1);expect(c.lines[0].points).toHaveLength(2);});
 });
 describe('原版空间数学',()=>{
