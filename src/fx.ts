@@ -1,6 +1,6 @@
 import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import feverTrailColors from './feverTrailColors.json';
-import { feverEntrance } from './feverAnimation';
+import { feverEntrance, CORE_MOVE_END } from './feverAnimation';
 import * as THREE from 'three';
 import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
@@ -40,11 +40,15 @@ interface Spec {
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
   rate: FxMM;
+  /** Rate over Distance — 每单位位移的发射数；彗星 #607/#627 为 5。 */
+  rateDist?: FxMM;
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
   role: 'core' | 'impact' | 'parr' | 'p2' | 'plain';
+  /** 序列化 `moveWithTransform`：1=World ⇒ 粒子出生后留在世界坐标，不随节点移动。 */
+  world: boolean;
   base: number; loop: boolean; dur: number; followHead: boolean;
-  /** Emitter clock: next one-shot burst index / loop wrap / rate accumulator. */
-  burstI: number; rateAcc: number; cycle: number;
+  /** Emitter clock: next one-shot burst index / loop wrap / rate accumulators. */
+  burstI: number; rateAcc: number; distAcc: number; cycle: number;
 }
 interface Spark {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
@@ -52,6 +56,8 @@ interface Spark {
   r: number; g: number; b: number; a: number; grav: number;
   align: number; mesh: number; slice: boolean; tex: string;
   pitchLocal: boolean; spin: number; followHead: boolean;
+  /** 出生时的入场偏移（World 模拟空间 ⇒ 粒子留在世界坐标，不随节点一起走）。 */
+  off?: [number, number, number];
   grad?: FxGrad; gradMin?: FxGrad; gradBlend?: number; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
   fever?: boolean;
@@ -327,18 +333,25 @@ export class HitFx {
         trailInherit: n.ps.trail?.inheritColor !== false,
         trailGrad: n.ps.trail?.en ? n.ps.trail.colMax : undefined,
         trailGradMin: n.ps.trail?.en && n.ps.trail.colMode === 3 ? n.ps.trail.colMin : undefined,
+        // Unity 的 `ParticleSystem.Burst.cycleCount`：0 = 无限重复（内部 `m_RepeatCount = cycleCount - 1`
+        // ⇒ -1 为无限哨兵），不是「不发射」。用 Infinity 保留该语义，交由 emitBursts 按周期截断。
         bursts: (n.ps.bursts || []).map(b => ({
-          t: b.t, count: b.count, cycles: Math.max(1, b.cycles || 1), interval: b.interval || 0,
+          t: b.t, count: b.count,
+          cycles: b.cycles === 0 ? Number.POSITIVE_INFINITY : Math.max(1, b.cycles || 1),
+          interval: b.interval || 0,
         })),
         delay: n.ps.delay,
         rate: n.ps.rate || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+        rateDist: n.ps.rateDist || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
         align: n.rend?.align || 0,
         mesh: n.rend?.mode === 4 ? (n.rend.mesh?.includes('Plane') ? 2 : 1) : 0,
         slice, combo, tex: batchKey, role, base: cores.get(i) || 0,
+        // 序列化 moveWithTransform：1=World。缺字段（旧数据）按 Local 处理。
+        world: n.ps.world === true,
         loop: !!n.ps.loop, dur: Math.max(0.05, n.ps.dur || 1),
         // Hold 核心贴住当前头部；飞散粒子仍保留世界坐标。
         followHead: prefab.id === 'holdLoop' && (role === 'core' || n.name === 'Core'),
-        burstI: 0, rateAcc: 0, cycle: 0,
+        burstI: 0, rateAcc: 0, distAcc: 0, cycle: 0,
       });
     });
     return out;
@@ -435,7 +448,7 @@ export class HitFx {
     const [rdx, rdy, rdz] = qrot(spec.qx, spec.qy, spec.qz, spec.qw, dx, dy, dz);
     return { ox: rx, oy: ry, oz: rz, dx: rdx, dy: rdy, dz: rdz };
   }
-  private burst(live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number) {
+  private burst(live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number, offOverride?: [number, number, number]) {
     const sized = this.sized(spec, live.width, Math.random(), burstCount);
     const count = countOverride ?? sized.count;
     const pitchLocal = spec.align === 2 && isPitchLocal(spec.qx, spec.qy, spec.qz, spec.qw);
@@ -449,6 +462,13 @@ export class HitFx {
       const trailRandom = spec.trailEn ? Math.random() : 0;
       const trailSeed = Math.floor(trailRandom * 0x100000000);
       const trailFactor = live.fever ? feverTrailWidthFactor(trailSeed) : trailRandom;
+      // World 模拟空间（`moveWithTransform=1`）：粒子出生时把发射器当前的入场位移烘进世界
+      // 坐标，此后不再跟随节点 ⇒ 沿路径留下拖尾，这才是可见的「行进高光」。
+      // 若每帧都叠加当前位置（Local 行为），粒子会全部堆在节点上，只会看到一个亮点。
+      const birth = live.coreSide && spec.world ? feverEntrance(live.age) : null;
+      const birthOff = offOverride ?? (birth
+        ? (live.coreSide === 'left' ? birth.leftCore : birth.rightCore) as [number, number, number]
+        : null);
       const spark: Spark = {
         x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
         y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
@@ -459,6 +479,7 @@ export class HitFx {
         r: spec.col[0], g: spec.col[1], b: spec.col[2], a: spec.col[3], grav: spec.grav,
         align: spec.align, mesh: spec.mesh, slice: spec.slice, tex: spec.tex,
         pitchLocal, spin: sample(spec.rot, rnd), followHead: spec.followHead,
+        off: birthOff ?? undefined,
         grad, gradMin, gradBlend, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
         fever: !!live.fever,
@@ -482,13 +503,13 @@ export class HitFx {
       live.sparks.push(spark);
     }
   }
-  private emitDue(live: Live, spec: Spec, prevAge: number, age: number) {
+  private emitDue(live: Live, spec: Spec, prevAge: number, age: number, dist = 0) {
     const period = live.loop && spec.loop ? spec.dur : Number.POSITIVE_INFINITY;
     const firstCycle = Number.isFinite(period) ? Math.max(0, Math.floor(prevAge / period)) : 0;
     const lastCycle = Number.isFinite(period) ? Math.floor(age / period) : 0;
     for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
       const base = Number.isFinite(period) ? cycle * period : 0;
-      this.emitBursts(live, spec, prevAge - base, age - base, period, age > 0);
+      this.emitBursts(live, spec, prevAge - base, age - base, period, age > 0, base);
     }
     const rate = sample(spec.rate, Math.random());
     if (rate > 0) {
@@ -496,17 +517,70 @@ export class HitFx {
       const n = Math.floor(spec.rateAcc);
       if (n > 0) { spec.rateAcc -= n; this.burst(live, spec, undefined, n); }
     }
+    // Rate over Distance：彗星 #607/#627 的主要发射源（5/单位）。节点沿入场曲线位移，单趟
+    // 走完边线全长 ~34.7 单位 ⇒ 约 174 个。World 空间下必须**按路径细分**发射：每个粒子带上
+    // 出生时刻的节点位置与已存活时长，才能沿轨迹连成可见的「行进高光」；若整帧一次性发射，
+    // 粒子会全部堆在帧末位置，且以整帧时长推进年龄而立即过期。
+    const rd = spec.rateDist ? sample(spec.rateDist, Math.random()) : 0;
+    if (rd > 0 && dist > 0) {
+      spec.distAcc += rd * dist;
+      const n = Math.floor(spec.distAcc);
+      if (n > 0) {
+        spec.distAcc -= n;
+        if (live.coreSide && spec.world && age > prevAge) {
+          // 出生时刻要落在「节点确实在位移」的那段区间内：节点走完入场路径后不再移动，
+          // 若仍把粒子均匀铺到帧末，会凭空在终点堆出一簇（长帧跳转时尤其明显）。
+          const stop = CORE_MOVE_END;
+          const t0 = Math.min(prevAge, stop);
+          const t1 = Math.min(age, stop);
+          for (let k = 0; k < n; k++) {
+            const birthTime = t1 > t0 ? t0 + ((k + 1) / n) * (t1 - t0) : t1;
+            const e = feverEntrance(birthTime);
+            const off = (live.coreSide === 'left' ? e.leftCore : e.rightCore) as [number, number, number];
+            const first = live.sparks.length;
+            this.burst(live, spec, undefined, 1, off);
+            for (let i = first; i < live.sparks.length; i++) {
+              live.sparks[i].firstStep = Math.max(0, age - birthTime);
+            }
+          }
+        } else {
+          this.burst(live, spec, undefined, n);
+        }
+      }
+    }
   }
-  private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number, advancing: boolean) {
+  private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number, advancing: boolean, cycleBase = 0) {
     for (const b of spec.bursts) {
-      for (let c = 0; c < b.cycles; c++) {
-        const t = b.t + c * (b.interval || 0);
-        if (t >= period) break;
+      const interval = b.interval || 0;
+      // `cycles=0` 映射为 Infinity（无限重复）。此时终止条件只剩 `t >= period`，
+      // 若 period 也是 Infinity（非循环层）或 interval 为 0，循环不会收敛 ⇒ 必须有硬上限。
+      const span = Math.max(0, age - prevAge);
+      const cap = interval > 0
+        // 有限周期：t 自 0 起、按 interval 递增，会被 `t >= period` 截断，最多 ceil(period/interval) 批。
+        // 非循环层：只需覆盖本帧时间窗，再多一批兜住窗口边界。
+        ? (Number.isFinite(period) ? Math.ceil(period / interval) : Math.ceil(span / interval) + 1)
+        : 1;
+      const limit = Math.min(Number.isFinite(b.cycles) ? b.cycles : cap, cap);
+      for (let c = 0; c < limit; c++) {
+        const t = b.t + c * interval;
+        // 带容差：interval 为 0.01 这类二进制不精确值时，`10*0.01` 会略小于 0.1，
+        // 严格的 `t >= period` 会多放一批出来。
+        if (t >= period - 1e-9) break;
         if (t > prevAge && t <= age) {
           const first = live.sparks.length;
-          this.burst(live, spec, b.count);
+          // 补发旧批次时，粒子出生在时刻 cycleBase+t 而非当前 age ⇒ 用出生时刻的入场偏移。
+          const absT = cycleBase + t;
+          const off = live.coreSide && advancing
+            ? (() => {
+                const e = feverEntrance(absT);
+                return (live.coreSide === 'left' ? e.leftCore : e.rightCore) as [number, number, number];
+              })()
+            : undefined;
+          this.burst(live, spec, b.count, undefined, off);
           if (live.fever && advancing) for (let i = first; i < live.sparks.length; i++) {
-            live.sparks[i].firstStep = Math.max(0, age - t);
+            // 必须用**绝对**出生时刻 absT 反推存活时长。此处若用周期相对量 t，
+            // 一旦 dur<1 使周期重启（如彗星层 dur=0.1），补发粒子会按错误时长被立即判死。
+            live.sparks[i].firstStep = Math.max(0, age - absT);
           }
         }
       }
@@ -536,7 +610,12 @@ export class HitFx {
       if (!live || coreAge === 0) continue;
       live.age = coreAge;
       live.sparks = [];
-      for (const spec of live.specs) this.emitDue(live, spec, -1e-6, coreAge);
+      // 中途进入 Fever：补发从 0 到 coreAge 的批次，距离同样按入场曲线积分。
+      const e0 = feverEntrance(0), e1 = feverEntrance(coreAge);
+      const a0 = live.coreSide === 'left' ? e0.leftCore : e0.rightCore;
+      const a1 = live.coreSide === 'left' ? e1.leftCore : e1.rightCore;
+      const dist = Math.hypot(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]);
+      for (const spec of live.specs) this.emitDue(live, spec, -1e-6, coreAge, dist);
     }
     if (coreAge > 0) this.step(0);
   }
@@ -552,11 +631,13 @@ export class HitFx {
       const startDelay = delay + (fever ? sample(s.delay, Math.random()) : 0);
       return {
         ...s, bursts: s.bursts.map(b => ({ ...b, t: b.t + startDelay })),
-        burstI: 0, rateAcc: 0, cycle: 0,
+        burstI: 0, rateAcc: 0, distAcc: 0, cycle: 0,
       };
     });
     const live: Live = {
-      uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 1),
+      // 发射器周期 = `lengthInSec`。原包里彗星层是 0.1s、LineBase 1.6s、LineMove 0.8s，
+      // 不能兜底成 1：那会把 0.1s 的层撑成 1s，整条时间轴都错。
+      uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 0.05),
       loop, x, width, specs, sparks: [], abs, fever, coreSide,
     };
     // Fire bursts at t=0 immediately (most note FX bursts are at 0).
@@ -608,9 +689,17 @@ export class HitFx {
       const prev = live.age;
       live.age += dt;
       if (live.coreSide && !feverEntrance(live.age).coreActive) continue;
+      // 彗星根节点的位移量（沿边线），供 Rate over Distance 使用。
+      let dist = 0;
+      if (live.coreSide) {
+        const a0 = feverEntrance(prev), a1 = feverEntrance(live.age);
+        const c0 = live.coreSide === 'left' ? a0.leftCore : a0.rightCore;
+        const c1 = live.coreSide === 'left' ? a1.leftCore : a1.rightCore;
+        dist = Math.hypot(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]);
+      }
       for (const spec of live.specs) {
-        if (live.loop && spec.loop) this.emitDue(live, spec, prev, live.age);
-        else if (!live.loop) this.emitDue(live, spec, prev, live.age);
+        if (live.loop && spec.loop) this.emitDue(live, spec, prev, live.age, dist);
+        else if (!live.loop) this.emitDue(live, spec, prev, live.age, dist);
       }
       const sparks: Spark[] = [];
       const frameDt = dt;
@@ -675,7 +764,11 @@ export class HitFx {
       const color = [s.r * g[0], s.g * g[1], s.b * g[2], s.a * g[3]];
       const entrance = live.coreSide ? feverEntrance(live.age) : undefined;
       const offset = entrance ? (live.coreSide === 'left' ? entrance.leftCore : entrance.rightCore) : [0, 0, 0];
-      const x = s.x + offset[0], y = s.y + offset[1], z = s.z + offset[2];
+      // World 模拟空间：粒子在出生瞬间记录世界位置，之后不随发射器移动。
+      const wx = s.x + (s.off ? s.off[0] : offset[0]);
+      const wy = s.y + (s.off ? s.off[1] : offset[1]);
+      const wz = s.z + (s.off ? s.off[2] : offset[2]);
+      const x = wx, y = wy, z = wz;
       const before = batch.n;
       if (s.mesh === 2) {
         // PlaneEffectModel01: local upright, bottom pivot (impact light column).
