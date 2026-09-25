@@ -11,9 +11,11 @@ export interface FxNode {
   sx: number; sy: number; sz: number; active: boolean;
   ps?: {
     en: boolean; dur: number; loop: boolean; maxp: number; local: boolean; grav: number;
+    /** 序列化 `moveWithTransform`（`int`，Unity 保留的旧名）＝ `ParticleSystemSimulationSpace`：0=Local 1=World 2=Custom。 */
+    world?: boolean;
     col0R: number; col0G: number; col0B: number; col0A: number; size3d?: boolean;
     delay?: FxMM; life?: FxMM; speed?: FxMM; size?: FxMM; sizeY?: FxMM; rot?: FxMM;
-    rate?: FxMM; bursts?: { t: number; count: FxMM; cycles: number; interval: number; prob: number }[];
+    rate?: FxMM; rateDist?: FxMM; bursts?: { t: number; count: FxMM; cycles: number; interval: number; prob: number }[];
     shape?: {
       en: boolean; type: number; angle: number; radius: number; sx: number; sy: number; sz: number;
       px?: number; py?: number; pz?: number; rotx?: number; roty?: number; rotz?: number; randDir: number;

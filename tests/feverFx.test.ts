@@ -243,6 +243,70 @@ it('Fever 沿长度颜色分别作用于头尾，不替代寿命颜色', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
+it('burst cycles=0 按 Unity 语义无限重复，且不会在非循环层挂死', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.loop = true;
+  ps.dur = 0.1;
+  ps.life = constant(2);
+  ps.trail = undefined;
+  ps.limit = undefined;
+  ps.rate = constant(0);
+  // cycles=0 ⇒ Unity 语义为无限重复（内部 -1 哨兵），不是「只发一轮」。
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 0, interval: 0.01, prob: 1 }];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.spawn('feverLeft', 0, 1, true);
+    const count = () => { fx.draw(); return fx.group.children.reduce((n, c) => n + (c as THREE.Mesh).geometry.drawRange.count / 6, 0); };
+    // 单个 0.1s 周期内 interval=0.01 ⇒ t=0…0.09 共 10 批（t<period 截断）。
+    fx.sync(chart, 0.09, false);
+    expect(count()).toBe(10);
+    // 跨过周期边界：新周期从 t=0 重发 ⇒ abs 0.1 处再一批。若按旧的 cycles=1 映射，这里会停在 10。
+    fx.sync(chart, 0.1, false);
+    expect(count()).toBe(11);
+    // 再跨一个周期 ⇒ 继续累加，证明是无限重复而非只发一轮。
+    fx.sync(chart, 0.2, false);
+    expect(count()).toBe(21);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
+it('burst cycles=0 落在非循环层时不会死循环', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever![0]];
+  const node = data.fever[0].nodes[0];
+  data.fever[0].nodes = [node];
+  const ps = node.ps!;
+  const constant = (v: number) => ({ k: 0, v, lo: v, hi: v, mult: 1 });
+  ps.loop = false;
+  ps.dur = 0.05;
+  ps.life = constant(2);
+  ps.trail = undefined;
+  ps.limit = undefined;
+  ps.rate = constant(0);
+  // 非循环 + 无限 cycles + interval=0：若没有硬上限，`t >= period` 永不成立会挂死。
+  ps.bursts = [{ t: 0, count: constant(1), cycles: 0, interval: 0, prob: 1 }];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  try {
+    const chart = parseChart({ Notes: [], Bpms: [] });
+    fx.sync(chart, 0, false);
+    fx.spawn('feverLeft', 0, 1, false);
+    fx.sync(chart, 0.05, false);   // 必须在此返回
+    fx.draw();
+    const n = fx.group.children.reduce((s, c) => s + (c as THREE.Mesh).geometry.drawRange.count / 6, 0);
+    expect(n).toBe(1);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
 it('循环发射跨过多个周期不漏发，也不重复边界批次', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
@@ -333,7 +397,7 @@ it('Fever 局部入场粒子跟随动画节点并按关闭边界消失', () => {
   } finally { fx.dispose(); texture.dispose(); }
 });
 
-it('原始核心入场 prefab 在短周期中持续发射，并在关闭时清空', () => {
+it('原始核心入场 prefab 以 Rate over Distance 沿路径持续发射，并在关闭时清空', () => {
   const data = loadFeverFixture();
   data.prefabs = [];
   data.fever = [feverCorePrefab('left'), feverCorePrefab('right')];
@@ -342,16 +406,45 @@ it('原始核心入场 prefab 在短周期中持续发射，并在关闭时清�
   try {
     const chart = parseChart({ Notes: [], Bpms: [] });
     fx.sync(chart, 0, false); fx.setFever(true);
-    for (const time of [0.05, 0.15, 0.35, 0.55]) {
+    for (const time of [0.05, 0.15, 0.35]) {
       fx.sync(chart, time, false); fx.draw();
       const drawn = fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh[];
-      expect(drawn).toHaveLength(1);
-      expect(drawn[0].geometry.drawRange.count).toBe(12);
-      expect(drawn[0].renderOrder).toBe(640);
-      const p = drawn[0].geometry.getAttribute('position');
-      expect((p.getX(0) + p.getX(2)) / 2).toBeLessThan(0);
-      expect((p.getX(6) + p.getX(8)) / 2).toBeGreaterThan(0);
+      // 两个发射器贴图不同（#607 用 light03、#562 用 ParticleA001）⇒ 分属两个批次。
+      expect(drawn.length).toBeGreaterThanOrEqual(2);
+      for (const mesh of drawn) expect(mesh.renderOrder).toBe(640);
+      // 彗星本体批次 = 顶点数最多的那个。
+      const main = drawn.reduce((a, b) =>
+        a.geometry.drawRange.count >= b.geometry.drawRange.count ? a : b);
+      const count = main.geometry.drawRange.count;
+      // 原包 #607/#627 的发射量以 rateOverDistance=5/单位 为主（burst 仅 1×15@0.4s）。
+      // 单趟路径长 hypot(16.5,16.3,25.8)≈34.7 单位 ⇒ 若只走 burst，粒子数会少一个量级。
+      expect(count).toBeGreaterThan(100);
+      // World 模拟空间：粒子沉积在沿途各点，而不是全部堆在节点当前位置。
+      const p = main.geometry.getAttribute('position');
+      let minX = Infinity, maxX = -Infinity;
+      for (let i = 0; i < count; i += 3) {
+        const c = (p.getX(i) + p.getX(i + 2)) / 2;
+        if (c < minX) minX = c;
+        if (c > maxX) maxX = c;
+      }
+      // 拖尾同时覆盖起点侧与当前节点侧（展开量随节点前进而收窄）。
+      expect(maxX - minX).toBeGreaterThan(10);
     }
+    // 节点在 0.4166s 走完路径后不再位移 ⇒ 彗星本体的 Rate over Distance 停止，
+    // 只剩 burst 与子发射器的核心颗粒。用正向时间轴捕获「本体批次」再前进验证。
+    fx.sync(chart, 0.35, false); fx.draw();
+    const early = (fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh[]);
+    const main = early.reduce((a, b) =>
+      a.geometry.drawRange.count >= b.geometry.drawRange.count ? a : b);
+    const earlyCount = main.geometry.drawRange.count;
+    expect(earlyCount).toBeGreaterThan(100);
+    fx.sync(chart, 0.55, false); fx.draw();
+    // 停走后本体的存活粒子只剩零星 burst，应不足早期的一成。
+    expect(main.geometry.drawRange.count).toBeLessThan(earlyCount * 0.1);
+    // 子发射器（#562/#561）不随节点停走而停：它按自身 0.1s 周期持续发射，
+    // 故此时画面上仍有核心颗粒。
+    const late = (fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh[]);
+    expect(late.reduce((n, m) => n + m.geometry.drawRange.count, 0)).toBeGreaterThan(50);
     fx.sync(chart, 0.64, false); fx.draw();
     expect(fx.group.children.every(c => (c as THREE.Mesh).geometry.drawRange.count === 0)).toBe(true);
   } finally { fx.dispose(); texture.dispose(); }
@@ -393,8 +486,17 @@ it('核心入场以歌曲 Fever 起点为准，跳转到入场之后不重播', 
     fx.sync(chart, 10.1, false); fx.draw();
     const mesh = fx.group.children.find(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh;
     expect(mesh).toBeDefined();
+    // 从 0.2s 起补发：彗星应沿已走过的路径展开（两侧都在），而不是只留一个点。
     const p = mesh.geometry.getAttribute('position');
-    expect((p.getX(0) + p.getX(2)) / 2).toBeCloseTo(-8.374998509883881, 5);
+    const count = mesh.geometry.drawRange.count;
+    let minX = Infinity, maxX = -Infinity;
+    for (let i = 0; i < count; i += 3) {
+      const c = (p.getX(i) + p.getX(i + 2)) / 2;
+      if (c < minX) minX = c;
+      if (c > maxX) maxX = c;
+    }
+    expect(minX).toBeLessThan(-5);
+    expect(maxX).toBeGreaterThan(5);
   } finally { fx.dispose(); texture.dispose(); }
 });
 

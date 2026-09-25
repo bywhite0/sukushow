@@ -1,7 +1,10 @@
 /** sharedassets56 #92 streamed 曲线；路径 CRC 与原始 level56 层级交叉核对。 */
+/** 核心节点沿边线位移的结束时刻（秒）；此后节点静止，Rate over Distance 不再发射。 */
+export const CORE_MOVE_END = 0.4166666567325592;
+
 export function feverEntrance(age: number) {
   const t = Math.max(0, age);
-  const moveEnd = 0.4166666567325592;
+  const moveEnd = CORE_MOVE_END;
   const maskEnd = 0.4333333373069763;
   const leftCore = t >= moveEnd
     ? [-1.9600000381469727, 6.900000095367432, 25.799999237060547]
