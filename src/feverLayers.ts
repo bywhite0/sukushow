@@ -1,13 +1,24 @@
 import * as THREE from 'three';
 import { feverLineParticle } from './feverLines';
-import { feverMaskGeometry } from './feverMask';
+import { FEVER_EDGE_ROTATION, feverMaskGeometry, mirrorRotationToThree } from './feverMask';
 
+/**
+ * 边线各层共用 LineMask 的帧。所有位置/旋转以 **Unity 世界坐标**给出，本类统一做
+ * Z 镜像（位置取 -z、旋转取 (-x,-y,z,w)）交给 Three，避免同一组数值出现两种约定。
+ */
 export class FeverLayers {
   readonly group = new THREE.Group();
   private masks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
   private lines: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; kind: 'base' | 'move'; side: 'left' | 'right' }[] = [];
+  private quaternions: Record<'left' | 'right', THREE.Quaternion>;
   constructor(base: THREE.Texture, move: THREE.Texture, mask: THREE.Texture) {
-    this.group.position.set(0, 0, -5.99);
+    // 原始 `LineParticle` 链（WorldRoot > Fever > FeverEffectSet_001 > LineParticle）逐级均为
+    // 单位变换 ⇒ 边线层位于世界原点。旧值 -5.99 来自同级的 sc2_ingeame_feverEffect_L/R_001。
+    this.group.position.set(0, 0, 0);
+    this.quaternions = {
+      left: new THREE.Quaternion().fromArray(mirrorRotationToThree(FEVER_EDGE_ROTATION.left)),
+      right: new THREE.Quaternion().fromArray(mirrorRotationToThree(FEVER_EDGE_ROTATION.right)),
+    };
     for (const side of ['left', 'right'] as const) {
       const source = feverMaskGeometry(side, 0);
       const geometry = new THREE.BufferGeometry();
@@ -22,7 +33,8 @@ export class FeverLayers {
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `mask-${side}`;
-      mesh.quaternion.fromArray(source.rotation);
+      mesh.position.set(source.position[0], source.position[1], -source.position[2]);
+      mesh.quaternion.copy(this.quaternions[side]);
       mesh.renderOrder = 1039;
       mesh.frustumCulled = false;
       this.masks.push(mesh);
@@ -42,6 +54,7 @@ export class FeverLayers {
       });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
       mesh.name = `${kind}-${side}${i ? `-${i}` : ''}`;
+      mesh.quaternion.copy(this.quaternions[side]);
       mesh.renderOrder = kind === 'base' ? 1040 : 1041;
       mesh.frustumCulled = false;
       this.lines.push({ mesh, kind, side });
@@ -51,14 +64,15 @@ export class FeverLayers {
   update(on: boolean, elapsed: number) {
     this.group.visible = on;
     if (!on) return;
-    this.masks.forEach((mesh, i) => mesh.scale.fromArray(feverMaskGeometry(i === 0 ? 'left' : 'right', elapsed).scale));
+    this.masks.forEach((mesh, i) => {
+      const source = feverMaskGeometry(i === 0 ? 'left' : 'right', elapsed);
+      mesh.scale.fromArray(source.scale);
+      mesh.position.set(source.position[0], source.position[1], -source.position[2]);
+    });
     for (const { mesh, kind, side } of this.lines) {
       const state = feverLineParticle(kind, side, elapsed);
-      mesh.position.set(state.position[0], state.position[1], state.position[2]);
+      mesh.position.set(state.position[0], state.position[1], -state.position[2]);
       mesh.scale.set(state.size[0], state.size[1], 1);
-      const [x, y, z] = state.rotation;
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'ZXY'));
-      mesh.quaternion.set(-q.x, -q.y, q.z, q.w);
       mesh.material.color.setRGB(state.color[0], state.color[1], state.color[2], THREE.LinearSRGBColorSpace);
       mesh.material.opacity = state.color[3];
     }
