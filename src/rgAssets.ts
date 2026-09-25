@@ -22,6 +22,11 @@ export interface FxNode {
     };
     col?: { en: boolean; mode: number; max?: FxGrad; min?: FxGrad };
     vel?: { en: boolean; world: boolean; x: FxMM; y: FxMM; z: FxMM };
+    /**
+     * `ForceOverLifetimeModule`：**加速度**（单位/秒²），不是速度——积分时按 `v += F·dt`。
+     * `world` 即 `inWorldSpace`；为 `false` 时按节点旋转把力转到世界系。
+     */
+    force?: { en: boolean; world: boolean; x: FxMM; y: FxMM; z: FxMM };
     sizeol?: { en: boolean; curve?: FxMM; y?: FxMM; sep?: boolean };
     /** LimitVelocityOverLifetime — clamps |v| toward speed with dampen. */
     limit?: { en: boolean; dampen: number; speed?: FxMM };
