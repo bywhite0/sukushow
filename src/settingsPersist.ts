@@ -36,6 +36,8 @@ export type PreviewSettings = {
   guideAlpha: number
   /** 特效不透明度（百分比 0..100） */
   effectOpacity: number
+  /** Fever 显示（只影响特效，不改变逻辑状态） */
+  feverDisplay: boolean
   /** BGM 音量（百分比 0..100） */
   bgmVolume: number
   /** 音效音量（百分比 0..100） */
@@ -58,6 +60,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   holdAlpha: 74,
   guideAlpha: 50,
   effectOpacity: 100,
+  feverDisplay: true,
   bgmVolume: 100,
   soundVolume: 100,
   rate: 1,
@@ -96,6 +99,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     holdAlpha: clamp(num('holdAlpha', d.holdAlpha), 0, 100),
     guideAlpha: clamp(num('guideAlpha', d.guideAlpha), 0, 100),
     effectOpacity: clamp(num('effectOpacity', d.effectOpacity), 0, 100),
+    feverDisplay: bool('feverDisplay', d.feverDisplay),
     bgmVolume: clamp(num('bgmVolume', d.bgmVolume), 0, 100),
     soundVolume: clamp(num('soundVolume', d.soundVolume), 0, 100),
     rate: [0.5, 0.75, 1, 1.25, 1.5, 2].includes(rateValue) ? rateValue : d.rate,

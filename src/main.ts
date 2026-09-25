@@ -23,6 +23,7 @@ import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from '
 import { parseUrlPreviewParams } from './lib/url'
 import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from './llll/songAssets'
 import { createSongPicker } from './ui/songPicker'
+import { feverForSong } from './llll/fever'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -64,7 +65,9 @@ app.innerHTML = `
 <label class="setting" for="hold-alpha"><span>长条透明度<output id="hold-alpha-value">74</output></span><input id="hold-alpha" type="range" min="0" max="100" step="1" value="74"></label>
 <label class="setting" for="guide-alpha"><span>Guide 浓度<output id="guide-alpha-value">50</output></span><input id="guide-alpha" type="range" min="0" max="100" step="1" value="50"></label>
 <label class="setting" for="effect-opacity"><span>特效不透明度<output id="effect-opacity-value">100</output></span><input id="effect-opacity" type="range" min="0" max="100" step="1" value="100"></label>
+<label class="check"><input id="fever-display" type="checkbox" checked>Fever 特效</label>
 <label class="setting" for="effect-profile"><span>特效配置</span><select id="effect-profile"><option value="0" selected>Profile 0</option><option value="1">Profile 1</option></select></label>
+<p class="setting" id="fever-status"><small>Fever：未加载曲目。</small></p>
 </section>
 <section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
 <label class="setting" for="bgm-volume"><span>BGM 音量<output id="bgm-volume-value">100</output></span><input id="bgm-volume" type="range" min="0" max="100" step="1" value="100"></label>
@@ -161,6 +164,7 @@ function readSettings(): PreviewSettings {
     holdAlpha: Number(input('hold-alpha').value),
     guideAlpha: Number(input('guide-alpha').value),
     effectOpacity: Number(input('effect-opacity').value),
+    feverDisplay: input('fever-display').checked,
     bgmVolume: Number(input('bgm-volume').value),
     soundVolume: Number(input('sound-volume').value),
     rate: Number(select('rate').value),
@@ -191,6 +195,7 @@ function applySettingsToForm(settings: PreviewSettings) {
   setRange('hold-alpha', settings.holdAlpha ?? 74)
   setRange('guide-alpha', settings.guideAlpha ?? 50)
   setRange('effect-opacity', settings.effectOpacity ?? 100)
+  input('fever-display').checked = settings.feverDisplay ?? true
   setRange('bgm-volume', settings.bgmVolume ?? 100)
   setRange('sound-volume', settings.soundVolume ?? 100)
   select('rate').value = String(settings.rate ?? 1)
@@ -203,12 +208,13 @@ function applyRuntimeConfig() {
   const config = readRuntimeConfig()
   player.setPreviewConfig(config)
   player.setAudioVolumes(config.bgmVolume, config.soundVolume)
+  player.setFeverDisplay(input('fever-display').checked)
 }
 
 for (const id of [
   'mirror', 'lines', 'flick-anim', 'hold-anim', 'note-skin', 'effect-profile',
   'stage-cover', 'stage-opacity', 'bg-brightness', 'hold-alpha', 'guide-alpha',
-  'effect-opacity', 'bgm-volume', 'sound-volume', 'note-speed',
+  'effect-opacity', 'fever-display', 'bgm-volume', 'sound-volume', 'note-speed',
 ]) {
   const node = input(id)
   const handler = () => {
@@ -226,6 +232,27 @@ const format = (seconds: number) =>
 
 function setDuration(durationSec: number) {
   input('timeline').max = String(durationSec)
+}
+
+/**
+ * 推送当前曲目的 Fever 时段；无数据时显式推 -1 关闭（不沿用上一首）。
+ *
+ * Fever 只认曲目 Id（歌曲主数据），本地文件导入没有 Id，故一律关闭——
+ * 与自家 llll-preview-web「未知歌曲不估算」同口径。
+ */
+function applyFeverWindow(songId: string | null) {
+  const window = feverForSong(songId)
+  if (window) {
+    player.setFeverWindow(window.start, window.end)
+  } else {
+    player.setFeverWindow(-1, -1)
+  }
+  const status = document.getElementById('fever-status')
+  if (status) {
+    status.innerHTML = window
+      ? `<small>Fever：${window.start.toFixed(3)} – ${window.end.toFixed(3)} 秒</small>`
+      : '<small>Fever：本曲无数据（不估算）。</small>'
+  }
 }
 
 // ---- 资源预载 ----
@@ -345,6 +372,7 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
   }
   // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
   await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
+  applyFeverWindow(songId)
 }
 
 /** 60 轨全域演示谱：覆盖 Single / Flick / Hold / Trace 与最宽音符。 */
@@ -410,6 +438,7 @@ async function loadFromUrlParams(): Promise<boolean> {
 
   const label = params.title ?? params.scoreTitle ?? url.split('/').pop() ?? 'URL 谱面'
   await loadChart(chart, label, params.rawOffsetMs ?? 0)
+  applyFeverWindow(null)
   return true
 }
 
@@ -465,6 +494,7 @@ async function boot() {
   }
 
   await loadChart(demoChart(), '演示谱面')
+  applyFeverWindow(null)
   renderLoop()
 }
 
@@ -519,6 +549,8 @@ input('chart-file').onchange = async () => {
       ? parseChart(JSON.parse(asText.replace(/^\ufeff/, '')))
       : decodeChart(bytes)
     await loadChart(chart, file.name)
+    // 本地文件没有曲目 Id，Fever 一律关闭（不估算）。
+    applyFeverWindow(null)
   } catch (error) {
     message(`谱面读取失败：${String(error)}。原谱面已保留。`, true)
   } finally {

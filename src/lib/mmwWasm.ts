@@ -277,6 +277,16 @@ export class MmwWasmPlayer {
     )
   }
 
+  /** Fever 时段（歌曲秒）。start<0 或 end<=start 视为本曲无 Fever。 */
+  setFeverWindow(startSec: number, endSec: number) {
+    this.assertReady().ccall('setPlayerFeverWindow', null, ['number', 'number'], [startSec, endSec])
+  }
+
+  /** Fever 显示开关；只影响特效，不改变逻辑状态。 */
+  setFeverDisplay(enabled: boolean) {
+    this.assertReady().ccall('setPlayerFeverDisplay', null, ['number'], [enabled ? 1 : 0])
+  }
+
   renderFrame() {
     this.assertReady().ccall('renderPlayerFrame', null, [], [])
   }

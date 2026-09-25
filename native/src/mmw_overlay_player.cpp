@@ -238,6 +238,11 @@ namespace
         double apStartSec = 0.0;
         bool apSoundActive = false;
         double playbackRate = 1.0;
+        // Fever 时段（歌曲秒）；-1 表示本曲无 Fever 数据。显示开关只影响特效，
+        // 不改变逻辑状态（与 llll 客户端 EnableFeverDisplay 同口径）。
+        double feverStartSec = -1.0;
+        double feverEndSec = -1.0;
+        bool feverDisplayEnabled = true;
     };
 
     PlayerRuntimeState gPlayer;
@@ -2372,6 +2377,16 @@ void main() {
     constexpr float CHART_END_PADDING_SEC = 5.0f;
     constexpr float TEAM_POWER = 250000.0f;
     constexpr float RATING = 26.0f;
+    // Fever：屏幕左右两侧的彩虹边条 + 入场时的「FEVER!」字样。
+    // 宽度按 1920 设计宽度取比例，随画布缩放。
+    constexpr float FEVER_EDGE_WIDTH_RATIO = 0.115f;
+    constexpr float FEVER_EDGE_PEAK_ALPHA = 0.85f;
+    // 「FEVER!」字样的入场时长；原始素材 fx_fever_v2 约 2.38s，主峰在 0.6s 前。
+    constexpr float FEVER_TEXT_DURATION_SEC = 2.2f;
+    constexpr float FEVER_TEXT_PEAK_SEC = 0.55f;
+    // 上下两端的纵向衰减切片，避免边条像一块死板的贴纸。
+    constexpr int FEVER_EDGE_SLICES = 4;
+
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
     constexpr float INTRO_PLAYFIELD_FADE_IN_SEC = 1.8f;
@@ -3102,6 +3117,118 @@ void main() {
         return fonts;
     }
 
+    /**
+     * Fever 特效：屏幕左右两侧的彩虹边条 + 入场「FEVER!」字样。
+     *
+     * 视觉按 PJSK 官方素材（TootieJin/pjsekai-overlay-APPEND 的 extra-assets/fever，
+     * fx_fever_v2 / fx_fever_chance_v2）：玩家侧描述为「フィーバー中に
+     * 画面の左右が虹色になる」，故彩虹落在**画面左右边缘**，不是判定线。
+     *
+     * 本函数是纯时间函数（无内部状态），因此跳转/暂停后画面自洽，
+     * 不会出现「seek 到 Fever 中段却补播入场」的问题。
+     */
+    void drawFeverOverlay(
+        GlRenderer& renderer,
+        const std::unordered_map<std::string, Texture>& hudTextures,
+        const IntroFontSet& fonts,
+        float chartTimeSec,
+        float hudAlpha)
+    {
+        if (gPlayer.feverStartSec < 0.0 || gPlayer.feverEndSec <= gPlayer.feverStartSec) {
+            return;
+        }
+        const float overlayAlpha = clamp01(hudAlpha);
+        if (overlayAlpha <= 0.001f) {
+            return;
+        }
+        const float feverLocalSec = chartTimeSec - static_cast<float>(gPlayer.feverStartSec);
+        const float feverEndLocalSec = static_cast<float>(gPlayer.feverEndSec) - static_cast<float>(gPlayer.feverStartSec);
+        // 区间取 [start, end)，与 llll 客户端的 isFeverAt 同口径。
+        const bool feverActive = feverLocalSec >= 0.0f && feverLocalSec < feverEndLocalSec;
+        const bool textActive =
+            feverLocalSec >= 0.0f && feverLocalSec < FEVER_TEXT_DURATION_SEC;
+        if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive)) {
+            return;
+        }
+
+        const auto previewRectWindow = renderer.previewRectWindow();
+        const UiTransform tx = buildUiTransform(previewRectWindow[2], previewRectWindow[3]);
+        auto px = [&](float x) { return static_cast<float>(previewRectWindow[0]) + tx.offsetX + x * tx.scale; };
+        auto py = [&](float y) { return static_cast<float>(previewRectWindow[1]) + tx.offsetY + y * tx.scale; };
+        auto ps = [&](float value) { return value * tx.scale; };
+        ImDrawList* overlay = ImGui::GetForegroundDrawList();
+
+        if (feverActive) {
+            const Texture* rainbow = findTexture(hudTextures, "fever_rainbow");
+            if (rainbow != nullptr && rainbow->id != 0) {
+                const float bandWidth = 1920.0f * FEVER_EDGE_WIDTH_RATIO;
+                // 呼吸脉动：与素材帧的亮度起伏同量级，不做高频闪烁以免干扰读谱。
+                const float pulse = 0.75f + 0.25f * std::sin(feverLocalSec * 3.14159265f * 1.6f);
+                const float baseAlpha = clamp01(FEVER_EDGE_PEAK_ALPHA * pulse * overlayAlpha);
+                const float sliceHeight = 1080.0f / static_cast<float>(FEVER_EDGE_SLICES);
+
+                beginAdditive(overlay);
+                for (int slice = 0; slice < FEVER_EDGE_SLICES; ++slice) {
+                    const float top = static_cast<float>(slice) * sliceHeight;
+                    const float v0 = static_cast<float>(slice) / static_cast<float>(FEVER_EDGE_SLICES);
+                    const float v1 = static_cast<float>(slice + 1) / static_cast<float>(FEVER_EDGE_SLICES);
+                    // 纵向衰减：中间偏上最亮，上下两端收掉，避免整条边像贴纸。
+                    const float center = (v0 + v1) * 0.5f;
+                    const float falloff = 1.0f - std::abs(center - 0.42f) / 0.58f;
+                    const float sliceAlpha = clamp01(baseAlpha * std::max(0.15f, falloff));
+                    const ImU32 tint =
+                        IM_COL32(255, 255, 255, static_cast<int>(std::lround(sliceAlpha * 255.0f)));
+                    // 左边缘：彩虹由外向内；右边缘镜像，保证两侧对称朝外发散。
+                    drawHudImageUv(
+                        overlay,
+                        *rainbow,
+                        px(0.0f),
+                        py(top),
+                        ps(bandWidth),
+                        ps(sliceHeight),
+                        ImVec2(0.0f, v0),
+                        ImVec2(1.0f, v1),
+                        tint);
+                    drawHudImageUv(
+                        overlay,
+                        *rainbow,
+                        px(1920.0f - bandWidth),
+                        py(top),
+                        ps(bandWidth),
+                        ps(sliceHeight),
+                        ImVec2(1.0f, v0),
+                        ImVec2(0.0f, v1),
+                        tint);
+                }
+                endAdditive(overlay);
+            }
+        }
+
+        if (textActive && fonts.title != nullptr) {
+            // 入场：快速冲到峰值后缓慢收尾（对齐 fx_fever_v2 的 2.38s 节奏）。
+            const float progress = clamp01(feverLocalSec / FEVER_TEXT_DURATION_SEC);
+            const float peak = clamp01(FEVER_TEXT_PEAK_SEC / FEVER_TEXT_DURATION_SEC);
+            const float alpha = progress < peak
+                ? clamp01(progress / std::max(peak, 0.0001f))
+                : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
+            const char* text = "FEVER!";
+            const float fontSize = 108.0f;
+            const ImVec2 textSize = fonts.title->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
+            const float textX = 960.0f - textSize.x * 0.5f;
+            const float textY = 540.0f - textSize.y * 0.5f;
+            const ImU32 color =
+                IM_COL32(255, 255, 255, static_cast<int>(std::lround(clamp01(alpha * overlayAlpha) * 255.0f)));
+            beginAdditive(overlay);
+            overlay->AddText(
+                fonts.title,
+                ps(fontSize),
+                ImVec2(px(textX), py(textY)),
+                color,
+                text);
+            endAdditive(overlay);
+        }
+    }
+
     void drawOpeningIntroOverlay(
         GlRenderer& renderer,
         const std::unordered_map<std::string, Texture>& hudTextures,
@@ -3664,6 +3791,7 @@ void main() {
             addHudTexture(std::string("life_digit_s_") + ch, std::string("overlay/life/v3/digit/s") + ch + ".png");
         }
         addHudTexture("intro_grad", "overlay/start_grad.png");
+        addHudTexture("fever_rainbow", "overlay/rainbow.png");
         addHudTexture("custom_score_icon", "overlay/custom-score/icon.png");
         addHudTexture("ap_text", "overlay/ap-native/all-perfect.png");
         addHudTexture("ap_text_line", "overlay/ap-native/all-perfect-line.png");
@@ -4231,6 +4359,12 @@ void main() {
             gPlayer.hudTextures,
             outputTimeSec,
             static_cast<float>(gPlayer.apStartSec));
+        drawFeverOverlay(
+            *gPlayer.renderer,
+            gPlayer.hudTextures,
+            *gPlayer.introFonts,
+            chartTimeSec,
+            playfieldVisibility);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         gPlayer.renderer->present();
@@ -4489,6 +4623,17 @@ extern "C"
             gPlayer.stageCover,
             stageOpacity,
             backgroundBrightness);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverWindow(double startSec, double endSec)
+    {
+        gPlayer.feverStartSec = startSec;
+        gPlayer.feverEndSec = endSec;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverDisplay(int enabled)
+    {
+        gPlayer.feverDisplayEnabled = enabled != 0;
     }
 
     EMSCRIPTEN_KEEPALIVE void renderPlayerFrame()
