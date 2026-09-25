@@ -29,17 +29,24 @@ export const enum LlllNoteType {
 }
 
 /**
- * 单个音符的 category / noteBaseType。
+ * 单个音符的 (category, noteBaseType, critical)。
  * 取值经 custom_score_json.h 的谓词反推核对：
  *   isFlickNote      = base==3 || category==3
  *   isTraceNote      = base in {4,8,11} || category in {4,6,8}
  *   isTraceFlickNote = base==4 || category==8
- * 故 SINGLE→(0,1)、FLICK→(3,3)、TRACE→(4,11) 与 pjsk_mapper.py 一致。
+ * 故 SINGLE→(0,1)、FLICK→(3,3) 与 pjsk_mapper.py 一致。
+ *
+ * TRACE 走 **friction 的 critical 形式** (4,11,critical)：
+ * llll 源谱的トレース音符在游戏内是金色（贴图 ui_sc2_ingame_notes_trace
+ * 主色均值 RGB(252,230,68)），而 PJSK 渲染管线的 friction 只有 critical 档
+ * 才取金色贴图 SPR_NOTE_FRICTION_CRITICAL(226,197,109)；非 critical 档是
+ * 青绿 SPR_NOTE_FRICTION(103,241,183)。故必须带 critical 才与源游戏同色。
+ * 谓词不变（仍命中 isTraceNote: base==11），只是多一枚 type=1 的 critical 旗标。
  */
-const TAP_KINDS: Record<number, readonly [number, number]> = {
-  [LlllNoteType.Single]: [0, 1],
-  [LlllNoteType.Flick]: [3, 3],
-  [LlllNoteType.Trace]: [4, 11],
+const TAP_KINDS: Record<number, readonly [number, number, boolean]> = {
+  [LlllNoteType.Single]: [0, 1, false],
+  [LlllNoteType.Flick]: [3, 3, false],
+  [LlllNoteType.Trace]: [4, 11, true],
 }
 
 /** Hold 首/中/尾节点的 (category, noteBaseType)；中段走 base=6（Invisible 链节点）。 */
@@ -189,6 +196,7 @@ function makeNote(
   laneEnd: number,
   category: number,
   noteBaseType: number,
+  critical = false,
 ): RawNoteJson {
   return {
     id,
@@ -196,7 +204,7 @@ function makeNote(
     laneStart,
     laneEnd,
     category,
-    type: 0,
+    type: critical ? 1 : 0,
     speedRatio: 1,
     noteLineType: 0,
     noteBaseType,
@@ -307,7 +315,8 @@ export function chartToMusicScore(chart: Chart, options: ConvertOptions = {}): M
     if (!kind) {
       throw new Error(`未知的 llll 音符类型：${note.type}（UID ${note.uid}）`)
     }
-    notes.push(makeNote(nextId(), ticks.at(note.time), note.l, note.r, kind[0], kind[1]))
+    const [category, noteBaseType, critical] = kind
+    notes.push(makeNote(nextId(), ticks.at(note.time), note.l, note.r, category, noteBaseType, critical))
   }
 
   notes.sort((a, b) => (a.ticks === b.ticks ? a.id - b.id : a.ticks - b.ticks))

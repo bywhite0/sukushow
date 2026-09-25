@@ -81,6 +81,25 @@ describe.skipIf(!SAMPLE)('真实 llll 谱面（203115_04，3088 音符）', () =
     }
   })
 
+  it('TRACE 全部走 friction 的 critical 形式（与源游戏金色一致）', () => {
+    // llll 源谱的トレース在游戏内是金色；PJSK 管线里 friction 只有 critical 档
+    // 取金色贴图 SPR_NOTE_FRICTION_CRITICAL，非 critical 档是青绿 SPR_NOTE_FRICTION。
+    const chart = parseChart(loadSample())
+    const score = chartToMusicScore(chart)
+
+    const isTrace = (n: { category: number; noteBaseType: number }) =>
+      n.noteBaseType === 11 || n.noteBaseType === 4 || n.noteBaseType === 8 ||
+      n.category === 4 || n.category === 6 || n.category === 8
+
+    const traces = score.NoteList.filter(isTrace)
+    expect(traces.length).toBeGreaterThan(0)
+    expect(traces.every((n) => n.type === 1)).toBe(true)
+
+    // 其余音符（含 Hold 节点）不得被误染成 critical
+    const others = score.NoteList.filter((n) => !isTrace(n))
+    expect(others.every((n) => n.type === 0)).toBe(true)
+  })
+
   it('事件表包含 BPM 且 ticks 非负', () => {
     const chart = parseChart(loadSample())
     const score = chartToMusicScore(chart)

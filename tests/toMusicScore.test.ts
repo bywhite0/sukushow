@@ -69,17 +69,50 @@ describe('音符种类映射', () => {
     const score = chartToMusicScore(chart)
     const sorted = [...score.NoteList].sort((a, b) => a.ticks - b.ticks)
 
-    // SINGLE → (0,1)：既非 flick 也非 trace
+    // SINGLE → (0,1)：既非 flick 也非 trace，非 critical
     expect(sorted[0].category).toBe(0)
     expect(sorted[0].noteBaseType).toBe(1)
+    expect(sorted[0].type).toBe(0)
 
     // FLICK → (3,3)：命中 isFlickNote（base==3）
     expect(sorted[1].category).toBe(3)
     expect(sorted[1].noteBaseType).toBe(3)
+    expect(sorted[1].type).toBe(0)
 
-    // TRACE → (4,11)：命中 isTraceNote（base==11）
+    // TRACE → (4,11)：命中 isTraceNote（base==11），且带 critical 旗标
     expect(sorted[2].category).toBe(4)
     expect(sorted[2].noteBaseType).toBe(11)
+    expect(sorted[2].type).toBe(1)
+  })
+
+  it('TRACE 走 friction 的 critical 形式（金色贴图，与 llll 源游戏同色）', () => {
+    // llll トレース在游戏内是金色；PJSK 管线里 friction 只有 critical 档取
+    // SPR_NOTE_FRICTION_CRITICAL（金色），非 critical 档是 SPR_NOTE_FRICTION（青绿）。
+    // 故 TRACE 必须置 type=1，否则渲染成青绿、与源游戏不符。
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(3, 10, 20) },
+      { Uid: 2, just: '2.0', holds: [], Flags: flags(0, 10, 20) },
+    ])
+    const score = chartToMusicScore(chart)
+    const sorted = [...score.NoteList].sort((a, b) => a.ticks - b.ticks)
+
+    const trace = sorted[0]
+    // 谓词不变：仍命中 isTraceNote（base==11 || category==4）
+    expect(trace.noteBaseType === 11 || trace.category === 4).toBe(true)
+    // critical 旗标：custom_score_json.h 读 type（toBool），pjsekai-scores-rs 读 truthy_field
+    expect(trace.type).toBe(1)
+    // 对照组：普通 Single 不带 critical
+    expect(sorted[1].type).toBe(0)
+  })
+
+  it('Hold 节点不带 critical（TRACE 的旗标不外溢到长条）', () => {
+    const chart = makeChart([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 12, 20, 22) },
+    ])
+    const score = chartToMusicScore(chart)
+    for (const note of score.NoteList) {
+      expect(note.type).toBe(0)
+    }
   })
 })
 
