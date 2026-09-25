@@ -184,7 +184,7 @@
 .stage canvas{position:relative;z-index:1;background:transparent}
 .stage .hud-stage,.stage .hud-root{position:relative;z-index:2}
 
-/* === HUD FX: rings / combo flash / AP増加 (2026-09-19) === */
+/* === HUD FX: rings / combo flash / AP増加 === */
 /* Ring mask lives on .hud-gage > img above; empty rings hide until fill > 0. */
 .hud-gage[data-fill="0"],.hud-gage.is-empty{
   opacity:0;
