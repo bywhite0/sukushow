@@ -869,3 +869,76 @@ it.each(['跳转', '关闭击中特效'] as const)('%s后 Fever 粒子继续绘�
     expect(count()).toBe(0);
   } finally { fx.dispose(); texture.dispose(); }
 });
+
+type FxInternals = { live: { uid: number; sparks: { age: number; life: number; vx: number;
+  vy: number; vz: number; forceEn: boolean; forceX: number; forceY: number; forceZ: number }[] }[] };
+
+it('startDelay 平移整个周期序列，超过 lengthInSec 也不丢失发射', () => {
+  // 边线子树 6 层的真实组合：`startDelay` 0–0.1、`lengthInSec` 0.05、burst `cycles=0`（无限）。
+  // 若把 delay 折进 `bursts[].t`，t 会恒大于周期而被窗口截断 ⇒ 整层永不发射。
+  const data = loadFeverFixture();
+  const prefab = data.fever!.find(p => p.id === 'feverLineLeft')!;
+  // 只留 renderer 打开的层；原父节点也在被过滤之列，需把子节点提到根，否则索引越界。
+  prefab.nodes = prefab.nodes.filter(n => !n.rend?.off).map(n => ({ ...n, parent: -1 }));
+  for (const node of prefab.nodes) {
+    node.ps!.delay = { k: 0, v: 0.09, lo: 0.09, hi: 0.09, mult: 0.09 }; // > dur(0.05)
+    node.ps!.trail = undefined;
+  }
+  data.prefabs = [];
+  data.fever = [prefab];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  try {
+    fx.setMode('off');
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    for (let t = 1 / 60; t <= 0.4; t += 1 / 60) fx.sync(chart, t, false);
+    const live = (fx as unknown as FxInternals).live.filter(l => l.uid === -204);
+    expect(live).toHaveLength(1);
+    // 该层应持续有粒子在世（稳态 ≈ 100/s × 平均寿命 0.75s）。
+    expect(live[0].sparks.length).toBeGreaterThan(10);
+  } finally { fx.dispose(); texture.dispose(); }
+});
+
+it('ForceOverLifetime 按加速度积分，并在出生时采样一次', () => {
+  const data = loadFeverFixture();
+  const prefab = data.fever!.find(p => p.id === 'feverLineLeft')!;
+  const node = prefab.nodes.find(n => n.ps!.force?.en && !n.rend?.off)!;
+  node.ps!.shape = undefined;      // 去掉形状偏移，只看速度积分
+  node.ps!.speed = { k: 0, v: 0, lo: 0, hi: 0, mult: 0 };
+  node.ps!.rot = { k: 0, v: 0, lo: 0, hi: 0, mult: 0 };
+  node.ps!.rotol = undefined;
+  node.ps!.grav = 0;
+  node.ps!.size = { k: 0, v: 1, lo: 1, hi: 1, mult: 1 };
+  node.ps!.life = { k: 0, v: 10, lo: 10, hi: 10, mult: 10 };
+  node.ps!.delay = { k: 0, v: 0, lo: 0, hi: 0, mult: 1 };
+  node.ps!.trail = undefined;
+  node.ps!.bursts = [{ t: 0, count: { k: 0, v: 1, lo: 1, hi: 1, mult: 1 }, cycles: 1, interval: 0, prob: 1 }];
+  node.parent = -1;
+  prefab.nodes = [node];
+  data.prefabs = [];
+  data.fever = [prefab];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  try {
+    fx.setMode('off');
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 1 / 60, false);
+    const sparks = (fx as unknown as FxInternals).live.find(l => l.uid === -204)!.sparks;
+    expect(sparks.length).toBeGreaterThan(0);
+    const s = sparks[0];
+    expect(s.forceEn).toBe(true);
+    // `randomizePerFrame=False` ⇒ 出生时采样一次，此后恒定（±0.3 范围内）。
+    for (const v of [s.forceX, s.forceY, s.forceZ]) expect(Math.abs(v)).toBeLessThanOrEqual(0.3000001);
+    const before = { vx: s.vx, vy: s.vy, vz: s.vz };
+    const dt = 1 / 60;
+    fx.sync(chart, dt + 1 / 60, false);
+    // v += F·dt（加速度语义，不是直接叠加 F）。
+    expect(s.vx - before.vx).toBeCloseTo(s.forceX * dt, 6);
+    expect(s.vy - before.vy).toBeCloseTo(s.forceY * dt, 6);
+    expect(s.vz - before.vz).toBeCloseTo(s.forceZ * dt, 6);
+  } finally { fx.dispose(); texture.dispose(); }
+});

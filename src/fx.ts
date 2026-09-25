@@ -39,9 +39,16 @@ interface Spec {
   trailSizeWidth: boolean; trailInherit: boolean; trailGrad?: FxGrad; trailGradMin?: FxGrad;
   bursts: { t: number; count: FxMM; cycles: number; interval: number }[];
   delay?: FxMM;
+  /**
+   * `spawn()` 时每个发射器每次启动只采样一次的 `startDelay`（绝对秒）。循环层用它平移整个周期序列；
+   * 非循环层不再把 delay 折进 `bursts[].t`，由 `emitBursts` 的绝对时刻比较处理。
+   */
+  delayAbs?: number;
   rate: FxMM;
   /** Rate over Distance — 每单位位移的发射数；彗星 #607/#627 为 5。 */
   rateDist?: FxMM;
+  /** ForceOverLifetime 的恒定加速度；出生时采样一次（`randomizePerFrame=False`）。 */
+  forceEn: boolean; forceWorld: boolean; force: [FxMM, FxMM, FxMM];
   align: number; mesh: number; slice: boolean; combo: boolean; tex: string;
   role: 'core' | 'impact' | 'parr' | 'p2' | 'plain';
   /** 序列化 `moveWithTransform`：1=World ⇒ 粒子出生后留在世界坐标，不随节点移动。 */
@@ -60,6 +67,8 @@ interface Spark {
   off?: [number, number, number];
   grad?: FxGrad; gradMin?: FxGrad; gradBlend?: number; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
+  /** ForceOverLifetime 恒定加速度（世界系）。 */
+  forceEn: boolean; forceX: number; forceY: number; forceZ: number;
   fever?: boolean;
   firstStep?: number;
   omega: number;
@@ -343,6 +352,15 @@ export class HitFx {
         delay: n.ps.delay,
         rate: n.ps.rate || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
         rateDist: n.ps.rateDist || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+        // ForceOverLifetime：加速度。`inWorldSpace=false` 时按节点旋转转到世界系
+        // （本子树各级旋转均为单位 ⇒ 与直接使用世界轴等价，但保留通用路径）。
+        forceEn: !!n.ps.force?.en,
+        forceWorld: !!n.ps.force?.world,
+        force: [
+          n.ps.force?.x || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+          n.ps.force?.y || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+          n.ps.force?.z || { k: 0, v: 0, lo: 0, hi: 0, mult: 0 },
+        ],
         align: n.rend?.align || 0,
         mesh: n.rend?.mode === 4 ? (n.rend.mesh?.includes('Plane') ? 2 : 1) : 0,
         slice, combo, tex: batchKey, role, base: cores.get(i) || 0,
@@ -451,6 +469,18 @@ export class HitFx {
   private burst(live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number, offOverride?: [number, number, number]) {
     const sized = this.sized(spec, live.width, Math.random(), burstCount);
     const count = countOverride ?? sized.count;
+    // ForceOverLifetime：`randomizePerFrame=False` 时每个粒子在**出生瞬间**采样一次，
+    // 整条生命期恒定（Unity 文档）。`inWorldSpace=false` 需按节点旋转折算到世界系。
+    const force: [number, number, number] = spec.forceEn
+      ? (() => {
+        const f: [number, number, number] = [
+          sample(spec.force[0], Math.random()),
+          sample(spec.force[1], Math.random()),
+          sample(spec.force[2], Math.random()),
+        ];
+        return spec.forceWorld ? f : qrot(spec.qx, spec.qy, spec.qz, spec.qw, f[0], f[1], f[2]) as [number, number, number];
+      })()
+      : [0, 0, 0];
     const pitchLocal = spec.align === 2 && isPitchLocal(spec.qx, spec.qy, spec.qz, spec.qw);
     for (let i = 0; i < count && this.total() < MAX_SPARKS; i++) {
       const rnd = Math.random(), rnd2 = Math.random();
@@ -482,6 +512,7 @@ export class HitFx {
         off: birthOff ?? undefined,
         grad, gradMin, gradBlend, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
+        forceEn: spec.forceEn, forceX: force[0], forceY: force[1], forceZ: force[2],
         fever: !!live.fever,
         omega: spec.rotOlEn ? sample(spec.rotOl, rnd) : 0,
         trailEn: spec.trailEn || ((this.mode === 'full' || this.mode === 'current') && spec.limitEn),
@@ -505,11 +536,15 @@ export class HitFx {
   }
   private emitDue(live: Live, spec: Spec, prevAge: number, age: number, dist = 0) {
     const period = live.loop && spec.loop ? spec.dur : Number.POSITIVE_INFINITY;
-    const firstCycle = Number.isFinite(period) ? Math.max(0, Math.floor(prevAge / period)) : 0;
-    const lastCycle = Number.isFinite(period) ? Math.floor(age / period) : 0;
+    // `startDelay` 平移整个发射序列（Unity MainModule 语义）：第 k 个周期区间是
+    // `[delay + k·period, delay + (k+1)·period)`。**不能**把它折进 `b.t`——
+    // 那样 `b.t` 会超过 period，被周期窗口截断后整层永不发射（本子树 delay 0–0.1、period 0.05）。
+    const delay = spec.delayAbs ?? 0;
+    const firstCycle = Number.isFinite(period) ? Math.max(0, Math.floor((prevAge - delay) / period)) : 0;
+    const lastCycle = Number.isFinite(period) ? Math.floor((age - delay) / period) : 0;
     for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
-      const base = Number.isFinite(period) ? cycle * period : 0;
-      this.emitBursts(live, spec, prevAge - base, age - base, period, age > 0, base);
+      const base = Number.isFinite(period) ? delay + cycle * period : delay;
+      this.emitBursts(live, spec, prevAge, age, period, age > 0, base);
     }
     const rate = sample(spec.rate, Math.random());
     if (rate > 0) {
@@ -552,24 +587,30 @@ export class HitFx {
   private emitBursts(live: Live, spec: Spec, prevAge: number, age: number, period: number, advancing: boolean, cycleBase = 0) {
     for (const b of spec.bursts) {
       const interval = b.interval || 0;
-      // `cycles=0` 映射为 Infinity（无限重复）。此时终止条件只剩 `t >= period`，
+      // 全部按**绝对时刻**处理：批 c 的绝对时刻是 `cycleBase + b.t + c*interval`。
+      // `b.t` 已含 `startDelay`，可能 ≥ period（本子树 delay 0–0.1、period 0.05）——
+      // 那不是「该被丢弃」，而是落在后续周期里，由绝对时刻自然对齐；
+      // 若改用周期内相对量再配 `t >= period` 截断，整层会永远不发射或每周期只发两三批。
+      const absBurst = cycleBase + b.t;
+      // `cycles=0` 映射为 Infinity（无限重复）。此时终止条件只剩「越过本周期」，
       // 若 period 也是 Infinity（非循环层）或 interval 为 0，循环不会收敛 ⇒ 必须有硬上限。
       const span = Math.max(0, age - prevAge);
       const cap = interval > 0
-        // 有限周期：t 自 0 起、按 interval 递增，会被 `t >= period` 截断，最多 ceil(period/interval) 批。
+        // 有限周期：每周期最多 ceil(period/interval) 批。
         // 非循环层：只需覆盖本帧时间窗，再多一批兜住窗口边界。
         ? (Number.isFinite(period) ? Math.ceil(period / interval) : Math.ceil(span / interval) + 1)
         : 1;
       const limit = Math.min(Number.isFinite(b.cycles) ? b.cycles : cap, cap);
+      const windowEnd = Number.isFinite(period) ? cycleBase + period : Number.POSITIVE_INFINITY;
+      // 容差按 interval 取相对量：`interval` 是 float32（0.01 → 0.009999999776），
+      // 5 批累计 0.04999999888，比 0.05 略小 —— 固定的 1e-9 容差放不住这个漂移，
+      // 会让每周期多出边界重复的一批（100/s 变成 120/s）。相对容差远小于批间距，安全。
+      const eps = Math.max(1e-9, interval * 1e-3);
       for (let c = 0; c < limit; c++) {
-        const t = b.t + c * interval;
-        // 带容差：interval 为 0.01 这类二进制不精确值时，`10*0.01` 会略小于 0.1，
-        // 严格的 `t >= period` 会多放一批出来。
-        if (t >= period - 1e-9) break;
-        if (t > prevAge && t <= age) {
+        const absT = absBurst + c * interval;
+        if (absT >= windowEnd - eps) break;
+        if (absT > prevAge && absT <= age) {
           const first = live.sparks.length;
-          // 补发旧批次时，粒子出生在时刻 cycleBase+t 而非当前 age ⇒ 用出生时刻的入场偏移。
-          const absT = cycleBase + t;
           const off = live.coreSide && advancing
             ? (() => {
                 const e = feverEntrance(absT);
@@ -578,7 +619,7 @@ export class HitFx {
             : undefined;
           this.burst(live, spec, b.count, undefined, off);
           if (live.fever && advancing) for (let i = first; i < live.sparks.length; i++) {
-            // 必须用**绝对**出生时刻 absT 反推存活时长。此处若用周期相对量 t，
+            // 必须用**绝对**出生时刻 absT 反推存活时长。此处若用周期相对量，
             // 一旦 dur<1 使周期重启（如彗星层 dur=0.1），补发粒子会按错误时长被立即判死。
             live.sparks[i].firstStep = Math.max(0, age - absT);
           }
@@ -603,6 +644,12 @@ export class HitFx {
     // level56 #544/#543：入场爆发不循环，后续批次仍须推进。
     this.spawn('feverLeft', 0, 1, false, -200, true, true);
     this.spawn('feverRight', 0, 1, false, -201, true, true);
+    // 边线子树的 6 个发射器（#297/#233）：与边线同帧，随 Fever 一同起停。
+    // 原包 `looping=True`、`lengthInSec=0.05` ⇒ 每 0.05s 重启一轮（每轮 5 批 @0.01s），
+    // 是整个 Fever 期间持续存在的稳态发射，不是一次性入场爆发。
+    // 其中 LineParticle_Left/Right 的 renderer 在原包关闭，`compile()` 会跳过。
+    this.spawn('feverLineLeft', 0, 1, true, -204, true, true);
+    this.spawn('feverLineRight', 0, 1, true, -205, true, true);
     const coreAge = Math.max(0, elapsed);
     if (!feverEntrance(coreAge).coreActive) return;
     for (const [id, uid] of [['feverCoreLeft', -202], ['feverCoreRight', -203]] as const) {
@@ -627,12 +674,9 @@ export class HitFx {
     const coreSide = id === 'feverCoreLeft' ? 'left' : id === 'feverCoreRight' ? 'right' : undefined;
     const delay = fever && !coreSide ? 1 / 60 : 0;
     const specs = src.map(s => {
-      // 每个发射器每次启动只采样一次，所有批次共享其 startDelay。
+      // 每个发射器每次启动只采样一次 startDelay，平移整条周期序列（见 emitDue）。
       const startDelay = delay + (fever ? sample(s.delay, Math.random()) : 0);
-      return {
-        ...s, bursts: s.bursts.map(b => ({ ...b, t: b.t + startDelay })),
-        burstI: 0, rateAcc: 0, distAcc: 0, cycle: 0,
-      };
+      return { ...s, delayAbs: startDelay, burstI: 0, rateAcc: 0, distAcc: 0, cycle: 0 };
     });
     const live: Live = {
       // 发射器周期 = `lengthInSec`。原包里彗星层是 0.1s、LineBase 1.6s、LineMove 0.8s，
@@ -709,6 +753,8 @@ export class HitFx {
         s.age += dt;
         if (s.age > s.life) continue;
         s.vy -= 9.81 * s.grav * dt;
+        // ForceOverLifetime：加速度（v += F·dt），不是速度叠加。
+        if (s.forceEn) { s.vx += s.forceX * dt; s.vy += s.forceY * dt; s.vz += s.forceZ * dt; }
         if (s.omega) s.spin += s.omega * dt;
         // Middle+: ~40% free integrate for a bit of punch, then LimitVelocity, then rest.
         // Full integrate-first flew too high; limit-first + birth brake was too flat.
