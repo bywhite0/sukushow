@@ -48,7 +48,6 @@ const OVERLAY_TEXTURES = [
   'overlay/judge/v3/1.png',
   'overlay/autolive.png',
   'overlay/start_grad.png',
-  'overlay/rainbow.png',
   'overlay/custom-score/icon.png',
   'overlay/ap-native/all-perfect.png',
   'overlay/ap-native/all-perfect-line.png',

@@ -2377,15 +2377,38 @@ void main() {
     constexpr float CHART_END_PADDING_SEC = 5.0f;
     constexpr float TEAM_POWER = 250000.0f;
     constexpr float RATING = 26.0f;
-    // Fever：屏幕左右两侧的彩虹边条 + 入场时的「FEVER!」字样。
-    // 宽度按 1920 设计宽度取比例，随画布缩放。
-    constexpr float FEVER_EDGE_WIDTH_RATIO = 0.115f;
-    constexpr float FEVER_EDGE_PEAK_ALPHA = 0.85f;
+    // Fever：入场「FEVER!」字样 + 窗口边框。
+    //
+    // 反查客户端运行时资源得到的**原始实现**（实测证据链）：
+    //   1. 专用着色器 **`Sekai/RhythmGame/Fever-Frame`**
+    //      （同族另有 `Sekai/Sprites/FeverLine`、`Sekai/RhythmGame/Fever-Lane`）
+    //   2. 其属性表含 **`_ColorTex`（颜色纹理）+ `_Speed`（流动速度）**
+    //   3. 使用该着色器的材质：`_ColorTex` = **`effect_fever_ gradation`**，
+    //      `_Speed` = 1.0，`_Color` / `_RendererColor` = 纯白
+    //   4. `effect_fever_ gradation`（150×150）是**垂直平滑渐变**，水平方向恒定：
+    //        0.00 品红(246, 85,167) → 0.50 蓝紫(115,116,255) → 1.00 青绿(9,229,189)
+    //
+    //   → 边框的彩虹 = **用 _ColorTex 采样这条渐变，再由 _Speed 让它沿边框滚动**。
+    //     既不是纯色四边形，也不是贴 tex_rainbow_01（那是稀疏对角彩带，已弃用）。
+    //     整个 Fever 资源集里**没有任何边框贴图**，边框是程序化绘制的。
+    //
+    // 形状：**不是闭合矩形环**。官方特效素材 fx_fever_frame.mp4 逐像素实测：
+    //   左右两条通高竖条（宽 11px）+ 上下四角的短臂（长 211px），
+    //   顶边/底边中间留空（x∈[212,1711] 纯黑）。
+    // 与资源层级一致 —— FeverView/FeverChance 下只有
+    //   `fever_chance_frame_left` / `_right` 两个对象，无独立上下边。
+    constexpr float FEVER_FRAME_BORDER_PX = 11.0f;   // 边框粗细（设计坐标 1920×1080）
+    constexpr float FEVER_FRAME_ARM_PX = 211.0f;     // 四角短臂的淡出长度
+    constexpr float FEVER_FRAME_PEAK_ALPHA = 0.95f;
+    // 边框颜色：**白色**。官方素材实测 (245,242,246)，饱和度 0.015。
+    // 曾误以为边框是彩虹（见下方注释），已按素材改正。
+    constexpr float FEVER_FRAME_RGB[3] = {245.0f / 255.0f, 242.0f / 255.0f, 246.0f / 255.0f};
+    // 呼吸周期（秒）：整体亮度的缓慢起伏。
+    constexpr float FEVER_FRAME_PULSE_SEC = 2.4f;
+
     // 「FEVER!」字样的入场时长；原始素材 fx_fever_v2 约 2.38s，主峰在 0.6s 前。
     constexpr float FEVER_TEXT_DURATION_SEC = 2.2f;
     constexpr float FEVER_TEXT_PEAK_SEC = 0.55f;
-    // 上下两端的纵向衰减切片，避免边条像一块死板的贴纸。
-    constexpr int FEVER_EDGE_SLICES = 4;
 
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
@@ -3159,49 +3182,74 @@ void main() {
         ImDrawList* overlay = ImGui::GetForegroundDrawList();
 
         if (feverActive) {
-            const Texture* rainbow = findTexture(hudTextures, "fever_rainbow");
-            if (rainbow != nullptr && rainbow->id != 0) {
-                const float bandWidth = 1920.0f * FEVER_EDGE_WIDTH_RATIO;
-                // 呼吸脉动：与素材帧的亮度起伏同量级，不做高频闪烁以免干扰读谱。
-                const float pulse = 0.75f + 0.25f * std::sin(feverLocalSec * 3.14159265f * 1.6f);
-                const float baseAlpha = clamp01(FEVER_EDGE_PEAK_ALPHA * pulse * overlayAlpha);
-                const float sliceHeight = 1080.0f / static_cast<float>(FEVER_EDGE_SLICES);
+            // 形状与颜色均按官方特效素材逐像素实测（1920×1080）。
+            //
+            // 【形状】左右两条**通高竖条**（宽 11px）+ 上下四角的**渐变淡出臂**。
+            //   顶边 y=0..11 的亮度沿 x 从角落 245 平滑衰减到 x≈211 处归零：
+            //     x=0→245  x=60→192  x=120→98  x=180→25  x=211→9  x=240→2
+            //   —— 是**渐变淡出**，不是硬边短臂（低阈值下可见 0..234 连续，
+            //      阈值越高测得的「臂长」越短：TH=8→211、TH=96→122）。
+            //   顶/底边中间确实为空（x∈[240,1711] 恒为 0）。
+            //   形状在 fx_fever_frame.mp4 与 fx_super_fever_frame.mp4 两个独立素材
+            //   上完全一致，且与资源侧层级吻合（FeverView/FeverChance 下只有
+            //   fever_chance_frame_left/right，无独立上下边）。
+            //
+            // 【颜色】边框是**白色**，不是彩虹。
+            //   素材实测 (245,242,246)，饱和度 S=0.015、色相桶仅 2/12 —— 基本纯白。
+            //   边框颜色在整个 2.25s 里恒定，无流动、无变色。
+            //   真正的彩虹在**主特效层 fx_fever_v2**（斜向光带，11/12 色相桶全覆盖），
+            //   而 fx_fever_v2 最外 12px 边缘带的彩色像素数为 **0** —— 彩虹不落在边框上。
+            //   另注：材质 `GroundTapEffect` 虽用 `Sekai/RhythmGame/Fever-Frame` 着色器
+            //   且 `_ColorTex = effect_fever_ gradation`，但它与边框对象无关
+            //   （边框的 SpriteRenderer 材质 fileID=1，即内置材质）；
+            //   此前误把该着色器的颜色纹理当作边框配色依据，已按素材改正。
+            const float pulse = 0.88f + 0.12f * std::sin(
+                feverLocalSec * 6.2831853f / FEVER_FRAME_PULSE_SEC);
+            const float baseAlpha = clamp01(FEVER_FRAME_PEAK_ALPHA * pulse * overlayAlpha);
 
-                beginAdditive(overlay);
-                for (int slice = 0; slice < FEVER_EDGE_SLICES; ++slice) {
-                    const float top = static_cast<float>(slice) * sliceHeight;
-                    const float v0 = static_cast<float>(slice) / static_cast<float>(FEVER_EDGE_SLICES);
-                    const float v1 = static_cast<float>(slice + 1) / static_cast<float>(FEVER_EDGE_SLICES);
-                    // 纵向衰减：中间偏上最亮，上下两端收掉，避免整条边像贴纸。
-                    const float center = (v0 + v1) * 0.5f;
-                    const float falloff = 1.0f - std::abs(center - 0.42f) / 0.58f;
-                    const float sliceAlpha = clamp01(baseAlpha * std::max(0.15f, falloff));
-                    const ImU32 tint =
-                        IM_COL32(255, 255, 255, static_cast<int>(std::lround(sliceAlpha * 255.0f)));
-                    // 左边缘：彩虹由外向内；右边缘镜像，保证两侧对称朝外发散。
-                    drawHudImageUv(
-                        overlay,
-                        *rainbow,
-                        px(0.0f),
-                        py(top),
-                        ps(bandWidth),
-                        ps(sliceHeight),
-                        ImVec2(0.0f, v0),
-                        ImVec2(1.0f, v1),
-                        tint);
-                    drawHudImageUv(
-                        overlay,
-                        *rainbow,
-                        px(1920.0f - bandWidth),
-                        py(top),
-                        ps(bandWidth),
-                        ps(sliceHeight),
-                        ImVec2(1.0f, v0),
-                        ImVec2(0.0f, v1),
-                        tint);
-                }
-                endAdditive(overlay);
-            }
+            const float b = FEVER_FRAME_BORDER_PX;   // 竖条宽 11px
+            const float a = FEVER_FRAME_ARM_PX;      // 四角臂的淡出长度
+            const float W = 1920.0f, H = 1080.0f;
+            const int alphaByte = static_cast<int>(std::lround(baseAlpha * 255.0f));
+            const ImU32 white = IM_COL32(
+                static_cast<int>(std::lround(FEVER_FRAME_RGB[0] * 255.0f)),
+                static_cast<int>(std::lround(FEVER_FRAME_RGB[1] * 255.0f)),
+                static_cast<int>(std::lround(FEVER_FRAME_RGB[2] * 255.0f)),
+                alphaByte);
+
+            // 臂的淡出：亮度沿边由角落的满值线性降到 0。
+            // 用「单 quad + 顶点色渐变」绘制：若改成密集小片，叠加混合会让
+            // 相邻片重叠累积出现饱和平台；顶点插值天然平滑、且只有一个 quad。
+            auto armColor = [&](float f) {
+                return IM_COL32(
+                    static_cast<int>(std::lround(FEVER_FRAME_RGB[0] * 255.0f)),
+                    static_cast<int>(std::lround(FEVER_FRAME_RGB[1] * 255.0f)),
+                    static_cast<int>(std::lround(FEVER_FRAME_RGB[2] * 255.0f)),
+                    static_cast<int>(std::lround(baseAlpha * clamp01(f) * 255.0f)));
+            };
+            const ImU32 armFull = armColor(1.0f);
+            const ImU32 armZero = armColor(0.0f);
+
+            beginAdditive(overlay);
+
+            // 左右通高竖条（整条等亮，无淡出）
+            overlay->AddRectFilled(ImVec2(px(0.0f), py(0.0f)), ImVec2(px(b), py(H)), white);
+            overlay->AddRectFilled(ImVec2(px(W - b), py(0.0f)), ImVec2(px(W), py(H)), white);
+
+            // 上下四条淡出臂：alpha 由角落的满值线性降到内侧的 0。
+            //   上左：UL=角(满) UR=内(0) BR=内(0) BL=角(满)
+            overlay->AddRectFilledMultiColor(ImVec2(px(0.0f), py(0.0f)), ImVec2(px(a), py(b)),
+                                             armFull, armZero, armZero, armFull);
+            //   上右：UL=内(0) UR=角(满)
+            overlay->AddRectFilledMultiColor(ImVec2(px(W - a), py(0.0f)), ImVec2(px(W), py(b)),
+                                             armZero, armFull, armFull, armZero);
+            //   下左
+            overlay->AddRectFilledMultiColor(ImVec2(px(0.0f), py(H - b)), ImVec2(px(a), py(H)),
+                                             armFull, armZero, armZero, armFull);
+            //   下右
+            overlay->AddRectFilledMultiColor(ImVec2(px(W - a), py(H - b)), ImVec2(px(W), py(H)),
+                                             armZero, armFull, armFull, armZero);
+            endAdditive(overlay);
         }
 
         if (textActive && fonts.title != nullptr) {
@@ -3791,7 +3839,6 @@ void main() {
             addHudTexture(std::string("life_digit_s_") + ch, std::string("overlay/life/v3/digit/s") + ch + ".png");
         }
         addHudTexture("intro_grad", "overlay/start_grad.png");
-        addHudTexture("fever_rainbow", "overlay/rainbow.png");
         addHudTexture("custom_score_icon", "overlay/custom-score/icon.png");
         addHudTexture("ap_text", "overlay/ap-native/all-perfect.png");
         addHudTexture("ap_text_line", "overlay/ap-native/all-perfect-line.png");
