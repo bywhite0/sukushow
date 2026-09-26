@@ -2397,18 +2397,40 @@ void main() {
     //   顶边/底边中间留空（x∈[212,1711] 纯黑）。
     // 与资源层级一致 —— FeverView/FeverChance 下只有
     //   `fever_chance_frame_left` / `_right` 两个对象，无独立上下边。
-    constexpr float FEVER_FRAME_BORDER_PX = 11.0f;   // 边框粗细（设计坐标 1920×1080）
-    constexpr float FEVER_FRAME_ARM_PX = 211.0f;     // 四角短臂的淡出长度
+    // ---- 以下数值全部来自 **PJSK 原包素材** 逐像素实测（非推断）----
+    // 素材 fx_fever_frame / fx_super_fever_frame / fx_fever_v2（1920×1080 mp4）。
+    // PJSK 客户端字符串字面量已确认这些名字与路径模板 `effect_asset/live/fever/{0}`。
+    //
+    // 【边框】fx_fever_frame 与 fx_super_fever_frame **逐像素完全相同**
+    //   （非黑像素 29,839、亮度总和 6,241,839、峰值 246、bbox 全幅，三者全等），
+    //   故 SuperFever 不需要单独的边框视觉。
+    //   形状：左右竖条厚 11px（x=0..9 恒为 241–244，x=10 掉到 190）；
+    //         顶/底中段（x=960 处 y=0..79）**恒为 0** ⇒ 不是闭合矩形；
+    //         四角臂沿边衰减：x=0→243、40→214、80→160、120→96、160→44、180→24、200→11、205→0。
+    //   颜色：(237,234,238)，饱和度 0.017 ⇒ **白色**。
+    //   ⇒ 现有实现（11px 竖条 + 四角淡出臂 + 白色 + 无顶/底中段）已与原包一致。
+    constexpr float FEVER_FRAME_BORDER_PX = 11.0f;
+    constexpr float FEVER_FRAME_ARM_PX = 205.0f;     // 实测衰减到 0 的位置（原为估的 211）
     constexpr float FEVER_FRAME_PEAK_ALPHA = 0.95f;
-    // 边框颜色：**白色**。官方素材实测 (245,242,246)，饱和度 0.015。
-    // 曾误以为边框是彩虹（见下方注释），已按素材改正。
-    constexpr float FEVER_FRAME_RGB[3] = {245.0f / 255.0f, 242.0f / 255.0f, 246.0f / 255.0f};
-    // 呼吸周期（秒）：整体亮度的缓慢起伏。
+    constexpr float FEVER_FRAME_RGB[3] = {237.0f / 255.0f, 234.0f / 255.0f, 238.0f / 255.0f};
+    // 呼吸周期：原包边框**全程静止**（9 个采样帧亮度总和完全相同），
+    // 故呼吸不是原包行为，仅保留一条极缓慢起伏避免画面死板。
     constexpr float FEVER_FRAME_PULSE_SEC = 2.4f;
 
-    // 「FEVER!」字样的入场时长；原始素材 fx_fever_v2 约 2.38s，主峰在 0.6s 前。
-    constexpr float FEVER_TEXT_DURATION_SEC = 2.2f;
-    constexpr float FEVER_TEXT_PEAK_SEC = 0.55f;
+    // 【入场文字与紫色光束】fx_fever_v2 实测时间线（容器 2.38s，**实际内容只有 1.20s**）：
+    //   t=0.05s 出现、t=0.25–0.30s 主峰（非黑 26 万、亮度总和 2.6e7、峰值 255）、
+    //   t=0.55s 起进入稳定段（非黑 ≈2.28 万）、t=1.20s 结束。
+    //   稳定段 bbox=(731,493,1183,573)：中心 (957,533)、宽 453、高 81 —— 即「FEVER!」字样。
+    //   紫色光束：t=0.25s 时左束由 (1059,60) 展到 (18,1020)、右束由 (1101,60) 展到 (1896,1020)，
+    //   即**从底部两角向中心汇聚的倒 V**；主峰颜色 (115,84,140)、饱和度 0.433。
+    constexpr float FEVER_TEXT_DURATION_SEC = 1.20f;  // 实测内容长度（非容器 2.38s）
+    constexpr float FEVER_TEXT_PEAK_SEC = 0.28f;      // 实测主峰
+    constexpr float FEVER_TEXT_CENTER_X = 957.0f;
+    constexpr float FEVER_TEXT_CENTER_Y = 533.0f;
+    constexpr float FEVER_TEXT_WIDTH = 453.0f;        // 实测稳定段宽度
+    constexpr float FEVER_TEXT_HEIGHT = 81.0f;
+    constexpr float FEVER_BEAM_APEX_Y = 60.0f;        // 光束两腿在中心汇聚处的高度
+    constexpr float FEVER_BEAM_RGB[3] = {115.0f / 255.0f, 84.0f / 255.0f, 140.0f / 255.0f};
 
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
@@ -2909,6 +2931,39 @@ void main() {
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
     }
 
+    /**
+     * 四顶点各自带色的实心四边形。
+     * ImGui 自带只有 AddRectFilledMultiColor 的轴对齐版；这里用 PrimVtx 直接写顶点，
+     * 便于画任意四边形并逐顶点插值（紫色光束的倒 V 需要）。
+     */
+    void addQuadGradient(
+        ImDrawList* drawList,
+        const ImVec2& p0, const ImVec2& p1, const ImVec2& p2, const ImVec2& p3,
+        ImU32 c0, ImU32 c1, ImU32 c2, ImU32 c3)
+    {
+        if (!drawList) {
+            return;
+        }
+        // ⚠ 必须用 PrimWriteIdx + PrimWriteVtx 这一对，**不能用 PrimVtx**：
+        // PrimVtx 内部是 `PrimWriteIdx(_VtxCurrentIdx); PrimWriteVtx(...)`，每次调用都占一个索引槽；
+        // 4 次 PrimVtx + 6 次显式 PrimWriteIdx 会写 10 个索引进 6 个预留位 ⇒ 索引缓冲溢出，
+        // 把本帧后续所有绘制写坏（症状是差分铺满音符带、而不是只出现在 Fever 元素上）。
+        // 下面这个写法与 ImGui 自带 AddRectFilledMultiColor 完全一致。
+        drawList->PrimReserve(6, 4);
+        const ImDrawIdx base = static_cast<ImDrawIdx>(drawList->_VtxCurrentIdx);
+        const ImVec2 uv = drawList->_Data->TexUvWhitePixel;
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 0));
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 1));
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 2));
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 0));
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 2));
+        drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + 3));
+        drawList->PrimWriteVtx(p0, uv, c0);
+        drawList->PrimWriteVtx(p1, uv, c1);
+        drawList->PrimWriteVtx(p2, uv, c2);
+        drawList->PrimWriteVtx(p3, uv, c3);
+    }
+
     void beginAdditive(ImDrawList* drawList)
     {
         drawList->AddCallback(useAdditiveBlend, nullptr);
@@ -3232,6 +3287,43 @@ void main() {
 
             beginAdditive(overlay);
 
+            // 紫色光束：底部两角向中心汇聚的倒 V。
+            // 原包是黑底加色层，这里用两个顶点色渐变四边形还原：底角亮、汇聚点透明。
+            {
+                const float beamT = clamp01(feverLocalSec / FEVER_TEXT_DURATION_SEC);
+                // 0.05s 起、0.25–0.30s 主峰、0.40s 后收尽。
+                const float beamAlpha = beamT < 0.05f
+                    ? 0.0f
+                    : (beamT < 0.28f ? clamp01((beamT - 0.05f) / 0.23f)
+                                     : clamp01(1.0f - (beamT - 0.28f) / 0.16f));
+                if (beamAlpha > 0.001f) {
+                    const ImU32 beamEdge = IM_COL32(
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)),
+                        static_cast<int>(std::lround(clamp01(beamAlpha * 0.55f * overlayAlpha) * 255.0f)));
+                    const ImU32 beamApex = IM_COL32(
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)), 0);
+                    // 左束：窄斜带，四点取自素材的上下两端 ——
+                    //   底边 y=1080 处 x∈[0,96]（素材 y=1020 为 [18,108]）
+                    //   顶端 y=60 处收细到 x∈[856,876]（素材 y=180 为 [753,780]）
+                    // 底亮顶透明，对应「底角亮、向汇聚点衰减」。
+                    addQuadGradient(overlay,
+                                    ImVec2(px(0.0f), py(1080.0f)), ImVec2(px(96.0f), py(1080.0f)),
+                                    ImVec2(px(876.0f), py(FEVER_BEAM_APEX_Y)),
+                                    ImVec2(px(856.0f), py(FEVER_BEAM_APEX_Y)),
+                                    beamEdge, beamEdge, beamApex, beamApex);
+                    // 右束镜像
+                    addQuadGradient(overlay,
+                                    ImVec2(px(1920.0f), py(1080.0f)), ImVec2(px(1824.0f), py(1080.0f)),
+                                    ImVec2(px(1044.0f), py(FEVER_BEAM_APEX_Y)),
+                                    ImVec2(px(1064.0f), py(FEVER_BEAM_APEX_Y)),
+                                    beamEdge, beamEdge, beamApex, beamApex);
+                }
+            }
+
             // 左右通高竖条（整条等亮，无淡出）
             overlay->AddRectFilled(ImVec2(px(0.0f), py(0.0f)), ImVec2(px(b), py(H)), white);
             overlay->AddRectFilled(ImVec2(px(W - b), py(0.0f)), ImVec2(px(W), py(H)), white);
@@ -3259,11 +3351,12 @@ void main() {
             const float alpha = progress < peak
                 ? clamp01(progress / std::max(peak, 0.0001f))
                 : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
+            // 位置与字号按素材稳定段 bbox：中心 (957,533)、高 81px。
             const char* text = "FEVER!";
-            const float fontSize = 108.0f;
+            const float fontSize = FEVER_TEXT_HEIGHT * 1.15f;
             const ImVec2 textSize = fonts.title->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-            const float textX = 960.0f - textSize.x * 0.5f;
-            const float textY = 540.0f - textSize.y * 0.5f;
+            const float textX = FEVER_TEXT_CENTER_X - textSize.x * 0.5f;
+            const float textY = FEVER_TEXT_CENTER_Y - textSize.y * 0.5f;
             const ImU32 color =
                 IM_COL32(255, 255, 255, static_cast<int>(std::lround(clamp01(alpha * overlayAlpha) * 255.0f)));
             beginAdditive(overlay);
