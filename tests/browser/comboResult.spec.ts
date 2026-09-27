@@ -23,4 +23,12 @@ test('曲终时刻之后显示 AllPerfect 横幅，拖回之前隐藏', async ({
   await expect(page.locator('.cr-fx')).toHaveCSS('mix-blend-mode', 'plus-lighter');
   await seek(finish - 1);
   await expect(root).toBeHidden();
+  await page.locator('#tab-display').click();
+  await page.locator('#opt-combo-result').selectOption('2');
+  await expect(root).toHaveAttribute('data-kind', '2');
+  await seek(finish + 1.2);
+  await expect(root).toBeVisible();
+  await page.reload();
+  await expect(page.locator('#opt-combo-result')).toHaveValue('2');
+  await expect(page.locator('.combo-result')).toHaveAttribute('data-kind', '2');
 });

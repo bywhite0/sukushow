@@ -31,6 +31,8 @@ export type PreviewSettings = {
   enableFeverDisplay: boolean;
   /** 从头开播时先放开场过场（RhythmGameStart）。 */
   enableStartAnimation: boolean;
+  /** 曲终横幅档位（GetResultIndex：0 AP、1 FC、2 Clear、3 Finish）；自动演奏恒为 AP，其余仅供预览。 */
+  comboResult: 0 | 1 | 2 | 3;
   judgementOutput: number;
   fastSlow: number;
   totalAppeal: number;
@@ -66,6 +68,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   enableSkillCutin: RG_OPTION_DEFAULTS.enableSkillCutin,
   enableFeverDisplay: RG_OPTION_DEFAULTS.enableFeverDisplay,
   enableStartAnimation: true,
+  comboResult: 0,
   judgementOutput: RG_OPTION_DEFAULTS.judgementOutput,
   fastSlow: RG_OPTION_DEFAULTS.fastSlowThreshold,
   totalAppeal: 350_000,
@@ -124,6 +127,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     enableSkillCutin: bool('enableSkillCutin', d.enableSkillCutin),
     enableFeverDisplay: bool('enableFeverDisplay', d.enableFeverDisplay),
     enableStartAnimation: bool('enableStartAnimation', d.enableStartAnimation),
+    comboResult: (() => { const v = Math.trunc(num('comboResult', d.comboResult)); return (v === 1 || v === 2 || v === 3 ? v : 0) as 0 | 1 | 2 | 3; })(),
     judgementOutput: clamp(Math.trunc(num('judgementOutput', d.judgementOutput)), 0, 6),
     fastSlow: clamp(Math.trunc(num('fastSlow', d.fastSlow)), 0, 2),
     totalAppeal: clamp(num('totalAppeal', d.totalAppeal), 1000, 2_000_000),
