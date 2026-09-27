@@ -1,9 +1,10 @@
 /**
- * 曲终横幅 RhythmGameComboResult（level56 GO 370），目前只接 AllPerfect（自动演奏恒为 AP）。
+ * 曲终横幅 RhythmGameComboResult（level56 GO 370），四档 AP / FC / Clear / Finish。
+ * 自动演奏恒为 AP；其余三档由配置项手动选择预览。
  *
  * 时序：LiveEnd.Is = FinishTime ≤ t，FinishTime = MusicsRecord.PlayTime(ms) / 1000。
  * ComboResultResolver.ShowAsync（@0x4B01A80）按 GetResultIndex（AP→0，FC→1，Clear→2，Finish→3）
- * 互斥激活 roots[idx]，播放 se_rhythm_finish_0004（AP），然后 animator.Play 4 s 的 clip。
+ * 互斥激活 roots[idx]，播放 ComboResultSeNames[idx]（AP 0004 … Finish 0001），然后 animator.Play 4 s 的 clip。
  *
  * 分层（Canvas：world space，Default 层，order 10，overrideSorting）：
  *  1. Glow：粒子渲染器在 Default 层 order 1，低于 Canvas order 10，所以画在黑罩之下；
@@ -17,16 +18,21 @@
 import { hudScale } from './hud';
 import { sampleCurve } from './startAnim';
 import {
-  AP_BANNER_CURVES,
-  AP_BANNER_EMITTERS,
-  AP_BANNER_NODES,
+  COMBO_RESULT_BANNERS,
   COMBO_RESULT_BG,
   COMBO_RESULT_CLIP_DURATION,
+  COMBO_RESULT_TEXTURES,
+  type BannerClip,
+  type BannerCurve,
   type BannerEmitter,
   type BannerNode,
 } from './comboResultClip';
 
 export { COMBO_RESULT_CLIP_DURATION };
+
+/** GetResultIndex：0 AllPerfect、1 FullCombo、2 Clear、3 Finish。 */
+export type ResultKind = 0 | 1 | 2 | 3;
+export const RESULT_KINDS: readonly ResultKind[] = [0, 1, 2, 3];
 
 export const BANNER_TEX_BASE = '/rg/banner/';
 /** 粒子单位：1 unit = 100 设计像素（与 HUD 同一 1920×1080 参考分辨率）。 */
@@ -105,12 +111,14 @@ export function dampedDistance(v0: number, lim: number, dampen: number, t: numbe
 
 // ── 节点与动画 ───────────────────────────────────────────────────
 type Prop = 'active' | 'x' | 'y' | 'scale.x' | 'scale.y' | 'r' | 'g' | 'b' | 'a';
-const CURVES = new Map<string, Map<string, (typeof AP_BANNER_CURVES)[number]['keys']>>();
-for (const c of AP_BANNER_CURVES) {
-  let m = CURVES.get(c.path);
-  if (!m) CURVES.set(c.path, (m = new Map()));
-  m.set(c.prop, c.keys);
-}
+
+/** 一档横幅的预处理结果：曲线按路径索引、节点下标、整次 Play 的全部粒子。 */
+export type CompiledBanner = {
+  clip: BannerClip;
+  curves: Map<string, Map<string, BannerCurve['keys']>>;
+  index: Map<string, number>;
+  particles: readonly BannerParticle[];
+};
 
 export type NodeState = {
   active: boolean;
@@ -118,30 +126,31 @@ export type NodeState = {
   r: number; g: number; b: number; a: number;
 };
 
-export function nodeStateAt(node: BannerNode, t: number): NodeState {
-  const m = CURVES.get(node.path);
+export function nodeStateAt(node: BannerNode, t: number, b: CompiledBanner = BANNERS[0]!): NodeState {
+  const m = b.curves.get(node.path);
   const get = (p: Prop, base: number) => {
     const keys = m?.get(p);
     return keys ? sampleCurve(keys, t) : base;
   };
   const c = node.rgba ?? [1, 1, 1, 1];
   return {
-    active: get('active', node.active ? 1 : 0) > 0.5,
+    // 四个 Root 在 prefab 里只有当前档是 active；运行时由 RhythmGameComboResult 按结果档位 SetActive(true)，
+    // 所以 Root 本身恒视为激活，只看其下节点的 active 与曲线。
+    active: node.parent < 0 || get('active', node.active ? 1 : 0) > 0.5,
     x: get('x', node.x), y: get('y', node.y),
     sx: get('scale.x', node.sx), sy: get('scale.y', node.sy),
     r: get('r', c[0]), g: get('g', c[1]), b: get('b', c[2]), a: get('a', c[3]),
   };
 }
 
-const NODE_INDEX = new Map(AP_BANNER_NODES.map((n, i) => [n.path, i]));
-
 /** GameObject 被激活的时刻（自身与所有祖先的 active 曲线都为 1 的最早时刻），即 playOnAwake 开播时刻。 */
-export function activationTime(path: string): number {
-  let idx = NODE_INDEX.get(path);
+export function activationTime(path: string, b: CompiledBanner = BANNERS[0]!): number {
+  let idx = b.index.get(path);
   let start = 0;
   while (idx !== undefined && idx >= 0) {
-    const n = AP_BANNER_NODES[idx]!;
-    const keys = CURVES.get(n.path)?.get('active');
+    const n = b.clip.nodes[idx]!;
+    if (n.parent < 0) break; // Root 由代码激活（见 nodeStateAt）
+    const keys = b.curves.get(n.path)?.get('active');
     if (keys) {
       const on = keys.find((k) => k[4] > 0.5);
       if (!on) return Infinity;
@@ -156,7 +165,9 @@ export function activationTime(path: string): number {
 export type BannerParticle = {
   emitter: number;
   spawn: number; life: number;
-  speed: number; angle: number; r0: number;
+  speed: number;
+  /** 出生位置（unit，y 向上）与平面内运动方向（单位向量；Box 发射沿视线，平面内为 0）。 */
+  ox: number; oy: number; dx: number; dy: number;
   size: number; sizeY: number; rotSpeed: number; limit: number;
 };
 
@@ -164,7 +175,9 @@ export type BannerParticle = {
  * 一次 Play 的全部粒子。随机数顺序：系统 startDelay → 每粒子 life、speed、angle、radius、
  * size、sizeY、rotation、limit。burst 共 cycles 轮，每轮间隔 repeatInterval，每轮发 count 个。
  * Circle 形状（radius · radiusThickness）：厚度 0 恰在边上；厚度 > 0 时在环带内按面积均匀取半径（分布为推断）。
- * 方向沿半径向外（Circle 发射方向）。
+ * 方向沿半径向外（Circle 发射方向）。绕 X 转 180° 只是镜像，均匀角分布下不影响。
+ * Box 形状（boxThickness 0 = 整个体积）：在 scale.x × scale.y 矩形内均匀取点；发射方向沿形状局部 ±Z，
+ * 即视线方向，平面投影下不产生位移（投影按正交处理，为推断）。
  */
 export function spawnEmitter(e: BannerEmitter, index: number, playStart: number): BannerParticle[] {
   if (!Number.isFinite(playStart)) return [];
@@ -177,14 +190,24 @@ export function spawnEmitter(e: BannerEmitter, index: number, playStart: number)
     for (let i = 0; i < e.count; i++) {
       const life = range(e.life, rnd());
       const speed = range(e.speed, rnd());
-      const angle = rnd() * Math.PI * 2;
-      const ur = rnd();
-      const r0 = e.thickness === 0 ? e.radius : Math.sqrt(inner * inner + ur * (e.radius * e.radius - inner * inner));
+      let ox: number, oy: number, dx: number, dy: number;
+      if (e.shape === 'box') {
+        const box = e.box!;
+        ox = (rnd() - 0.5) * box[0];
+        oy = (rnd() - 0.5) * box[1];
+        dx = 0; dy = 0;
+      } else {
+        const angle = rnd() * Math.PI * 2;
+        const ur = rnd();
+        const r0 = e.thickness === 0 ? e.radius : Math.sqrt(inner * inner + ur * (e.radius * e.radius - inner * inner));
+        dx = Math.cos(angle); dy = Math.sin(angle);
+        ox = dx * r0; oy = dy * r0;
+      }
       const size = range(e.size, rnd());
       const sizeY = e.sizeY ? range(e.sizeY, rnd()) : size;
       const rotSpeed = e.rotSpeed ? range(e.rotSpeed, rnd()) : 0;
       const limit = e.limit ? range(e.limit, rnd()) : Infinity;
-      out.push({ emitter: index, spawn, life, speed, angle, r0, size, sizeY, rotSpeed, limit });
+      out.push({ emitter: index, spawn, life, speed, ox, oy, dx, dy, size, sizeY, rotSpeed, limit });
     }
   }
   return out;
@@ -201,13 +224,12 @@ export function particleAt(p: BannerParticle, e: BannerEmitter, t: number): Part
   if (age < 0 || age >= p.life) return null;
   const x = age / p.life;
   const dist = Number.isFinite(p.limit) ? dampedDistance(p.speed, p.limit, e.dampen, age) : p.speed * age;
-  const rr = (p.r0 + dist) * BANNER_UNIT;
   const k = e.sizeKeys ? evalHermite(e.sizeKeys, x) : 1;
   const cap = e.maxSize * DESIGN_H;
   const g = e.grad ? evalGradient(e.grad, x) : [1, 1, 1, 1];
   return {
-    x: Math.cos(p.angle) * rr,
-    y: Math.sin(p.angle) * rr,
+    x: (p.ox + p.dx * dist) * BANNER_UNIT,
+    y: (p.oy + p.dy * dist) * BANNER_UNIT,
     w: Math.min(cap, Math.max(0, p.size * k * BANNER_UNIT)),
     h: Math.min(cap, Math.max(0, p.sizeY * k * BANNER_UNIT)),
     rot: p.rotSpeed * age,
@@ -215,7 +237,21 @@ export function particleAt(p: BannerParticle, e: BannerEmitter, t: number): Part
   };
 }
 
-export const AP_PARTICLES: readonly BannerParticle[] = AP_BANNER_EMITTERS.flatMap((e, i) => spawnEmitter(e, i, activationTime(e.path)));
+function compile(clip: BannerClip): CompiledBanner {
+  const curves = new Map<string, Map<string, BannerCurve['keys']>>();
+  for (const c of clip.curves) {
+    let m = curves.get(c.path);
+    if (!m) curves.set(c.path, (m = new Map()));
+    m.set(c.prop, c.keys);
+  }
+  const b: CompiledBanner = { clip, curves, index: new Map(clip.nodes.map((n, i) => [n.path, i])), particles: [] };
+  b.particles = clip.emitters.flatMap((e, i) => spawnEmitter(e, i, activationTime(e.path, b)));
+  return b;
+}
+
+/** 按 ResultKind 排列的四档横幅。 */
+export const BANNERS: readonly CompiledBanner[] = COMBO_RESULT_BANNERS.map(compile);
+export const AP_PARTICLES: readonly BannerParticle[] = BANNERS[0]!.particles;
 
 // ── 贴图 ─────────────────────────────────────────────────────────
 type Tex = { img: HTMLImageElement; data: ImageData | null };
@@ -276,7 +312,9 @@ export class ComboResult {
   private readonly ui: HTMLCanvasElement;
   private readonly fx: HTMLCanvasElement;
   private tex = new Map<string, Tex>();
+  /** 每档每个节点预着色好的贴图（键 = kind × 1000 + 节点下标）。 */
   private nodeImg = new Map<number, CanvasImageSource>();
+  private kind: ResultKind = 0;
   private tintCache = new Map<string, CanvasImageSource>();
   private ready: Promise<void> | null = null;
   private last: number | null = null;
@@ -288,6 +326,7 @@ export class ComboResult {
     this.root.className = 'combo-result';
     this.root.setAttribute('aria-hidden', 'true');
     this.root.hidden = true;
+    this.root.dataset.kind = '0';
     const mk = (cls: string) => {
       const c = document.createElement('canvas');
       c.className = `cr-layer ${cls}`;
@@ -307,22 +346,31 @@ export class ComboResult {
   /** 预载贴图（首次调用时开始）。 */
   load(): Promise<void> {
     if (this.ready) return this.ready;
-    const names = new Set<string>();
-    for (const n of AP_BANNER_NODES) if (n.sprite) names.add(n.sprite);
-    for (const e of AP_BANNER_EMITTERS) names.add(e.tex);
-    this.ready = Promise.all([...names].map(async (n) => this.tex.set(n, await loadTex(n)))).then(() => {
-      AP_BANNER_NODES.forEach((n, i) => {
+    this.ready = Promise.all(COMBO_RESULT_TEXTURES.map(async (n) => this.tex.set(n, await loadTex(n)))).then(() => {
+      BANNERS.forEach((b, k) => b.clip.nodes.forEach((n, i) => {
         const t = n.sprite ? this.tex.get(n.sprite) : undefined;
         if (!t) return;
         // rgb 曲线全是常量绑定（与 Image.color 相同），着色可预先算好；alpha 由 globalAlpha 逐帧给。
-        const s = nodeStateAt(n, 0);
+        const s = nodeStateAt(n, 0, b);
         const base = [s.r, s.g, s.b, 1];
         const mul = (g: readonly number[]) => [base[0]! * g[0]!, base[1]! * g[1]!, base[2]! * g[2]!, g[3]!];
-        this.nodeImg.set(i, n.gradL && n.gradR ? tinted(t, mul(n.gradL), mul(n.gradR)) : tinted(t, base));
-      });
+        this.nodeImg.set(k * 1000 + i, n.gradL && n.gradR ? tinted(t, mul(n.gradL), mul(n.gradR)) : tinted(t, base));
+      }));
       if (this.last !== null) this.render(this.last);
     });
     return this.ready;
+  }
+
+  /** 当前显示的档位（roots[kind]）。 */
+  get resultKind(): ResultKind {
+    return this.kind;
+  }
+
+  setKind(kind: ResultKind): void {
+    if (kind === this.kind) return;
+    this.kind = kind;
+    this.root.dataset.kind = String(kind);
+    if (this.last !== null) this.render(this.last);
   }
 
   get visible(): boolean {
@@ -367,18 +415,20 @@ export class ComboResult {
     ux.fillRect(0, 0, pw, ph);
 
     // UI：层级顺序；变换沿父链累乘（y 向上 → 画布 y 向下）
-    const states = AP_BANNER_NODES.map((n) => nodeStateAt(n, time));
-    const visible = (i: number): boolean => i < 0 || (states[i]!.active && visible(AP_BANNER_NODES[i]!.parent));
+    const b = BANNERS[this.kind]!;
+    const nodes = b.clip.nodes;
+    const states = nodes.map((n) => nodeStateAt(n, time, b));
+    const visible = (i: number): boolean => i < 0 || (states[i]!.active && visible(nodes[i]!.parent));
     const place = (x: CanvasRenderingContext2D, i: number) => {
-      const n = AP_BANNER_NODES[i]!;
+      const n = nodes[i]!;
       if (n.parent >= 0) place(x, n.parent);
       const st = states[i]!;
       x.translate(st.x, -st.y);
       if (n.rot) x.rotate(-n.rot * Math.PI / 180);
       x.scale(st.sx, st.sy);
     };
-    AP_BANNER_NODES.forEach((n, i) => {
-      const img = this.nodeImg.get(i);
+    nodes.forEach((n, i) => {
+      const img = this.nodeImg.get(this.kind * 1000 + i);
       if (!img || !visible(i)) return;
       const a = states[i]!.a;
       if (a <= 0) return;
@@ -391,9 +441,9 @@ export class ComboResult {
     // 粒子：加色
     gx.globalCompositeOperation = 'lighter';
     fx.globalCompositeOperation = 'lighter';
-    for (const p of AP_PARTICLES) {
-      const e = AP_BANNER_EMITTERS[p.emitter]!;
-      if (!visible(NODE_INDEX.get(e.path) ?? -1)) continue;
+    for (const p of b.particles) {
+      const e = b.clip.emitters[p.emitter]!;
+      if (!visible(b.index.get(e.path) ?? -1)) continue;
       const f = particleAt(p, e, time);
       if (!f || f.a <= 0 || f.w <= 0 || f.h <= 0) continue;
       const img = this.particleImage(e.tex, f.r, f.g, f.b);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AP_PARTICLES,
+  BANNERS,
   COMBO_RESULT_CLIP_DURATION,
   activationTime,
   dampedDistance,
@@ -9,7 +10,8 @@ import {
   particleAt,
   spawnEmitter,
 } from '../src/comboResult';
-import { AP_BANNER_CURVES, AP_BANNER_EMITTERS, AP_BANNER_NODES, COMBO_RESULT_BG } from '../src/comboResultClip';
+import { AP_BANNER_CURVES, AP_BANNER_EMITTERS, AP_BANNER_NODES, CLEAR_BANNER_EMITTERS, COMBO_RESULT_BANNERS, COMBO_RESULT_BG, COMBO_RESULT_TEXTURES } from '../src/comboResultClip';
+import { sanitizePreviewSettings } from '../src/settingsPersist';
 
 const node = (p: string) => AP_BANNER_NODES.find((n) => n.path === `Root-AllPerfect/${p}`)!;
 const em = (p: string) => AP_BANNER_EMITTERS.find((e) => e.path.endsWith(`/${p}`))!;
@@ -62,7 +64,7 @@ describe('曲终横幅 AllPerfect', () => {
     for (const p of ps) {
       expect(p.limit).toBeGreaterThanOrEqual(0.7 - 1e-6);
       expect(p.limit).toBeLessThanOrEqual(1 + 1e-6);
-      expect(p.r0).toBeCloseTo(0.34, 6);
+      expect(Math.hypot(p.ox, p.oy)).toBeCloseTo(0.34, 6);
     }
     expect(new Set(ps.map((p) => p.limit.toFixed(3))).size).toBeGreaterThan(5);
   });
@@ -98,5 +100,59 @@ describe('曲终横幅 AllPerfect', () => {
     expect(particleAt(p, e, p.spawn + 0.3)).toEqual(particleAt(p, e, p.spawn + 0.3));
     expect(particleAt(p, e, p.spawn - 0.01)).toBeNull();
     expect(particleAt(p, e, p.spawn + p.life)).toBeNull();
+  });
+});
+
+describe('曲终横幅四档（FC / Clear / Finish）', () => {
+  it('按 GetResultIndex 排列，root 与 clip 一一对应，各 4 s', () => {
+    expect(COMBO_RESULT_BANNERS.map((b) => b.root)).toEqual(['Root-AllPerfect', 'Root-FullCombo', 'Root-Clear', 'Root-Finish']);
+    expect(COMBO_RESULT_BANNERS.map((b) => b.clip)).toEqual(['sc2_ingame_end_AllPerfect', 'sc2_ingame_end_FullCombo', 'sc2_ingame_end_Clear', 'sc2_ingame_end_Finish']);
+    for (const b of COMBO_RESULT_BANNERS) for (const n of b.nodes) expect(n.path.startsWith(b.root)).toBe(true);
+  });
+
+  it('每档的 rgb 曲线都是常量（预着色成立），贴图都在清单里', () => {
+    for (const b of COMBO_RESULT_BANNERS) {
+      for (const c of b.curves) if (['r', 'g', 'b'].includes(c.prop)) expect(c.keys).toHaveLength(1);
+      for (const n of b.nodes) if (n.sprite) expect(COMBO_RESULT_TEXTURES).toContain(n.sprite);
+      for (const e of b.emitters) expect(COMBO_RESULT_TEXTURES).toContain(e.tex);
+    }
+  });
+
+  it('每档都有粒子，且都在 4 s 片段内出生', () => {
+    for (const b of BANNERS) {
+      expect(b.particles.length).toBeGreaterThan(0);
+      for (const p of b.particles) if (Number.isFinite(p.spawn)) expect(p.spawn).toBeLessThan(4);
+    }
+  });
+
+  it('只导出原包里真正绘制的发射器（GameObject 链 active 且 Renderer 启用）', () => {
+    const names = (b: (typeof BANNERS)[number]) => b.clip.emitters.map((e) => e.path.split('/').pop()).sort();
+    expect(BANNERS[0]!.clip.emitters).toHaveLength(12);
+    expect(BANNERS[1]!.clip.emitters).toHaveLength(11);
+    expect(names(BANNERS[2]!)).toEqual(['BurstParticle01', 'flare02', 'sc2_ingeame_end_ClearTitleEffect']);
+    expect(names(BANNERS[3]!)).toEqual(['flare02', 'sc2_ingeame_end_FinishiTitleEffect']);
+  });
+
+  it('Clear 的 BurstParticle 是 Box 发射：5.4×2.5 矩形内均匀出生，平面内不移动', () => {
+    const boxes = CLEAR_BANNER_EMITTERS.filter((e) => e.shape === 'box');
+    expect(boxes.map((e) => e.path.split('/').pop())).toEqual(['BurstParticle01']);
+    for (const e of boxes) {
+      expect(e.box).toEqual([5.400000095367432, 2.5]);
+      const ps = spawnEmitter(e, 0, 0);
+      for (const p of ps) {
+        expect(Math.abs(p.ox)).toBeLessThanOrEqual(2.7 + 1e-6);
+        expect(Math.abs(p.oy)).toBeLessThanOrEqual(1.25 + 1e-6);
+        expect(p.dx).toBe(0);
+        expect(p.dy).toBe(0);
+        const f = particleAt(p, e, p.spawn + p.life * 0.5)!;
+        expect(f.x).toBeCloseTo(p.ox * 100, 6);
+      }
+    }
+  });
+
+  it('配置项 comboResult 只接受 0–3，默认 AP', () => {
+    expect(sanitizePreviewSettings({}).comboResult).toBe(0);
+    expect(sanitizePreviewSettings({ comboResult: 2 }).comboResult).toBe(2);
+    expect(sanitizePreviewSettings({ comboResult: 7 }).comboResult).toBe(0);
   });
 });

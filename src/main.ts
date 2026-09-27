@@ -10,7 +10,7 @@ import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
 import { StartAnimation } from './startAnim';
-import { ComboResult, COMBO_RESULT_CLIP_DURATION } from './comboResult';
+import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from './comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
 import { createSongPicker } from './songPicker';
 import {
@@ -64,6 +64,7 @@ app.innerHTML=`
 <label class="check"><input id="opt-skill-cutin" type="checkbox" checked>技能 Cut-in</label>
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
 <label class="check"><input id="opt-start-anim" type="checkbox" checked>开场过场</label>
+<label class="setting" for="opt-combo-result"><span>曲终横幅 <small>GetResultIndex</small></span><select id="opt-combo-result"><option value="0" selected>AllPerfect</option><option value="1">FullCombo</option><option value="2">Clear</option><option value="3">Finish</option></select><small>自动演奏恒为 AP；其余档位仅供预览。</small></label>
 <label class="check"><input id="opt-mv" type="checkbox" checked>MV / MusicVideo</label>
 </section>
 <section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
@@ -134,6 +135,7 @@ function readSettings():PreviewSettings{
   enableSkillCutin:input('opt-skill-cutin').checked,
   enableFeverDisplay:input('opt-fever').checked,
   enableStartAnimation:input('opt-start-anim').checked,
+  comboResult:(()=>{const v=Number(el<HTMLSelectElement>('opt-combo-result').value);return (v===1||v===2||v===3?v:0) as ResultKind;})(),
   judgementOutput:Number(el<HTMLSelectElement>('opt-judgement-output').value),
   fastSlow:Number(el<HTMLSelectElement>('opt-fast-slow').value),
   totalAppeal:Number(input('opt-appeal').value),
@@ -168,6 +170,7 @@ function applySettingsToForm(s:PreviewSettings){
  input('opt-skill-cutin').checked=s.enableSkillCutin;
  input('opt-fever').checked=s.enableFeverDisplay;
  input('opt-start-anim').checked=s.enableStartAnimation;
+ el<HTMLSelectElement>('opt-combo-result').value=String(s.comboResult);
  el<HTMLSelectElement>('opt-judgement-output').value=String(s.judgementOutput);
  el<HTMLSelectElement>('opt-fast-slow').value=String(s.fastSlow);
  input('opt-appeal').value=String(s.totalAppeal);
@@ -186,6 +189,7 @@ const format=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).t
 function metadata(){input('timeline').max=String(chart.duration);}metadata();
 const startAnim=new StartAnimation(el('stage'));
 const comboResult=new ComboResult(el('stage'));
+comboResult.setKind(readSettings().comboResult);
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
@@ -287,6 +291,7 @@ input('opt-fs-y').oninput=()=>{el('opt-fs-y-value').textContent=input('opt-fs-y'
 input('opt-fever').onchange=applyHudOptions;
 input('opt-ap-continue').onchange=applyHudOptions;
 input('opt-start-anim').onchange=()=>persistSettings();
+el<HTMLSelectElement>('opt-combo-result').onchange=()=>{comboResult.setKind(readSettings().comboResult);persistSettings();};
 input('opt-mv').onchange=()=>persistSettings();
 input('opt-skill-view').onchange=()=>persistSettings();
 input('opt-skill-cutin').onchange=()=>persistSettings();
@@ -351,7 +356,7 @@ let comboLastT=0;
  */
 function syncComboResult(t:number,playing:boolean){
  if(finishTime===null||t<finishTime){if(comboResult.visible)comboResult.hide();comboLastT=t;return;}
- if(playing&&comboLastT<finishTime&&t-finishTime<0.25)se?.playFinish(0);
+ if(playing&&comboLastT<finishTime&&t-finishTime<0.25)se?.playFinish(comboResult.resultKind);
  comboResult.render(t-finishTime);
  comboLastT=t;
 }

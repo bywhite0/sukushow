@@ -95,18 +95,24 @@ const SPRITES = [
   'ui_sc2_ingame_rank_base',
 ];
 
-/** 曲终横幅 RhythmGameComboResult · AllPerfect 用到的贴图（UI Image + 粒子材质 _MainTex），见 src/comboResultClip.ts。 */
+/** 曲终横幅 RhythmGameComboResult 四档用到的贴图（UI Image + 粒子材质 _MainTex），与 src/comboResultClip.ts 的 COMBO_RESULT_TEXTURES 一致。 */
 const BANNER_TEX = [
+  'sc2_Result_Particle_light03',
+  'sc2_Result_effect_glow_02',
+  'sc2_Result_effect_impact01',
+  'sc2_ingameStartEnd_glitter_lyric_01',
+  'sc2_result_effect_glitter_lyric_01',
+  'ui_sc2_ingame_end_AllperfectTitle',
+  'ui_sc2_ingame_end_ClearTitle',
+  'ui_sc2_ingame_end_FnishTitle',
+  'ui_sc2_ingame_end_FullcomboTitle',
+  'ui_sc2_ingame_end_allperfect',
+  'ui_sc2_ingame_end_clear',
+  'ui_sc2_ingame_end_finish',
+  'ui_sc2_ingame_end_fullcombo',
   'ui_sc2_ingame_end_line',
   'ui_sc2_ingame_end_star01',
   'ui_sc2_ingame_end_star02',
-  'ui_sc2_ingame_end_allperfect',
-  'ui_sc2_ingame_end_AllperfectTitle',
-  'sc2_ingameStartEnd_glitter_lyric_01',
-  'sc2_Result_effect_impact01',
-  'sc2_Result_effect_glow_02',
-  'sc2_Result_Particle_light03',
-  'sc2_result_effect_glitter_lyric_01',
 ];
 
 const rel = (abs) => abs.slice(repoRoot.length + 1).replaceAll('\\', '/');

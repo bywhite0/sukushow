@@ -199,16 +199,20 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - URL：`?song=<id>&difficulty=<NORMAL|HARD|EXPERT|MASTER>&offset=<毫秒>`；选曲时同步回 URL，`offset` 只作用于本次打开，不写入设置。
 ## 曲终横幅（RhythmGameComboResult）
 
-- 结果档位：`GetResultIndex` 为 AP→0、FC→1、Clear→2、Finish→3。自动演奏恒为 AP，所以预览只接了 AP 横幅（`roots[0]`）。
+- 结果档位：`GetResultIndex` 为 AP→0、FC→1、Clear（mental ≥ 1）→2、Finish→3；`roots[]` 序列化顺序为 AllPerfect / FullCombo / Clear / Finish，与 `ComboResultAnimationNames`（clip #99 / #102 / #100 / #101，各 4 s）一一对应。自动演奏恒为 AP；显示设置里的「曲终横幅」可切换四档，仅供预览，持久化在 localStorage。
 - 触发时刻：FinishTime = `MusicsRecord.PlayTime`（毫秒）/ 1000，取 `song-list.json` 的 `playTime`；例如 103119 为 112.37 s。进度条时长延长到 FinishTime + 4 s（片段时长）。
-- 出现时 `ShowAsync` 激活对应 root，播放 SE `se_rhythm_finish_0004`，再播 4 s 动画片段。预览在播放中正向越过 FinishTime（0.25 s 内）时播放该 SE。
+- 出现时 `ShowAsync` 把 `roots[idx]` 互斥激活（@0x4B01CEC），播放 `ComboResultSeNames[idx]`：AP→`se_rhythm_finish_0004`、FC→`0003`、Clear→`0002`、Finish→`0001`，再播动画片段。四个 Root 在 prefab 里只有一个是 active，所以预览把 Root 本身恒视为激活，只看其下节点的 active 与曲线。预览在播放中正向越过 FinishTime（0.25 s 内）时播放 SE。
 - 画布为 World Space、Default 层、order 10；Bg 为黑色 α 0.698。
 - 层序：Glow 发射器位于 Default 层 order 1，画在画布下；其余发射器位于更高的 sorting layer，画在画布上。
 - 粒子材质均为加色（tex × 顶点色，SrcAlpha One），预览用 `lighter` / `plus-lighter` 合成。
-- 动画曲线与节点来自 banners.json；发射器参数直接取 level56 的 ParticleSystem/Renderer：burst cycles/interval、startDelay、LimitVelocity 的 dampen 与 magnitude 随机范围、Circle 半径/厚度、Hermite 尺寸曲线（time/value/inSlope/outSlope × scalar）、渐变、maxParticleSize、sortingOrder。生成脚本 `scripts/gen-combo-result-clip.py` 对不支持的模块直接断言失败。
+- 动画曲线与节点来自 banners.json；发射器参数直接取 level56 的 ParticleSystem/Renderer：burst cycles/interval、startDelay、LimitVelocity 的 dampen 与 magnitude 随机范围、Circle 半径/厚度、Box 尺寸、Hermite 尺寸曲线（time/value/inSlope/outSlope × scalar）、渐变、maxParticleSize、sortingOrder。生成脚本 `scripts/gen-combo-result-clip.py` 对不支持的模块直接断言失败。
+- 只导出实际绘制的发射器：GameObject 自身及祖先全部 active，且 `ParticleSystemRenderer.m_Enabled` 为真。AP 12 个、FC 11 个全部满足；Clear 只剩标题特效、BurstParticle01、flare02（Ring / Glow 等 9 个关闭，所以没有光球），Finish 只剩标题特效与 flare02。
+- Circle 发射器允许形状 Z 偏移（如 AP 标题特效 z = −3，沿视线）与绕 X 180°（只镜像圆，均匀角分布不变），缩放必须为 1。
+- 色彩空间：原项目为 Gamma 空间（实机录像测得叠加系数逐通道平直约 0.19–0.2）。预览的贴图着色、渐变插值、黑罩与加色合成都直接在 sRGB 编码值上计算，不做线性化，与 Unity Gamma 管线一致；16 张横幅 PNG 均无 gAMA / sRGB / iCCP / cHRM 块，浏览器不会做色彩转换。
 
 推断项（原包无法直接对应到网页的部分）：
 - maxParticleSize 按视口高度（1080 参考）换算。
 - Circle 发射在厚度 > 0 时按面积均匀取半径。
+- Box 发射（Clear 的 BurstParticle01，5.4 × 2.5）在矩形内均匀出生；发射方向沿形状局部 Z（视线），按正交投影处理，平面内不移动。
 - 随机数不是 Unity 的 RNG，粒子具体分布与原版不同，统计参数一致。
 - 横幅按播放时间轴驱动（可拖动进度条回看），原版按实时播放。
