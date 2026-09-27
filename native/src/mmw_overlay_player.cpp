@@ -2377,57 +2377,31 @@ void main() {
     constexpr float CHART_END_PADDING_SEC = 5.0f;
     constexpr float TEAM_POWER = 250000.0f;
     constexpr float RATING = 26.0f;
-    // Fever：入场「FEVER!」字样 + 窗口边框。
+    // Fever：窗口边框 + 入场「FEVER!」字样 + 紫色光束。
     //
-    // 反查客户端运行时资源得到的**原始实现**（实测证据链）：
-    //   1. 专用着色器 **`Sekai/RhythmGame/Fever-Frame`**
-    //      （同族另有 `Sekai/Sprites/FeverLine`、`Sekai/RhythmGame/Fever-Lane`）
-    //   2. 其属性表含 **`_ColorTex`（颜色纹理）+ `_Speed`（流动速度）**
-    //   3. 使用该着色器的材质：`_ColorTex` = **`effect_fever_ gradation`**，
-    //      `_Speed` = 1.0，`_Color` / `_RendererColor` = 纯白
-    //   4. `effect_fever_ gradation`（150×150）是**垂直平滑渐变**，水平方向恒定：
-    //        0.00 品红(246, 85,167) → 0.50 蓝紫(115,116,255) → 1.00 青绿(9,229,189)
+    // 取值依据是客户端的 Fever 特效素材 fx_fever_frame / fx_super_fever_frame /
+    // fx_fever_v2（1920×1080，客户端以 `effect_asset/live/fever/{0}` 为路径模板按需加载）。
     //
-    //   → 边框的彩虹 = **用 _ColorTex 采样这条渐变，再由 _Speed 让它沿边框滚动**。
-    //     既不是纯色四边形，也不是贴 tex_rainbow_01（那是稀疏对角彩带，已弃用）。
-    //     整个 Fever 资源集里**没有任何边框贴图**，边框是程序化绘制的。
-    //
-    // 形状：**不是闭合矩形环**。官方特效素材 fx_fever_frame.mp4 逐像素实测：
-    //   左右两条通高竖条（宽 11px）+ 上下四角的短臂（长 211px），
-    //   顶边/底边中间留空（x∈[212,1711] 纯黑）。
-    // 与资源层级一致 —— FeverView/FeverChance 下只有
-    //   `fever_chance_frame_left` / `_right` 两个对象，无独立上下边。
-    // ---- 以下数值全部来自 **PJSK 原包素材** 逐像素实测（非推断）----
-    // 素材 fx_fever_frame / fx_super_fever_frame / fx_fever_v2（1920×1080 mp4）。
-    // PJSK 客户端字符串字面量已确认这些名字与路径模板 `effect_asset/live/fever/{0}`。
-    //
-    // 【边框】fx_fever_frame 与 fx_super_fever_frame **逐像素完全相同**
-    //   （非黑像素 29,839、亮度总和 6,241,839、峰值 246、bbox 全幅，三者全等），
+    // 【边框】fx_fever_frame 与 fx_super_fever_frame 内容完全一致
+    //   （非黑像素 29,839、亮度总和 6,241,839、峰值 246、bbox 全幅，三者相等），
     //   故 SuperFever 不需要单独的边框视觉。
-    //   形状：左右竖条厚 11px（x=0..9 恒为 241–244，x=10 掉到 190）；
-    //         顶/底中段（x=960 处 y=0..79）**恒为 0** ⇒ 不是闭合矩形；
-    //         四角臂沿边衰减：x=0→243、40→214、80→160、120→96、160→44、180→24、200→11、205→0。
-    //   颜色：(237,234,238)，饱和度 0.017 ⇒ **白色**。
-    //   ⇒ 现有实现（11px 竖条 + 四角淡出臂 + 白色 + 无顶/底中段）已与原包一致。
+    //   形状：左右竖条厚 11px；顶/底中段为空（x=960 处 y=0..79 恒为 0）
+    //         ⇒ 不是闭合矩形；四角臂沿边平滑衰减，x≈205 处归零。
+    //   颜色：白（饱和度 0.017）。亮度恒定，无呼吸/脉动。
     constexpr float FEVER_FRAME_BORDER_PX = 11.0f;
-    constexpr float FEVER_FRAME_ARM_PX = 205.0f;     // 实测衰减到 0 的位置（原为估的 211）
+    constexpr float FEVER_FRAME_ARM_PX = 205.0f;
     constexpr float FEVER_FRAME_PEAK_ALPHA = 0.95f;
     constexpr float FEVER_FRAME_RGB[3] = {237.0f / 255.0f, 234.0f / 255.0f, 238.0f / 255.0f};
-    // 呼吸周期：原包边框**全程静止**（9 个采样帧亮度总和完全相同），
-    // 故呼吸不是原包行为，仅保留一条极缓慢起伏避免画面死板。
-    constexpr float FEVER_FRAME_PULSE_SEC = 2.4f;
 
-    // 【入场文字与紫色光束】fx_fever_v2 实测时间线（容器 2.38s，**实际内容只有 1.20s**）：
-    //   t=0.05s 出现、t=0.25–0.30s 主峰（非黑 26 万、亮度总和 2.6e7、峰值 255）、
-    //   t=0.55s 起进入稳定段（非黑 ≈2.28 万）、t=1.20s 结束。
-    //   稳定段 bbox=(731,493,1183,573)：中心 (957,533)、宽 453、高 81 —— 即「FEVER!」字样。
-    //   紫色光束：t=0.25s 时左束由 (1059,60) 展到 (18,1020)、右束由 (1101,60) 展到 (1896,1020)，
-    //   即**从底部两角向中心汇聚的倒 V**；主峰颜色 (115,84,140)、饱和度 0.433。
-    constexpr float FEVER_TEXT_DURATION_SEC = 1.20f;  // 实测内容长度（非容器 2.38s）
-    constexpr float FEVER_TEXT_PEAK_SEC = 0.28f;      // 实测主峰
+    // 【入场文字与紫色光束】fx_fever_v2
+    //   容器 2.38s，但内容只有 1.20s：0.05s 起、0.25–0.30s 主峰、1.20s 结束。
+    //   稳定段 bbox=(731,493,1183,573) ⇒ 中心 (957,533)、宽 453、高 81（「FEVER!」字样）。
+    //   紫色光束：底部两角向中心汇聚的倒 V，带宽约 90px，主峰颜色 (115,84,140)。
+    constexpr float FEVER_TEXT_DURATION_SEC = 1.20f;
+    constexpr float FEVER_TEXT_PEAK_SEC = 0.28f;
     constexpr float FEVER_TEXT_CENTER_X = 957.0f;
     constexpr float FEVER_TEXT_CENTER_Y = 533.0f;
-    constexpr float FEVER_TEXT_WIDTH = 453.0f;        // 实测稳定段宽度
+    constexpr float FEVER_TEXT_WIDTH = 453.0f;
     constexpr float FEVER_TEXT_HEIGHT = 81.0f;
     constexpr float FEVER_BEAM_APEX_Y = 60.0f;        // 光束两腿在中心汇聚处的高度
     constexpr float FEVER_BEAM_RGB[3] = {115.0f / 255.0f, 84.0f / 255.0f, 140.0f / 255.0f};
@@ -3237,30 +3211,9 @@ void main() {
         ImDrawList* overlay = ImGui::GetForegroundDrawList();
 
         if (feverActive) {
-            // 形状与颜色均按官方特效素材逐像素实测（1920×1080）。
-            //
-            // 【形状】左右两条**通高竖条**（宽 11px）+ 上下四角的**渐变淡出臂**。
-            //   顶边 y=0..11 的亮度沿 x 从角落 245 平滑衰减到 x≈211 处归零：
-            //     x=0→245  x=60→192  x=120→98  x=180→25  x=211→9  x=240→2
-            //   —— 是**渐变淡出**，不是硬边短臂（低阈值下可见 0..234 连续，
-            //      阈值越高测得的「臂长」越短：TH=8→211、TH=96→122）。
-            //   顶/底边中间确实为空（x∈[240,1711] 恒为 0）。
-            //   形状在 fx_fever_frame.mp4 与 fx_super_fever_frame.mp4 两个独立素材
-            //   上完全一致，且与资源侧层级吻合（FeverView/FeverChance 下只有
-            //   fever_chance_frame_left/right，无独立上下边）。
-            //
-            // 【颜色】边框是**白色**，不是彩虹。
-            //   素材实测 (245,242,246)，饱和度 S=0.015、色相桶仅 2/12 —— 基本纯白。
-            //   边框颜色在整个 2.25s 里恒定，无流动、无变色。
-            //   真正的彩虹在**主特效层 fx_fever_v2**（斜向光带，11/12 色相桶全覆盖），
-            //   而 fx_fever_v2 最外 12px 边缘带的彩色像素数为 **0** —— 彩虹不落在边框上。
-            //   另注：材质 `GroundTapEffect` 虽用 `Sekai/RhythmGame/Fever-Frame` 着色器
-            //   且 `_ColorTex = effect_fever_ gradation`，但它与边框对象无关
-            //   （边框的 SpriteRenderer 材质 fileID=1，即内置材质）；
-            //   此前误把该着色器的颜色纹理当作边框配色依据，已按素材改正。
-            const float pulse = 0.88f + 0.12f * std::sin(
-                feverLocalSec * 6.2831853f / FEVER_FRAME_PULSE_SEC);
-            const float baseAlpha = clamp01(FEVER_FRAME_PEAK_ALPHA * pulse * overlayAlpha);
+            // 边框：左右两条通高竖条（宽 11px）+ 上下四角的渐变淡出臂，
+            // 顶/底中段留空 —— 开口框，不是闭合矩形。颜色为白，亮度恒定。
+            const float baseAlpha = clamp01(FEVER_FRAME_PEAK_ALPHA * overlayAlpha);
 
             const float b = FEVER_FRAME_BORDER_PX;   // 竖条宽 11px
             const float a = FEVER_FRAME_ARM_PX;      // 四角臂的淡出长度
