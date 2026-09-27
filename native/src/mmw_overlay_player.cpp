@@ -2406,7 +2406,12 @@ void main() {
     // 【入场文字与紫色光束】fx_fever_v2
     //   容器 2.38s，但内容只有 1.20s：0.05s 起、0.25–0.30s 主峰、1.20s 结束。
     //   稳定段 bbox=(731,493,1183,573) ⇒ 中心 (957,533)、宽 453、高 81（「FEVER!」字样）。
-    //   紫色光束：底部两角向中心汇聚的倒 V，带宽约 90px，主峰颜色 (115,84,140)。
+    //   紫色光束：底部两角向中心汇聚的倒 V。
+    //   颜色取自解密资源 eff_fever_grd（fx_fever_v2 的颜色梯度纹理）：
+    //   沿光束是一条彩虹竖向梯度——顶(apex) 品红 (254,126,198) → 中 紫罗兰
+    //   (169,120,251)/(139,133,255) → 底 青 (90,210,237) → 蓝绿 (66,255,217)。
+    //   旧值是 flat 暗紫 (115,84,140)。形状 tex_fever_v2 是白色 V-mask（描边宽度大体均匀），
+    //   颜色全由该梯度给。
     constexpr float FEVER_TEXT_DURATION_SEC = 1.20f;
     constexpr float FEVER_TEXT_PEAK_SEC = 0.28f;
     constexpr float FEVER_TEXT_CENTER_X = 957.0f;
@@ -2414,7 +2419,6 @@ void main() {
     constexpr float FEVER_TEXT_WIDTH = 453.0f;
     constexpr float FEVER_TEXT_HEIGHT = 81.0f;
     constexpr float FEVER_BEAM_APEX_Y = 60.0f;        // 光束两腿在中心汇聚处的高度
-    constexpr float FEVER_BEAM_RGB[3] = {115.0f / 255.0f, 84.0f / 255.0f, 140.0f / 255.0f};
 
     // ---- FeverChance（入场）----
     // 取值依据是客户端的 FeverChance 特效素材 fx_fever_chance_v2（1920×1080）。
@@ -2484,13 +2488,36 @@ void main() {
     };
 
     // ---- Fever 紫光（fx_fever_v2）----
-    // 与 FeverChance 中心线同族，宽度剖面不同（更宽、且越靠下越宽）。
+    // 与 FeverChance 中心线同族。tex_fever_v2 的 V-mask 描边宽度大体均匀（每腿约占
+    // sprite 宽 0.29），故宽度剖面取近似均匀；绝对像素为视觉估计（mesh 变换未取到）。
     constexpr float FEVER_BEAM_APEX_HALF_SEP = 45.0f;
     constexpr float FEVER_BEAM_SLOPE = 0.838f;
     constexpr float FEVER_BEAM_WIDTH[][2] = {
-        {0.0f, 8.0f}, {120.0f, 9.0f}, {240.0f, 24.0f}, {360.0f, 34.0f},
-        {480.0f, 47.0f}, {600.0f, 71.0f}, {720.0f, 93.0f}, {840.0f, 110.0f},
-        {960.0f, 113.0f}, {1080.0f, 118.0f},
+        {0.0f, 40.0f}, {300.0f, 50.0f}, {600.0f, 52.0f}, {900.0f, 48.0f}, {1080.0f, 44.0f},
+    };
+    // 颜色梯度（y→RGB，采自 eff_fever_grd 竖向：顶=品红、中=紫罗兰、底=蓝绿）。
+    constexpr float FEVER_BEAM_COLOR[][4] = {
+        {0.0f, 254.0f / 255.0f, 126.0f / 255.0f, 198.0f / 255.0f},
+        {135.0f, 231.0f / 255.0f, 122.0f / 255.0f, 214.0f / 255.0f},
+        {270.0f, 200.0f / 255.0f, 118.0f / 255.0f, 235.0f / 255.0f},
+        {405.0f, 169.0f / 255.0f, 120.0f / 255.0f, 251.0f / 255.0f},
+        {540.0f, 139.0f / 255.0f, 133.0f / 255.0f, 255.0f / 255.0f},
+        {675.0f, 116.0f / 255.0f, 165.0f / 255.0f, 255.0f / 255.0f},
+        {810.0f, 90.0f / 255.0f, 210.0f / 255.0f, 237.0f / 255.0f},
+        {945.0f, 69.0f / 255.0f, 249.0f / 255.0f, 219.0f / 255.0f},
+        {1080.0f, 66.0f / 255.0f, 255.0f / 255.0f, 217.0f / 255.0f},
+    };
+    // SuperFever 梯度（eff_feversuper_grd）：黄→粉→紫→蓝→青，更满的彩虹。
+    constexpr float FEVER_SUPER_BEAM_COLOR[][4] = {
+        {0.0f, 255.0f / 255.0f, 241.0f / 255.0f, 127.0f / 255.0f},
+        {135.0f, 255.0f / 255.0f, 196.0f / 255.0f, 153.0f / 255.0f},
+        {270.0f, 255.0f / 255.0f, 140.0f / 255.0f, 186.0f / 255.0f},
+        {405.0f, 225.0f / 255.0f, 119.0f / 255.0f, 224.0f / 255.0f},
+        {540.0f, 164.0f / 255.0f, 121.0f / 255.0f, 253.0f / 255.0f},
+        {675.0f, 133.0f / 255.0f, 138.0f / 255.0f, 255.0f / 255.0f},
+        {810.0f, 104.0f / 255.0f, 181.0f / 255.0f, 246.0f / 255.0f},
+        {945.0f, 71.0f / 255.0f, 246.0f / 255.0f, 220.0f / 255.0f},
+        {1080.0f, 66.0f / 255.0f, 255.0f / 255.0f, 218.0f / 255.0f},
     };
     // 颜色剖面（y → RGB）：中段最亮的暖金，两端转暗橙。
     constexpr float CHANCE_BEAM_COLOR[][4] = {
@@ -2505,6 +2532,20 @@ void main() {
         {960.0f, 88.0f / 255.0f, 76.0f / 255.0f, 41.0f / 255.0f},
         {1080.0f, 70.0f / 255.0f, 60.0f / 255.0f, 34.0f / 255.0f},
     };
+
+    // ---- 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示 ----
+    // 反汇编 MultiFeverView.UpdateFeverGauge（RVA 0x5370CA4）：feverGaugeFlash 只在 gauge
+    // 充过普通阈值、进 super 区间时 SetActive 一次（s9>0，s9=(value-requireFever)/
+    // (requireSuper-requireFever)；feverState 1→2 后不再重触发）—— super 专属、一发，不是
+    // 普通 FeverChance、也不是持续辉光。本项目无 super 阈值、由开关代表 super，且充能态起点
+    // （progress 跨 0.7）即 super 入口，故仅 superFeverEnabled 且充能态时自 chanceLocalSec=0
+    // 放一发。形状纹理 tex_fevergauge_flash 为白色 → 取白色加色辉光。
+    // 时序包络为近似一发（起→峰→尽），权威曲线见动画 clip_fevergauge_flash_v2_01；
+    // 几何暂借计量条中心线（其独立 mesh 未取到，属估计）。
+    constexpr float FEVER_GAUGE_FLASH_DELAY_SEC = 0.10f;
+    constexpr float FEVER_GAUGE_FLASH_PEAK_SEC = 0.40f;
+    constexpr float FEVER_GAUGE_FLASH_DURATION_SEC = 0.80f;
+    constexpr float FEVER_GAUGE_FLASH_RGB[3] = {1.0f, 1.0f, 1.0f};
 
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
@@ -3473,6 +3514,53 @@ void main() {
             }
         }
 
+        // 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示：进 super 区间时放一发
+        // 从两底角向顶点上扫的白色辉光（一发 0.8s 起→峰→尽，非持续辉光）。反汇编实证 super
+        // 专属且只 SetActive 一次（见常量处注释）；本项目 superFeverEnabled 且充能起点即
+        // super 入口，故自 chanceLocalSec=0 起放该包络。
+        if (chanceActive && gPlayer.superFeverEnabled && gPlayer.feverDisplayEnabled) {
+            const float ft = chanceLocalSec;
+            const float flashEnv = ft < FEVER_GAUGE_FLASH_DELAY_SEC
+                ? 0.0f
+                : (ft < FEVER_GAUGE_FLASH_PEAK_SEC
+                       ? (ft - FEVER_GAUGE_FLASH_DELAY_SEC) /
+                             (FEVER_GAUGE_FLASH_PEAK_SEC - FEVER_GAUGE_FLASH_DELAY_SEC)
+                       : clamp01(1.0f - (ft - FEVER_GAUGE_FLASH_PEAK_SEC) /
+                                            (FEVER_GAUGE_FLASH_DURATION_SEC - FEVER_GAUGE_FLASH_PEAK_SEC)));
+            if (ft < FEVER_GAUGE_FLASH_DURATION_SEC && flashEnv > 0.001f) {
+                auto flashWidthAt = [&](float y) {
+                    constexpr int kN = static_cast<int>(sizeof(FEVER_BEAM_WIDTH) / sizeof(FEVER_BEAM_WIDTH[0]));
+                    if (y <= FEVER_BEAM_WIDTH[0][0]) return FEVER_BEAM_WIDTH[0][1];
+                    if (y >= FEVER_BEAM_WIDTH[kN - 1][0]) return FEVER_BEAM_WIDTH[kN - 1][1];
+                    for (int i = 1; i < kN; ++i) {
+                        if (y <= FEVER_BEAM_WIDTH[i][0]) {
+                            const float y0 = FEVER_BEAM_WIDTH[i - 1][0];
+                            const float y1 = FEVER_BEAM_WIDTH[i][0];
+                            const float k = (y - y0) / (y1 - y0);
+                            return FEVER_BEAM_WIDTH[i - 1][1] +
+                                   (FEVER_BEAM_WIDTH[i][1] - FEVER_BEAM_WIDTH[i - 1][1]) * k;
+                        }
+                    }
+                    return FEVER_BEAM_WIDTH[kN - 1][1];
+                };
+                auto flashColorAt = [&](float, float a) {
+                    return IM_COL32(
+                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[0] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[1] * 255.0f)),
+                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[2] * 255.0f)),
+                        static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
+                };
+                beginAdditive(overlay);
+                drawBeamGlow(overlay, px, py, 960.5f,
+                             CHANCE_BEAM_APEX_HALF_SEP, CHANCE_BEAM_SLOPE,
+                             flashEnv,
+                             CHANCE_BEAM_SEGMENTS,
+                             flashWidthAt,
+                             flashColorAt);
+                endAdditive(overlay);
+            }
+        }
+
         // ---- 充能计量条 ----
         // 只在 FeverChance 态可见（原包在 StartProgress 里才 SetActive(true)，
         // 且 UpdateFeverGauge 仅在 feverState ∈ {1,2} 时更新）。
@@ -3618,11 +3706,33 @@ void main() {
                         }
                         return FEVER_BEAM_WIDTH[kN - 1][1];
                     };
-                    auto feverColorAt = [&](float, float a) {
+                    auto feverColorAt = [&](float y, float a) {
+                        // 沿 y 采 eff_fever_grd 梯度（super 时用 eff_feversuper_grd）；
+                        // 加色叠加下核心自然提亮，无需另并白。
+                        const float (*tbl)[4] =
+                            gPlayer.superFeverEnabled ? FEVER_SUPER_BEAM_COLOR : FEVER_BEAM_COLOR;
+                        constexpr int kC =
+                            static_cast<int>(sizeof(FEVER_BEAM_COLOR) / sizeof(FEVER_BEAM_COLOR[0]));
+                        float r = tbl[0][1], g = tbl[0][2], b = tbl[0][3];
+                        if (y >= tbl[kC - 1][0]) {
+                            r = tbl[kC - 1][1]; g = tbl[kC - 1][2]; b = tbl[kC - 1][3];
+                        } else if (y > tbl[0][0]) {
+                            for (int i = 1; i < kC; ++i) {
+                                if (y <= tbl[i][0]) {
+                                    const float y0 = tbl[i - 1][0];
+                                    const float y1 = tbl[i][0];
+                                    const float k = (y - y0) / (y1 - y0);
+                                    r = tbl[i - 1][1] + (tbl[i][1] - tbl[i - 1][1]) * k;
+                                    g = tbl[i - 1][2] + (tbl[i][2] - tbl[i - 1][2]) * k;
+                                    b = tbl[i - 1][3] + (tbl[i][3] - tbl[i - 1][3]) * k;
+                                    break;
+                                }
+                            }
+                        }
                         return IM_COL32(
-                            static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
-                            static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
-                            static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)),
+                            static_cast<int>(std::lround(clamp01(r) * 255.0f)),
+                            static_cast<int>(std::lround(clamp01(g) * 255.0f)),
+                            static_cast<int>(std::lround(clamp01(b) * 255.0f)),
                             static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
                     };
                     drawBeamGlow(overlay, px, py, 960.0f,

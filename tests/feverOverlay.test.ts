@@ -557,6 +557,31 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       },
       { a: (chanceSuper as any).onUrls[0], b: (chanceFullAt1 as any).onUrls[0] },
     )
+    // SuperFever 计量条闪光（fx_fever_gauge_flash_v2，淡紫）只在 super 态出现：
+    // super 态左侧光束条带区应偏蓝（淡紫 B>R），普通态是暖金（R>B）。取 ROI 的 (B−R) 均值。
+    const beamBlueness = (url: string) =>
+      page.evaluate(async ({ url }: any) => {
+        const bmp = await createImageBitmap(await (await fetch(url)).blob())
+        const cv = new OffscreenCanvas(bmp.width, bmp.height)
+        const ctx = cv.getContext('2d', { willReadFrequently: true })!
+        ctx.clearRect(0, 0, cv.width, cv.height)
+        ctx.drawImage(bmp, 0, 0)
+        const px = ctx.getImageData(0, 0, cv.width, cv.height).data
+        const sc = cv.width / 1920
+        let s = 0
+        let n = 0
+        for (let y = Math.round(700 * sc); y < Math.round(820 * sc); y++) {
+          for (let x = Math.round(220 * sc); x < Math.round(340 * sc); x++) {
+            const i = (y * cv.width + x) * 4
+            s += px[i + 2] - px[i]
+            n++
+          }
+        }
+        return n ? s / n : 0
+      }, { url })
+    const superBeamBlue = await beamBlueness((chanceSuper as any).onUrls[0])
+    const normalBeamBlue = await beamBlueness((chanceFullAt1 as any).onUrls[0])
+    console.log('[fever] beam (B-R): super=', superBeamBlue, 'normal=', normalBeamBlue)
     const pointerRegions = await page.evaluate(
       async ({ url }: any) => {
         const bmp = await createImageBitmap(await (await fetch(url)).blob())
@@ -628,6 +653,12 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     // ---- SuperFever 开关：进度满时打开应画出，且配色与非 super 不同 ----
     expect(chanceSuper.middle, 'SuperFever 打开时应画出光带').toBeGreaterThan(5000)
     expect(superPixelDiff, 'SuperFever 配色应与普通版不同').toBeGreaterThan(1000)
+    // 计量条闪光（fx_fever_gauge_flash_v2）是 SuperFever 专属：super 态光束条带偏紫（B>R），
+    // 普通态偏暖金（R>B），二者的 (B−R) 应明显反向。
+    expect(
+      superBeamBlue - normalBeamBlue,
+      'SuperFever 应在光束条带引入偏紫闪光（B−R 高于普通态）',
+    ).toBeGreaterThan(8)
 
     // ---- Fever / SuperFever 指针 ----
     // 原包口径：两个指针由 FadeInFeverChance 一起淡入，不按状态二选一。
