@@ -187,10 +187,10 @@ const startAnim=new StartAnimation(el('stage'));
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
-/** ReadyAsync：开场 SE → ShowAsync 播完 → bgm.Play。仅从头开播时走过场；再按播放键跳过。 */
+/** ReadyAsync：开场 SE → ShowAsync 播完 → bgm.Play。仅从头开播时走过场；再按播放键跳过过场直接开播。 */
 async function toggle(){
  if(!player)return;
- if(startAnim.active){startAnim.cancel();return;}
+ if(startAnim.active){startAnim.skip();return;}
  try{
   if(player.transport.playing){player.pause();se?.pause();return;}
   const fromTop=player.transport.time<=0.05;
@@ -341,7 +341,7 @@ applyScoreCfg();
 
 let frame=0;
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.setIdle(input('opt-start-anim').checked&&!player.transport.playing&&t<=1e-6);const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();},{once:true});
