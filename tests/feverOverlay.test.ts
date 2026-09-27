@@ -65,6 +65,41 @@ const alive = await serverAlive()
 const pw = alive ? await loadPlaywright() : null
 const canRun = Boolean(pw)
 
+/**
+ * ON/OFF 两态的整幅像素差分计数（在页内算完，只回一个小数字）。
+ * 判据：通道差之和 > 40 才算「有差异」，边缘 8px 不计（避开画布边框）。
+ */
+async function middleDiff(page: any, onUrls: string[], offUrls: string[]) {
+  return page.evaluate(
+    async ({ onUrls, offUrls }: any) => {
+      const load = async (u: string) => createImageBitmap(await (await fetch(u)).blob())
+      const [a, b] = await Promise.all([load(onUrls[0]), load(offUrls[0])])
+      const w = a.width
+      const h = a.height
+      const cv = new OffscreenCanvas(w, h)
+      const ctx = cv.getContext('2d', { willReadFrequently: true })!
+      ctx.clearRect(0, 0, w, h)
+      ctx.drawImage(a, 0, 0)
+      const A = ctx.getImageData(0, 0, w, h).data
+      ctx.clearRect(0, 0, w, h)
+      ctx.drawImage(b, 0, 0)
+      const B = ctx.getImageData(0, 0, w, h).data
+      const m = 8
+      let n = 0
+      for (let y = m; y < h - m; y++) {
+        for (let x = m; x < w - m; x++) {
+          const i = (y * w + x) * 4
+          const d =
+            Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])
+          if (d > 40) n++
+        }
+      }
+      return n
+    },
+    { onUrls, offUrls },
+  )
+}
+
 describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）', () => {
   it('边框＝左右竖条 + 四角臂、顶/底中段为空；紫光按素材时序出现', async () => {
     const { chromium } = pw as any
@@ -180,36 +215,6 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       }, urls)
 
     /** ON/OFF 的整幅像素（供差分用），同样在页内算差分，只回计数。 */
-    const middleDiff = (onUrls: string[], offUrls: string[]) =>
-      page.evaluate(
-        async ({ onUrls, offUrls }: any) => {
-          const load = async (u: string) =>
-            createImageBitmap(await (await fetch(u)).blob())
-          const [a, b] = await Promise.all([load(onUrls[0]), load(offUrls[0])])
-          const w = a.width
-          const h = a.height
-          const cv = new OffscreenCanvas(w, h)
-          const ctx = cv.getContext('2d', { willReadFrequently: true })!
-          ctx.clearRect(0, 0, w, h)
-          ctx.drawImage(a, 0, 0)
-          const A = ctx.getImageData(0, 0, w, h).data
-          ctx.clearRect(0, 0, w, h)
-          ctx.drawImage(b, 0, 0)
-          const B = ctx.getImageData(0, 0, w, h).data
-          const m = 8
-          let n = 0
-          for (let y = m; y < h - m; y++) {
-            for (let x = m; x < w - m; x++) {
-              const i = (y * w + x) * 4
-              const d =
-                Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])
-              if (d > 40) n++
-            }
-          }
-          return n
-        },
-        { onUrls, offUrls },
-      )
 
     const grabPair = async (local: number) => {
       const onUrls: string[] = []
@@ -221,7 +226,7 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       return {
         on: await measureState(onUrls),
         off: await measureState(offUrls),
-        middle: await middleDiff(onUrls, offUrls),
+        middle: await middleDiff(page, onUrls, offUrls),
         onUrls,
       }
     }
@@ -260,5 +265,176 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     expect(before.middle, '0.02s 紫光未起（素材 0.05s 才出现）').toBeLessThan(
       peak.middle * 0.2,
     )
+  }, 300000)
+
+  it('FeverChance：叶形暖金光带按素材时序出现，且不画 Fever 边框', async () => {
+    const { chromium } = pw as any
+    fs.mkdirSync(OUT, { recursive: true })
+    const browser = await chromium.launch()
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+    await page.goto(`${BASE}?song=${SONG}&difficulty=MASTER`, { waitUntil: 'load' })
+    await page.waitForFunction(
+      () => Boolean((window as any).__LLL_PJSK__?.player),
+      null,
+      { timeout: 90000 },
+    )
+    await page.waitForTimeout(15000)
+
+    const meta = await page.evaluate(
+      (id: string) =>
+        fetch('/src/llll/feverMetadata.json')
+          .then((r) => r.json())
+          .then((j) => j[id] ?? null),
+      SONG,
+    )
+    const lead = await page.evaluate(
+      () => (window as any).__LLL_PJSK__.player.getStateSnapshot().effectiveLeadInSec,
+    )
+    expect(meta, `曲目 ${SONG} 应在 feverMetadata 里`).toBeTruthy()
+    expect(meta.chanceStart, 'FeverChance 代理窗口应有起点').toBeTruthy()
+    // 代理口径的硬契约：chance 段紧邻 Fever 起点。
+    expect(meta.chanceEnd).toBe(meta.start)
+
+    await page.evaluate(() => {
+      ;(window as any).__LLL_PJSK__.player.setPreviewConfig({
+        mirror: 0, flickAnimation: 1, holdAnimation: 1, simultaneousLine: 1,
+        effectProfile: 0, noteSkin: 0, noteSpeed: 1,
+        holdAlpha: 0, guideAlpha: 0, stageCover: 0,
+        stageOpacity: 0, backgroundBrightness: 0, effectOpacity: 0,
+      })
+    })
+
+    const shootDataUrl = async (local: number, display: boolean) => {
+      await page.evaluate(
+        ({ sec, display, s, e }: any) => {
+          const p = (window as any).__LLL_PJSK__.player
+          p.pause()
+          p.setFeverWindow(s, e)
+          p.setFeverDisplay(display)
+          p.seek(sec)
+          p.renderFrame()
+        },
+        { sec: meta.start + local + lead, display, s: meta.start, e: meta.end },
+      )
+      await page.waitForTimeout(360)
+      const buf: Buffer = await page.locator('canvas').screenshot()
+      return `data:image/png;base64,${buf.toString('base64')}`
+    }
+
+    const measureState = (urls: string[]) =>
+      page.evaluate(async (urls: string[]) => {
+        const bitmaps = await Promise.all(
+          urls.map(async (u) => createImageBitmap(await (await fetch(u)).blob())),
+        )
+        const w = bitmaps[0].width
+        const h = bitmaps[0].height
+        const cv = new OffscreenCanvas(w, h)
+        const ctx = cv.getContext('2d', { willReadFrequently: true })!
+        const layers: Uint8ClampedArray[] = []
+        for (const b of bitmaps) {
+          ctx.clearRect(0, 0, w, h)
+          ctx.drawImage(b, 0, 0)
+          layers.push(ctx.getImageData(0, 0, w, h).data)
+        }
+        const px = new Uint8ClampedArray(layers[0].length)
+        for (let i = 0; i < px.length; i++) {
+          let m = 0
+          for (const L of layers) if (L[i] > m) m = L[i]
+          px[i] = m
+        }
+        const lum = (x: number, y: number) => {
+          const i = (y * w + x) * 4
+          return (px[i] + px[i + 1] + px[i + 2]) / 3
+        }
+        const avg = (x0: number, x1: number, y0: number, y1: number) => {
+          let s = 0
+          let n = 0
+          for (let y = y0; y < y1; y++) {
+            for (let x = x0; x < x1; x++) {
+              s += lum(x, y)
+              n++
+            }
+          }
+          return n ? s / n : 0
+        }
+        return {
+          w,
+          h,
+          leftBar: lum(2, Math.floor(h / 2)),
+          rightBar: lum(w - 3, Math.floor(h / 2)),
+          // 光带贴到画面最边缘（x<20），采样窗必须贴边取，否则正好错过。
+          bottomLeft: avg(0, 20, h - 14, h - 2),
+          bottomRight: avg(w - 20, w, h - 14, h - 2),
+          topGap: lum(Math.floor(w / 2), 2),
+        }
+      }, urls)
+
+    const shootChanceDataUrl = async (local: number, display: boolean) => {
+      await page.evaluate(
+        ({ sec, display, s, e, cs, ce }: any) => {
+          const p = (window as any).__LLL_PJSK__.player
+          p.pause()
+          p.setFeverWindow(s, e)
+          p.setFeverChanceWindow(cs, ce)
+          p.setFeverDisplay(display)
+          p.seek(sec)
+          p.renderFrame()
+        },
+        {
+          sec: meta.chanceStart + local + lead,
+          display,
+          s: meta.start,
+          e: meta.end,
+          cs: meta.chanceStart,
+          ce: meta.chanceEnd,
+        },
+      )
+      await page.waitForTimeout(360)
+      const buf: Buffer = await page.locator('canvas').screenshot()
+      return `data:image/png;base64,${buf.toString('base64')}`
+    }
+
+    const grabChance = async (local: number) => {
+      const onUrls: string[] = []
+      const offUrls: string[] = []
+      for (let i = 0; i < 4; i++) {
+        onUrls.push(await shootChanceDataUrl(local, true))
+        offUrls.push(await shootChanceDataUrl(local, false))
+      }
+      return {
+        on: await measureState(onUrls),
+        middle: await middleDiff(page, onUrls, offUrls),
+        onUrls,
+      }
+    }
+
+    const chancePeak = await grabChance(0.25)
+    const chanceAfter = await grabChance(1.5)
+    const chanceBefore = await grabChance(0.02)
+    await browser.close()
+
+    for (const [name, r] of Object.entries({ chancePeak, chanceAfter, chanceBefore })) {
+      const url = (r as any).onUrls[0] as string
+      fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
+    }
+
+    // ---- 主峰：叶形光带 + 文字都应画出来 ----
+    expect(chancePeak.middle, '主峰应画出光带与文字').toBeGreaterThan(5000)
+
+    // ---- 光带确实张开到两个底角（底角亮度显著高于「已收尽」之后） ----
+    expect(chancePeak.on.bottomLeft, '左下角应有光带').toBeGreaterThan(
+      chanceAfter.on.bottomLeft + 10,
+    )
+    expect(chancePeak.on.bottomRight, '右下角应有光带').toBeGreaterThan(
+      chanceAfter.on.bottomRight + 10,
+    )
+
+    // ---- chance 期间不画 Fever 边框：左右竖条应缺席 ----
+    expect(chancePeak.on.leftBar, 'chance 期间不应有左侧通高竖条').toBeLessThan(100)
+    expect(chancePeak.on.rightBar, 'chance 期间不应有右侧通高竖条').toBeLessThan(100)
+
+    // ---- 时序：0.02s 未起（素材 0.05s 才出现）；1.5s 后内容消失（素材内容 1.20s） ----
+    expect(chanceBefore.middle, '0.02s 光带未起').toBeLessThan(chancePeak.middle * 0.2)
+    expect(chanceAfter.middle, '1.5s 后光带应已收尽').toBe(0)
   }, 300000)
 })

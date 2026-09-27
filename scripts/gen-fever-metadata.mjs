@@ -16,6 +16,11 @@
  *   - times = [0, b0, b1, b2, b3, musicEnd]，第 n 段 = [times[n-1], times[n]]；
  *   - 毫秒转秒。
  *
+ * 另输出 FeverChance 的**代理**窗口（`chanceStart`/`chanceEnd`）：
+ *   llll **没有** chance 概念（`key_type` 只有 1/10/20/99），故取「Fever 段之前
+ *   那一段」= `[times[n-2], times[n-1])`。这是代理值，不是源数据；
+ *   `sectionNo === 1` 时无前一段，两字段为 `null`。
+ *
  * 注意：Fever 时段**不在谱面里**。llll 的 `{Notes, Bpms}` 没有分段字段，
  * 分段来自歌曲主数据 FeverSectionNo + musicscore CSV 的分段事件。
  *
@@ -75,7 +80,15 @@ function feverFromMusicScore(csv, sectionNo) {
     throw new Error('第五段需要晚于末段起点的 MusicEnd（key_type=99）')
   }
   const times = [0, ...boundaries, musicEnd]
-  return { start: times[sectionNo - 1] / 1000, end: times[sectionNo] / 1000 }
+  const start = times[sectionNo - 1] / 1000
+  const end = times[sectionNo] / 1000
+  // FeverChance 是**代理值**，不是 llll 源数据：llll 没有 chance 概念
+  // （key_type 只有 1/10/20/99）。这里取「Fever 段之前那一段」，
+  // 即同一个 times 数组里的前一段 [times[n-2], times[n-1])。
+  // sectionNo === 1 时没有前一段，两个字段为 null。
+  const chanceStart = sectionNo >= 2 ? times[sectionNo - 2] / 1000 : null
+  const chanceEnd = sectionNo >= 2 ? times[sectionNo - 1] / 1000 : null
+  return { start, end, chanceStart, chanceEnd }
 }
 
 const songList = JSON.parse(fs.readFileSync(songListFile, 'utf8'))

@@ -242,6 +242,9 @@ namespace
         // 不改变逻辑状态（与 llll 客户端 EnableFeverDisplay 同口径）。
         double feverStartSec = -1.0;
         double feverEndSec = -1.0;
+        // FeverChance 时段（歌曲秒）；-1 表示本曲无该时段。
+        double feverChanceStartSec = -1.0;
+        double feverChanceEndSec = -1.0;
         bool feverDisplayEnabled = true;
     };
 
@@ -2406,6 +2409,40 @@ void main() {
     constexpr float FEVER_BEAM_APEX_Y = 60.0f;        // 光束两腿在中心汇聚处的高度
     constexpr float FEVER_BEAM_RGB[3] = {115.0f / 255.0f, 84.0f / 255.0f, 140.0f / 255.0f};
 
+    // ---- FeverChance（入场）----
+    // 取值依据是客户端的 FeverChance 特效素材 fx_fever_chance_v2（1920×1080）。
+    constexpr float CHANCE_DURATION_SEC = 1.20f;      // 内容长度（容器 2.32s）
+    constexpr float CHANCE_PEAK_SEC = 0.25f;          // 主峰
+    constexpr float CHANCE_END_SEC = 0.40f;           // 光束收尽
+    constexpr float CHANCE_TEXT_CENTER_X = 960.0f;
+    constexpr float CHANCE_TEXT_CENTER_Y = 534.0f;
+    constexpr float CHANCE_TEXT_HEIGHT = 60.0f;       // 文字带高度（496..572，含光晕）
+    constexpr float CHANCE_TEXT_PEAK_ALPHA = 0.85f;
+    // 光束中心线：顶点在顶部中央（左右各偏离中线 54.4px），斜率 0.837 向下张开到两底角。
+    constexpr float CHANCE_BEAM_APEX_HALF_SEP = 54.4f;
+    constexpr float CHANCE_BEAM_SLOPE = 0.837f;
+    constexpr float CHANCE_BEAM_PEAK_ALPHA = 0.95f;
+    constexpr int CHANCE_BEAM_SEGMENTS = 16;
+    // 宽度剖面（y → 像素宽）：中间最宽、两端收窄，是叶形而不是三角。
+    constexpr float CHANCE_BEAM_WIDTH[][2] = {
+        {0.0f, 20.0f}, {120.0f, 31.0f}, {240.0f, 52.0f}, {360.0f, 77.0f},
+        {480.0f, 95.0f}, {600.0f, 85.0f}, {720.0f, 64.0f}, {840.0f, 40.0f},
+        {960.0f, 27.0f}, {1080.0f, 18.0f},
+    };
+    // 颜色剖面（y → RGB）：中段最亮的暖金，两端转暗橙。
+    constexpr float CHANCE_BEAM_COLOR[][4] = {
+        {0.0f, 78.0f / 255.0f, 68.0f / 255.0f, 39.0f / 255.0f},
+        {120.0f, 102.0f / 255.0f, 87.0f / 255.0f, 45.0f / 255.0f},
+        {240.0f, 156.0f / 255.0f, 119.0f / 255.0f, 71.0f / 255.0f},
+        {360.0f, 247.0f / 255.0f, 190.0f / 255.0f, 86.0f / 255.0f},
+        {480.0f, 252.0f / 255.0f, 243.0f / 255.0f, 81.0f / 255.0f},
+        {600.0f, 253.0f / 255.0f, 241.0f / 255.0f, 83.0f / 255.0f},
+        {720.0f, 182.0f / 255.0f, 152.0f / 255.0f, 79.0f / 255.0f},
+        {840.0f, 122.0f / 255.0f, 103.0f / 255.0f, 55.0f / 255.0f},
+        {960.0f, 88.0f / 255.0f, 76.0f / 255.0f, 41.0f / 255.0f},
+        {1080.0f, 70.0f / 255.0f, 60.0f / 255.0f, 34.0f / 255.0f},
+    };
+
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
     constexpr float INTRO_PLAYFIELD_FADE_IN_SEC = 1.8f;
@@ -3199,7 +3236,15 @@ void main() {
         const bool feverActive = feverLocalSec >= 0.0f && feverLocalSec < feverEndLocalSec;
         const bool textActive =
             feverLocalSec >= 0.0f && feverLocalSec < FEVER_TEXT_DURATION_SEC;
-        if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive)) {
+        const float chanceStartLocalSec =
+            static_cast<float>(gPlayer.feverChanceStartSec) - static_cast<float>(gPlayer.feverStartSec);
+        const float chanceEndLocalSec =
+            static_cast<float>(gPlayer.feverChanceEndSec) - static_cast<float>(gPlayer.feverStartSec);
+        const bool chanceActive = gPlayer.feverChanceStartSec >= 0.0 &&
+                                  gPlayer.feverChanceEndSec > gPlayer.feverChanceStartSec &&
+                                  feverLocalSec >= chanceStartLocalSec &&
+                                  feverLocalSec < chanceEndLocalSec;
+        if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive && !chanceActive)) {
             return;
         }
 
@@ -3209,6 +3254,91 @@ void main() {
         auto py = [&](float y) { return static_cast<float>(previewRectWindow[1]) + tx.offsetY + y * tx.scale; };
         auto ps = [&](float value) { return value * tx.scale; };
         ImDrawList* overlay = ImGui::GetForegroundDrawList();
+
+        // FeverChance 入场：两束叶形暖金光带（顶点在顶部中央、向下张开到两底角）。
+        // 逐段绘制而非单个四边形 —— 宽度与颜色都沿轴变化，单四边形只能线性插值，
+        // 表达不了「中间最宽」的叶形轮廓。
+        if (chanceActive) {
+            const float localSec = feverLocalSec - chanceStartLocalSec;
+            const float beamT = clamp01(localSec / CHANCE_DURATION_SEC);
+            const float beamAlpha = beamT < 0.05f
+                ? 0.0f
+                : (beamT < CHANCE_PEAK_SEC / CHANCE_DURATION_SEC
+                       ? clamp01((beamT - 0.05f) / (CHANCE_PEAK_SEC / CHANCE_DURATION_SEC - 0.05f))
+                       : clamp01(1.0f - (beamT - CHANCE_PEAK_SEC / CHANCE_DURATION_SEC) /
+                                           (CHANCE_END_SEC / CHANCE_DURATION_SEC -
+                                            CHANCE_PEAK_SEC / CHANCE_DURATION_SEC)));
+
+            auto widthAt = [&](float y) {
+                constexpr int kN = static_cast<int>(sizeof(CHANCE_BEAM_WIDTH) / sizeof(CHANCE_BEAM_WIDTH[0]));
+                if (y <= CHANCE_BEAM_WIDTH[0][0]) return CHANCE_BEAM_WIDTH[0][1];
+                if (y >= CHANCE_BEAM_WIDTH[kN - 1][0]) return CHANCE_BEAM_WIDTH[kN - 1][1];
+                for (int i = 1; i < kN; ++i) {
+                    if (y <= CHANCE_BEAM_WIDTH[i][0]) {
+                        const float y0 = CHANCE_BEAM_WIDTH[i - 1][0];
+                        const float y1 = CHANCE_BEAM_WIDTH[i][0];
+                        const float k = (y - y0) / (y1 - y0);
+                        return CHANCE_BEAM_WIDTH[i - 1][1] +
+                               (CHANCE_BEAM_WIDTH[i][1] - CHANCE_BEAM_WIDTH[i - 1][1]) * k;
+                    }
+                }
+                return CHANCE_BEAM_WIDTH[kN - 1][1];
+            };
+            auto colorAt = [&](float y, float alpha) {
+                constexpr int kN = static_cast<int>(sizeof(CHANCE_BEAM_COLOR) / sizeof(CHANCE_BEAM_COLOR[0]));
+                float r = CHANCE_BEAM_COLOR[0][1];
+                float g = CHANCE_BEAM_COLOR[0][2];
+                float b = CHANCE_BEAM_COLOR[0][3];
+                if (y <= CHANCE_BEAM_COLOR[0][0]) {
+                    r = CHANCE_BEAM_COLOR[0][1]; g = CHANCE_BEAM_COLOR[0][2]; b = CHANCE_BEAM_COLOR[0][3];
+                } else if (y >= CHANCE_BEAM_COLOR[kN - 1][0]) {
+                    r = CHANCE_BEAM_COLOR[kN - 1][1]; g = CHANCE_BEAM_COLOR[kN - 1][2];
+                    b = CHANCE_BEAM_COLOR[kN - 1][3];
+                } else {
+                    for (int i = 1; i < kN; ++i) {
+                        if (y <= CHANCE_BEAM_COLOR[i][0]) {
+                            const float y0 = CHANCE_BEAM_COLOR[i - 1][0];
+                            const float y1 = CHANCE_BEAM_COLOR[i][0];
+                            const float k = (y - y0) / (y1 - y0);
+                            r = CHANCE_BEAM_COLOR[i - 1][1] +
+                                (CHANCE_BEAM_COLOR[i][1] - CHANCE_BEAM_COLOR[i - 1][1]) * k;
+                            g = CHANCE_BEAM_COLOR[i - 1][2] +
+                                (CHANCE_BEAM_COLOR[i][2] - CHANCE_BEAM_COLOR[i - 1][2]) * k;
+                            b = CHANCE_BEAM_COLOR[i - 1][3] +
+                                (CHANCE_BEAM_COLOR[i][3] - CHANCE_BEAM_COLOR[i - 1][3]) * k;
+                            break;
+                        }
+                    }
+                }
+                return IM_COL32(static_cast<int>(std::lround(r * 255.0f)),
+                                static_cast<int>(std::lround(g * 255.0f)),
+                                static_cast<int>(std::lround(b * 255.0f)),
+                                static_cast<int>(std::lround(clamp01(alpha) * 255.0f)));
+            };
+
+            if (beamAlpha > 0.001f) {
+                beginAdditive(overlay);
+                for (int side = 0; side < 2; ++side) {
+                    const float dir = (side == 0) ? -1.0f : 1.0f;
+                    for (int i = 0; i < CHANCE_BEAM_SEGMENTS; ++i) {
+                        const float y0 = 1080.0f * static_cast<float>(i) / CHANCE_BEAM_SEGMENTS;
+                        const float y1 = 1080.0f * static_cast<float>(i + 1) / CHANCE_BEAM_SEGMENTS;
+                        const float c0 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y0);
+                        const float c1 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y1);
+                        const float w0 = widthAt(y0) * 0.5f;
+                        const float w1 = widthAt(y1) * 0.5f;
+                        const ImU32 top = colorAt(y0, beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha);
+                        const ImU32 bot = colorAt(y1, beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha);
+                        // 注意：四边形顶点顺序与外法线无关（无剔除），左右侧共用同一段代码。
+                        addQuadGradient(overlay,
+                                        ImVec2(px(c1 - w1), py(y1)), ImVec2(px(c1 + w1), py(y1)),
+                                        ImVec2(px(c0 + w0), py(y0)), ImVec2(px(c0 - w0), py(y0)),
+                                        bot, bot, top, top);
+                    }
+                }
+                endAdditive(overlay);
+            }
+        }
 
         if (feverActive) {
             // 边框：左右两条通高竖条（宽 11px）+ 上下四角的渐变淡出臂，
@@ -3294,6 +3424,30 @@ void main() {
             //   下右
             overlay->AddRectFilledMultiColor(ImVec2(px(W - a), py(H - b)), ImVec2(px(W), py(H)),
                                              armZero, armFull, armFull, armZero);
+            endAdditive(overlay);
+        }
+
+        // FeverChance 的「FEVER CHANCE!」字样：暖金、字号比 FEVER! 小一号。
+        if (chanceActive && fonts.title != nullptr) {
+            const float localSec = feverLocalSec - chanceStartLocalSec;
+            const float progress = clamp01(localSec / CHANCE_DURATION_SEC);
+            const float peak = clamp01(CHANCE_PEAK_SEC / CHANCE_DURATION_SEC);
+            const float alpha = progress < peak
+                ? clamp01(progress / std::max(peak, 0.0001f))
+                : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
+            const char* chanceText = "FEVER CHANCE!";
+            const float chanceFontSize = CHANCE_TEXT_HEIGHT * 1.15f;
+            const ImVec2 chanceSize =
+                fonts.title->CalcTextSizeA(chanceFontSize, FLT_MAX, 0.0f, chanceText);
+            const float chanceX = CHANCE_TEXT_CENTER_X - chanceSize.x * 0.5f;
+            const float chanceY = CHANCE_TEXT_CENTER_Y - chanceSize.y * 0.5f;
+            const ImU32 chanceColor = IM_COL32(
+                230, 189, 78,
+                static_cast<int>(std::lround(
+                    clamp01(alpha * CHANCE_TEXT_PEAK_ALPHA * overlayAlpha) * 255.0f)));
+            beginAdditive(overlay);
+            overlay->AddText(fonts.title, ps(chanceFontSize),
+                             ImVec2(px(chanceX), py(chanceY)), chanceColor, chanceText);
             endAdditive(overlay);
         }
 
@@ -4722,6 +4876,12 @@ extern "C"
     {
         gPlayer.feverStartSec = startSec;
         gPlayer.feverEndSec = endSec;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverChanceWindow(double startSec, double endSec)
+    {
+        gPlayer.feverChanceStartSec = startSec;
+        gPlayer.feverChanceEndSec = endSec;
     }
 
     EMSCRIPTEN_KEEPALIVE void setPlayerFeverDisplay(int enabled)

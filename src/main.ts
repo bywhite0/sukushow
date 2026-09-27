@@ -23,7 +23,7 @@ import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from '
 import { parseUrlPreviewParams } from './lib/url'
 import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from './llll/songAssets'
 import { createSongPicker } from './ui/songPicker'
-import { feverForSong } from './llll/fever'
+import { feverChanceForSong, feverForSong } from './llll/fever'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -247,10 +247,20 @@ function applyFeverWindow(songId: string | null) {
   } else {
     player.setFeverWindow(-1, -1)
   }
+  // FeverChance 的时段也是代理值，与 Fever 同源同口径（见 src/llll/fever.ts）。
+  const chance = feverChanceForSong(songId)
+  if (chance) {
+    player.setFeverChanceWindow(chance.start, chance.end)
+  } else {
+    player.setFeverChanceWindow(-1, -1)
+  }
   const status = document.getElementById('fever-status')
   if (status) {
     status.innerHTML = window
-      ? `<small>Fever：${window.start.toFixed(3)} – ${window.end.toFixed(3)} 秒</small>`
+      ? `<small>Fever：${window.start.toFixed(3)} – ${window.end.toFixed(3)} 秒` +
+        (chance
+          ? `；FeverChance：${chance.start.toFixed(3)} – ${chance.end.toFixed(3)} 秒</small>`
+          : '；FeverChance：本曲无前一段</small>')
       : '<small>Fever：本曲无数据（不估算）。</small>'
   }
 }

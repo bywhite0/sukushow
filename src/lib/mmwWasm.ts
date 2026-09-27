@@ -282,6 +282,18 @@ export class MmwWasmPlayer {
     this.assertReady().ccall('setPlayerFeverWindow', null, ['number', 'number'], [startSec, endSec])
   }
 
+  /**
+   * FeverChance 时段（歌曲秒，绝对时刻）。start<0 或 end<=start 视为本曲无该时段。
+   *
+   * 口径是代理值（Fever 段之前那一段），见 src/llll/fever.ts 的 FeverChanceWindow。
+   */
+  setFeverChanceWindow(startSec: number, endSec: number) {
+    this.assertReady().ccall('setPlayerFeverChanceWindow', null, ['number', 'number'], [
+      startSec,
+      endSec,
+    ])
+  }
+
   /** Fever 显示开关；只影响特效，不改变逻辑状态。 */
   setFeverDisplay(enabled: boolean) {
     this.assertReady().ccall('setPlayerFeverDisplay', null, ['number'], [enabled ? 1 : 0])
