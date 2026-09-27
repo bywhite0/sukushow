@@ -9,6 +9,7 @@ import { AudioPlayer } from './audio';
 import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
+import { StartAnimation } from './startAnim';
 import {
   loadPreviewSettings,
   savePreviewSettings,
@@ -59,6 +60,7 @@ app.innerHTML=`
 <label class="check"><input id="opt-skill-view" type="checkbox" checked>技能轨道显示</label>
 <label class="check"><input id="opt-skill-cutin" type="checkbox" checked>技能 Cut-in</label>
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
+<label class="check"><input id="opt-start-anim" type="checkbox" checked>开场过场</label>
 <label class="check"><input id="opt-mv" type="checkbox" checked>MV / MusicVideo</label>
 </section>
 <section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
@@ -128,6 +130,7 @@ function readSettings():PreviewSettings{
   enableRhythmSkillView:input('opt-skill-view').checked,
   enableSkillCutin:input('opt-skill-cutin').checked,
   enableFeverDisplay:input('opt-fever').checked,
+  enableStartAnimation:input('opt-start-anim').checked,
   judgementOutput:Number(el<HTMLSelectElement>('opt-judgement-output').value),
   fastSlow:Number(el<HTMLSelectElement>('opt-fast-slow').value),
   totalAppeal:Number(input('opt-appeal').value),
@@ -161,6 +164,7 @@ function applySettingsToForm(s:PreviewSettings){
  input('opt-skill-view').checked=s.enableRhythmSkillView;
  input('opt-skill-cutin').checked=s.enableSkillCutin;
  input('opt-fever').checked=s.enableFeverDisplay;
+ input('opt-start-anim').checked=s.enableStartAnimation;
  el<HTMLSelectElement>('opt-judgement-output').value=String(s.judgementOutput);
  el<HTMLSelectElement>('opt-fast-slow').value=String(s.fastSlow);
  input('opt-appeal').value=String(s.totalAppeal);
@@ -177,10 +181,30 @@ let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:Re
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;
 function metadata(){input('timeline').max=String(chart.duration);}metadata();
-async function toggle(){if(!player)return;try{if(player.transport.playing){player.pause();se?.pause();}else{await player.play();se?.resume();if(player.transport.time<=0.05)se?.playStart();}}catch(e){message(`播放失败：${String(e)}`,true);}}
+const startAnim=new StartAnimation(el('stage'));
+let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
+startAnim.setInfo(startInfo);
+function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
+/** ReadyAsync：开场 SE → ShowAsync 播完 → bgm.Play。仅从头开播时走过场；再按播放键跳过。 */
+async function toggle(){
+ if(!player)return;
+ if(startAnim.active){startAnim.cancel();return;}
+ try{
+  if(player.transport.playing){player.pause();se?.pause();return;}
+  const fromTop=player.transport.time<=0.05;
+  if(fromTop&&input('opt-start-anim').checked){
+   await player.context.resume();
+   se?.playStart();
+   if(!await startAnim.play())return;
+   await player.play();se?.resume();
+   return;
+  }
+  await player.play();se?.resume();if(fromTop)se?.playStart();
+ }catch(e){message(`播放失败：${String(e)}`,true);}
+}
 el('play').onclick=()=>void toggle();
-el('restart').onclick=()=>{player?.seek(0);se?.clear();};
-input('timeline').oninput=()=>{player?.seek(Number(input('timeline').value));se?.clear();};
+el('restart').onclick=()=>{startAnim.cancel();player?.seek(0);se?.clear();};
+input('timeline').oninput=()=>{startAnim.cancel();player?.seek(Number(input('timeline').value));se?.clear();};
 el<HTMLSelectElement>('rate').onchange=()=>{player?.setRate(Number(el<HTMLSelectElement>('rate').value));persistSettings();};
 input('speed').oninput=()=>{speed=Number(input('speed').value);el('speed-value').textContent=speed.toFixed(1);persistSettings();};
 input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();};input('lines').onchange=()=>{lines=input('lines').checked;persistSettings();};
@@ -189,12 +213,12 @@ input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offse
 input('chart-file').onchange=async()=>{
  const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
  try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo({title:file.name,difficulty:null,jacketUrl:null});player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
-el('demo').onclick=()=>{generation++;chart=demoChart();setChartFever('');el('chart-name').textContent='演示谱面';player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
+el('demo').onclick=()=>{generation++;chart=demoChart();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
+document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();startAnim.cancel();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
@@ -256,6 +280,7 @@ input('opt-judge-y').oninput=()=>{el('opt-judge-y-value').textContent=input('opt
 input('opt-fs-y').oninput=()=>{el('opt-fs-y-value').textContent=input('opt-fs-y').value;applyHudOptions();};
 input('opt-fever').onchange=applyHudOptions;
 input('opt-ap-continue').onchange=applyHudOptions;
+input('opt-start-anim').onchange=()=>persistSettings();
 input('opt-mv').onchange=()=>persistSettings();
 input('opt-skill-view').onchange=()=>persistSettings();
 input('opt-skill-cutin').onchange=()=>persistSettings();
@@ -314,7 +339,7 @@ applyScoreCfg();
 
 let frame=0;
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;el('play').textContent=player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
-window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();},{once:true});
+window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();},{once:true});

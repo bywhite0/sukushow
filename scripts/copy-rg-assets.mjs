@@ -67,6 +67,7 @@ const SPRITES = [
   'ui_sc2_ingame_flick_sign',
   'sc2_ingame_tap_line',
   'ui_sc2_ingame_combo',
+  'ui_sc2_result_base_01',
   ...numbered('ui_sc2_ingame_num_combo_', 0, 9),
   'ui_sc2_ingame_hantei_perfect',
   'ui_sc2_ingame_hantei_perfect_plus',

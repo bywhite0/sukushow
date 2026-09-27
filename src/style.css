@@ -349,3 +349,26 @@
 }
 .hud-aprate-upper.is-on{visibility:visible}
 
+/* 开场过场 RhythmGameStart（Canvas sortingOrder 30，盖住 HUD）。坐标 = level56 RectTransform，原点为画面中心、y 向下。 */
+.start-anim{position:absolute;inset:0;z-index:4;overflow:hidden;pointer-events:none;user-select:none;font-family:"FOT-Rodin Pro","Microsoft YaHei","PingFang SC",sans-serif}
+.start-anim[hidden]{display:none}
+.sa-bg{position:absolute;inset:0}
+.sa-logic{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:0 0}
+/* DifficultyRoot (0,384) 236×72，三层 ProceduralImage UniformModifier r=50，逐层 sizeDelta −8 */
+.sa-diff-root{position:absolute;left:-118px;top:-420px;width:236px;height:72px;border-radius:50px}
+.sa-white,.sa-diff-color{position:absolute;inset:4px;border-radius:50px}
+/* Base01：anchor/pivot (0.5,0)，pos (1,0)，218×36，sprite ui_sc2_result_base_01；无 Mask，不受圆角裁切 */
+.sa-base01{position:absolute;left:calc(50% - 108px);bottom:0;width:218px;height:36px;display:block}
+/* DifficultyName：EB 32，居中，characterSpacing −1（em/100） */
+.sa-diff-name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;letter-spacing:-.32px;line-height:1;white-space:nowrap}
+/* Jacket (0,22) 576×576 */
+.sa-jacket{position:absolute;left:-288px;top:-310px;width:576px;height:576px}
+/* DotOutlineMask (40,−40) 596；MaskRight 右锚 pos(−20,10) size(30,−20)；MaskBtm 下锚 pos(0,20) h30 padding.z=50 */
+.sa-mask-right{position:absolute;left:576px;top:30px;width:30px;height:576px;overflow:hidden}
+.sa-right{position:absolute;right:0;top:0;width:50px;height:100%}
+.sa-mask-btm{position:absolute;left:30px;top:576px;width:546px;height:30px;overflow:hidden}
+.sa-btm{position:absolute;left:0;bottom:0;width:596px;height:50px}
+.sa-jacket-image{position:absolute;inset:0;width:100%;height:100%;display:block}
+.sa-jacket-image[hidden]{display:none}
+/* ScoreLabel (0,−387) 1200×64：RODIN B 40，NomalText（无描边），居中，characterSpacing −3.5 */
+.sa-title{position:absolute;left:-600px;top:355px;width:1200px;height:64px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:40px;font-weight:700;letter-spacing:-1.4px;line-height:1.1}
