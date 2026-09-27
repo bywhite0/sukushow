@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+test('?song= 打开本地曲目，开场过场带上曲名 / 难度 / 封面',async({page,request})=>{
+ const list=await (await request.get('/song-list.json')).json();
+ const song=list.songs.find((s:any)=>s.hasChart&&s.hasJacket&&s.charts.MASTER);
+ const probe=await request.get(`/assets/chart/${song.charts.MASTER}`);
+ test.skip(!probe.ok()||!(await probe.body()).length,'未运行 scripts/link-assets.py');
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`/?song=${song.id}&difficulty=MASTER`);
+ await expect(page.locator('#message')).toContainText(`已加载 ${song.title} [MASTER]`,{timeout:20_000});
+ await expect(page.locator('#chart-name')).toHaveText(`${song.title} [MASTER]`);
+ await expect(page.locator('.difficulty-chip.is-active')).toHaveAttribute('data-difficulty','MASTER');
+ await page.getByRole('button',{name:'播放',exact:true}).click();
+ await expect(page.locator('.sa-title')).toHaveText(song.title);
+ await expect(page.locator('.sa-diff-name')).toHaveText('MASTER');
+ await expect(page.locator('.sa-jacket-image')).toHaveAttribute('src',`/assets/jacket/${song.jacketId}.png`);
+ await page.getByRole('button',{name:'跳过开场',exact:true}).click();
+ expect(errors).toEqual([]);
+});
+test('搜索框选曲并切难度，URL 同步',async({page,request})=>{
+ const list=await (await request.get('/song-list.json')).json();
+ const song=list.songs.find((s:any)=>s.hasChart&&s.charts.HARD);
+ const probe=await request.get(`/assets/chart/${song.charts.HARD}`);
+ test.skip(!probe.ok()||!(await probe.body()).length,'未运行 scripts/link-assets.py');
+ await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
+ await page.locator('#song-search').fill(song.id);
+ await page.locator('.song-option').first().click();
+ await expect(page.locator('#message')).toContainText(`已加载 ${song.title}`,{timeout:20_000});
+ await page.locator('.difficulty-chip[data-difficulty="HARD"]').click();
+ await expect(page.locator('#chart-name')).toHaveText(`${song.title} [HARD]`,{timeout:20_000});
+ await expect.poll(()=>new URL(page.url()).searchParams.get('difficulty')).toBe('HARD');
+ expect(new URL(page.url()).searchParams.get('song')).toBe(song.id);
+});

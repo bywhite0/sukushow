@@ -185,3 +185,10 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **布局**（level56，1920×1080，原点居中）：DifficultyRoot (0,384) 236×72，三层 ProceduralImage 半径 50（外圈 (0.608,0.569,0.682)、White、难度色），Base01 `ui_sc2_result_base_01` 218×36 底对齐 x+1，DifficultyName EB 32 字距 −1；Jacket (0,22) 576×576，MaskRight/MaskBtm 30 宽遮罩里的 50 宽条，难度色 α≤0.8，封面在条之上；ScoreLabel (0,−387) 1200×64，RODIN B 40 字距 −3.5。
 - **alpha 不级联**：uGUI 的 CanvasRenderer alpha 不传给子节点，所以每层 alpha 只写进自己的填充色、文字色或图片 opacity。
 - **难度色**：ColorPreset.GetDifficultyColor，NORMAL #36D6E0 / HARD #FFB32F / EXPERT #FD5B91 / MASTER #9370D5。未指定难度时按 MASTER；没有封面时不画封面（原版是封面图，预览不补白块）。
+## 选曲与本地资源
+
+- 与 llll-pjsk-preview 相同：`public/song-list.json` 由 `scripts/gen-song-list.py` 从 4L masterdata（Musics / Units / MusicScores）与资源目录生成，236 首里 154 首有谱面；难度等级只取 MusicScores。
+- 谱面、BGM、封面体积大且不可再分发，不进版本库。`python scripts/link-assets.py` 把它们链接或复制进 `public/assets/{chart,audio,jacket}`；来源目录取环境变量 `LLLL_CHART_DIR` / `LLLL_AUDIO_DIR` / `LLLL_JACKET_DIR`，或 gitignore 掉的 `scripts/link-assets.local.json`。
+- BGM 与封面按曲目条目的 `soundId` / `jacketId` 取（翻唱或改编版本与曲目 Id 不同，不拼接猜测）。
+- 选曲后：谱面走 `decodeChart`；Fever 由谱面文件名 `rhythmgame_chart_<id>_<n>.bytes` 自动匹配；开场过场拿到曲名、难度（决定难度色）和封面。手动打开的谱面若是同名文件，也会按曲目列表补上这三项。
+- URL：`?song=<id>&difficulty=<NORMAL|HARD|EXPERT|MASTER>&offset=<毫秒>`；选曲时同步回 URL，`offset` 只作用于本次打开，不写入设置。

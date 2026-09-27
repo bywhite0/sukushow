@@ -372,3 +372,101 @@
 .sa-jacket-image[hidden]{display:none}
 /* ScoreLabel (0,−387) 1200×64：RODIN B 40，NomalText（无描边），居中，characterSpacing −3.5 */
 .sa-title{position:absolute;left:-600px;top:355px;width:1200px;height:64px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:40px;font-weight:700;letter-spacing:-1.4px;line-height:1.1}
+
+
+/* 曲目选择器（header 内，可搜索 combobox）。
+   整体压在 header 原有的一行里：输入框 40px + 右侧难度徽章，
+   不再往下多占一行，header 高度维持 76px。 */
+.song-picker{flex:1 1 auto;min-width:0;max-width:560px}
+.picker{position:relative;display:flex;align-items:center;gap:8px;min-width:0}
+.picker-anchor{position:relative;flex:1 1 auto;min-width:0}
+.picker-field{position:relative;display:flex;align-items:center;min-width:0}
+.picker-icon{position:absolute;left:12px;font-size:12px;color:var(--shell-muted);pointer-events:none}
+/* 与 .quiet / .file-action 同规格：40px 高、6px 圆角、shell 色板 */
+.picker-input{
+  width:100%;min-width:0;min-height:40px;padding:8px 34px 8px 30px;
+  border:1px solid var(--shell-line);border-radius:6px;
+  background:var(--shell-raised);color:var(--shell-text);font:inherit;font-size:12px;
+}
+.picker-input::placeholder{color:var(--shell-muted)}
+.picker-input:hover{border-color:oklch(42% .008 285)}
+.picker-input:focus{outline:none;border-color:var(--shell-accent)}
+.picker-clear{
+  position:absolute;right:8px;display:flex;align-items:center;justify-content:center;
+  width:20px;height:20px;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--shell-muted);font-size:10px;line-height:1;
+}
+.picker-clear:hover{background:var(--shell-line);color:var(--shell-text)}
+.picker.is-disabled{opacity:.5}
+
+/* 难度徽章组：N/H/E/M 各一枚，等级取自 MusicScores.yaml */
+.difficulty-group{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.difficulty-group[hidden]{display:none}
+.difficulty-chip{
+  display:flex;align-items:center;justify-content:center;
+  width:40px;height:40px;padding:0;
+  border:1px solid var(--shell-line);border-radius:8px;
+  background:var(--shell-raised);color:var(--shell-muted);
+  font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;
+}
+.difficulty-chip{border-color:color-mix(in srgb,var(--chip) 55%,transparent);color:var(--chip)}
+.difficulty-chip:hover{border-color:var(--chip);background:color-mix(in srgb,var(--chip) 16%,var(--shell-raised))}
+/* 难度色 = ColorPreset.GetDifficultyColor（与开场过场同源）。 */
+.difficulty-chip[data-difficulty="NORMAL"]{--chip:#36d6e0}
+.difficulty-chip[data-difficulty="HARD"]{--chip:#ffb32f}
+.difficulty-chip[data-difficulty="EXPERT"]{--chip:#fd5b91}
+.difficulty-chip[data-difficulty="MASTER"]{--chip:#9370d5}
+.difficulty-chip.is-active{
+  background:var(--chip);border-color:var(--chip);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.25);
+}
+
+/* 下拉面板 */
+.picker-panel{
+  position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;
+  display:flex;flex-direction:column;max-height:min(60vh,440px);
+  border:1px solid var(--shell-line);border-radius:8px;background:var(--shell-bg);
+  box-shadow:0 18px 44px rgba(0,0,0,.5);overflow:hidden;
+}
+.picker-panel[hidden]{display:none}
+.picker-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:8px 12px;border-bottom:1px solid var(--shell-line);background:var(--shell-surface);
+}
+.picker-count{font-size:10px;color:var(--shell-muted)}
+.picker-toggle{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--shell-muted);cursor:pointer}
+.picker-toggle input{accent-color:var(--shell-accent);width:13px;height:13px}
+.picker-list{margin:0;padding:4px;list-style:none;overflow-y:auto;min-height:0}
+.picker-group{
+  padding:8px 10px 4px;font-size:10px;font-weight:600;color:var(--shell-muted);
+  letter-spacing:.06em;position:sticky;top:0;background:var(--shell-bg);z-index:1;
+}
+.song-option{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:5px;cursor:pointer}
+.song-option-main{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto}
+.song-option-title{
+  font-size:12px;color:var(--shell-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.song-option-unit{font-size:10px;color:var(--shell-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song-option-badges{display:flex;align-items:center;gap:3px;flex:0 0 auto}
+.song-option-badge{
+  display:flex;align-items:center;justify-content:center;
+  min-width:22px;padding:2px 5px;border-radius:4px;font-size:10px;font-weight:700;
+  background:var(--shell-raised);color:var(--shell-muted);font-variant-numeric:tabular-nums;
+  line-height:1.2;
+}
+.song-option-badge[data-difficulty="NORMAL"]{color:#36d6e0}
+.song-option-badge[data-difficulty="HARD"]{color:#ffb32f}
+.song-option-badge[data-difficulty="EXPERT"]{color:#fd5b91}
+.song-option-badge[data-difficulty="MASTER"]{color:#9370d5}
+.song-option.is-active{background:var(--shell-raised)}
+.song-option.is-selected{background:var(--shell-line)}
+.song-option.is-selected .song-option-title{color:var(--shell-accent)}
+.song-option.is-selected::before{content:"✓";font-size:10px;color:var(--shell-accent)}
+.picker-empty{padding:20px 12px;text-align:center;font-size:11px;color:var(--shell-muted)}
+@media(max-width:1000px){
+  .song-picker{order:3;flex-basis:100%;max-width:none;margin-top:12px}
+}
+@media(max-width:900px){
+  .picker-panel{max-height:min(50vh,340px)}
+  /* 窄屏收紧方块尺寸 */
+  .difficulty-chip{width:34px;height:34px}
+}
