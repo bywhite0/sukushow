@@ -421,12 +421,14 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     // ---- 主峰：叶形光带 + 文字都应画出来 ----
     expect(chancePeak.middle, '主峰应画出光带与文字').toBeGreaterThan(5000)
 
-    // ---- 光带确实张开到两个底角（底角亮度显著高于「已收尽」之后） ----
+    // ---- 光带确实张开到两个底角 ----
+    // 判据按**基线倍数**而不是绝对增量：光束是带长尾的辉光，能量铺得很开，
+    // 贴边处的绝对亮度本来就不高（个位数），用固定增量会随增益调整而失准。
     expect(chancePeak.on.bottomLeft, '左下角应有光带').toBeGreaterThan(
-      chanceAfter.on.bottomLeft + 10,
+      Math.max(chanceAfter.on.bottomLeft * 4, 3),
     )
     expect(chancePeak.on.bottomRight, '右下角应有光带').toBeGreaterThan(
-      chanceAfter.on.bottomRight + 10,
+      Math.max(chanceAfter.on.bottomRight * 4, 3),
     )
 
     // ---- chance 期间不画 Fever 边框：左右竖条应缺席 ----

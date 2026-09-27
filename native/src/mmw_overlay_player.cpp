@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -2422,12 +2423,36 @@ void main() {
     constexpr float CHANCE_BEAM_APEX_HALF_SEP = 54.4f;
     constexpr float CHANCE_BEAM_SLOPE = 0.837f;
     constexpr float CHANCE_BEAM_PEAK_ALPHA = 0.95f;
-    constexpr int CHANCE_BEAM_SEGMENTS = 16;
+    constexpr int CHANCE_BEAM_SEGMENTS = 8;
     // 宽度剖面（y → 像素宽）：中间最宽、两端收窄，是叶形而不是三角。
     constexpr float CHANCE_BEAM_WIDTH[][2] = {
         {0.0f, 20.0f}, {120.0f, 31.0f}, {240.0f, 52.0f}, {360.0f, 77.0f},
         {480.0f, 95.0f}, {600.0f, 85.0f}, {720.0f, 64.0f}, {840.0f, 40.0f},
         {960.0f, 27.0f}, {1080.0f, 18.0f},
+    };
+    // 光束不是实心四边形，而是「中心平顶 + 长尾」的柔和辉光。
+    // 横截面以**宽度**归一：s = |dx| / (宽度/2)，环带按 s 切分。
+    // 环带必须**互不重叠**：加色混合下重叠会累加成假亮，嵌套画会得到过亮的核心。
+    struct BeamGlowBand { float s0; float s1; float alpha; };
+    // 环带 alpha 取自素材横截面的归一化均值，与实现同一测量口径，可逐点对账：
+    //   s:  0.0    0.4    0.8    1.2    1.6    2.0    2.4    2.8    3.2    3.6    4.0
+    //   v: 1.00   0.73   0.40   0.28   0.22   0.15   0.11   0.07   0.05   0.02   0.01
+    // 注意尾巴到 s≈4 就归零，不能铺得更远：铺宽了光束会明显偏实、偏宽。
+    constexpr BeamGlowBand BEAM_GLOW_BANDS[] = {
+        {0.0f, 0.4f, 1.00f}, {0.4f, 0.8f, 0.73f}, {0.8f, 1.2f, 0.40f},
+        {1.2f, 1.6f, 0.28f}, {1.6f, 2.0f, 0.22f}, {2.0f, 2.4f, 0.15f},
+        {2.4f, 2.8f, 0.11f}, {2.8f, 3.2f, 0.07f}, {3.2f, 3.6f, 0.05f},
+        {3.6f, 4.0f, 0.02f}, {4.0f, 4.4f, 0.01f},
+    };
+
+    // ---- Fever 紫光（fx_fever_v2）----
+    // 与 FeverChance 中心线同族，宽度剖面不同（更宽、且越靠下越宽）。
+    constexpr float FEVER_BEAM_APEX_HALF_SEP = 45.0f;
+    constexpr float FEVER_BEAM_SLOPE = 0.838f;
+    constexpr float FEVER_BEAM_WIDTH[][2] = {
+        {0.0f, 8.0f}, {120.0f, 9.0f}, {240.0f, 24.0f}, {360.0f, 34.0f},
+        {480.0f, 47.0f}, {600.0f, 71.0f}, {720.0f, 93.0f}, {840.0f, 110.0f},
+        {960.0f, 113.0f}, {1080.0f, 118.0f},
     };
     // 颜色剖面（y → RGB）：中段最亮的暖金，两端转暗橙。
     constexpr float CHANCE_BEAM_COLOR[][4] = {
@@ -3216,6 +3241,62 @@ void main() {
      * 本函数是纯时间函数（无内部状态），因此跳转/暂停后画面自洽，
      * 不会出现「seek 到 Fever 中段却补播入场」的问题。
      */
+    /**
+     * 沿一条光束绘制「阶梯式辉光」。
+     *
+     * @param widthAt   y → 宽度（px）
+     * @param colorAt   (y, alpha) → ImU32
+     * @param apexHalf  顶点处距画面中线的横向偏移
+     * @param slope     中心线斜率（向下张开）
+     * @param peakAlpha 整体增益
+     */
+    template <typename WidthFn, typename ColorFn>
+    void drawBeamGlow(
+        ImDrawList* overlay,
+        const std::function<float(float)>& px,
+        const std::function<float(float)>& py,
+        float screenCenterX,
+        float apexHalf,
+        float slope,
+        float peakAlpha,
+        int segments,
+        WidthFn widthAt,
+        ColorFn colorAt)
+    {
+        constexpr int kBandCount = static_cast<int>(sizeof(BEAM_GLOW_BANDS) / sizeof(BEAM_GLOW_BANDS[0]));
+        // 半宽：宽度的一半（宽度本身是在阈值 40 处量得的）。
+        auto halfAt = [&](float y) { return widthAt(y) * 0.5f; };
+
+        for (int side = 0; side < 2; ++side) {
+            const float dir = (side == 0) ? -1.0f : 1.0f;
+            for (int i = 0; i < segments; ++i) {
+                const float y0 = 1080.0f * static_cast<float>(i) / static_cast<float>(segments);
+                const float y1 = 1080.0f * static_cast<float>(i + 1) / static_cast<float>(segments);
+                const float c0 = screenCenterX + dir * (apexHalf + slope * y0);
+                const float c1 = screenCenterX + dir * (apexHalf + slope * y1);
+                const float h0 = halfAt(y0);
+                const float h1 = halfAt(y1);
+                // 环带以中心线为轴对称铺开：两侧各一遍，否则宽度只有设计值的一半。
+                for (int bs = 0; bs < 2; ++bs) {
+                    const float bd = (bs == 0) ? -1.0f : 1.0f;
+                    for (int b = 0; b < kBandCount; ++b) {
+                        const float s0 = BEAM_GLOW_BANDS[b].s0;
+                        const float s1 = BEAM_GLOW_BANDS[b].s1;
+                        const float bandAlpha = BEAM_GLOW_BANDS[b].alpha;
+                        const ImU32 c0b = colorAt(y0, peakAlpha * bandAlpha);
+                        const ImU32 c1b = colorAt(y1, peakAlpha * bandAlpha);
+                        // s0/s1 是到中心线的归一距离；bd 决定落在哪一侧。
+                        addQuadGradient(
+                            overlay,
+                            ImVec2(px(c1 + bd * s1 * h1), py(y1)), ImVec2(px(c1 + bd * s0 * h1), py(y1)),
+                            ImVec2(px(c0 + bd * s0 * h0), py(y0)), ImVec2(px(c0 + bd * s1 * h0), py(y0)),
+                            c1b, c1b, c0b, c0b);
+                    }
+                }
+            }
+        }
+    }
+
     void drawFeverOverlay(
         GlRenderer& renderer,
         const std::unordered_map<std::string, Texture>& hudTextures,
@@ -3318,24 +3399,12 @@ void main() {
 
             if (beamAlpha > 0.001f) {
                 beginAdditive(overlay);
-                for (int side = 0; side < 2; ++side) {
-                    const float dir = (side == 0) ? -1.0f : 1.0f;
-                    for (int i = 0; i < CHANCE_BEAM_SEGMENTS; ++i) {
-                        const float y0 = 1080.0f * static_cast<float>(i) / CHANCE_BEAM_SEGMENTS;
-                        const float y1 = 1080.0f * static_cast<float>(i + 1) / CHANCE_BEAM_SEGMENTS;
-                        const float c0 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y0);
-                        const float c1 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y1);
-                        const float w0 = widthAt(y0) * 0.5f;
-                        const float w1 = widthAt(y1) * 0.5f;
-                        const ImU32 top = colorAt(y0, beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha);
-                        const ImU32 bot = colorAt(y1, beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha);
-                        // 注意：四边形顶点顺序与外法线无关（无剔除），左右侧共用同一段代码。
-                        addQuadGradient(overlay,
-                                        ImVec2(px(c1 - w1), py(y1)), ImVec2(px(c1 + w1), py(y1)),
-                                        ImVec2(px(c0 + w0), py(y0)), ImVec2(px(c0 - w0), py(y0)),
-                                        bot, bot, top, top);
-                    }
-                }
+                drawBeamGlow(overlay, px, py, 960.5f,
+                             CHANCE_BEAM_APEX_HALF_SEP, CHANCE_BEAM_SLOPE,
+                             beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha,
+                             CHANCE_BEAM_SEGMENTS,
+                             widthAt,
+                             [&](float y, float a) { return colorAt(y, a); });
                 endAdditive(overlay);
             }
         }
@@ -3380,30 +3449,34 @@ void main() {
                     : (beamT < 0.28f ? clamp01((beamT - 0.05f) / 0.23f)
                                      : clamp01(1.0f - (beamT - 0.28f) / 0.16f));
                 if (beamAlpha > 0.001f) {
-                    const ImU32 beamEdge = IM_COL32(
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)),
-                        static_cast<int>(std::lround(clamp01(beamAlpha * 0.55f * overlayAlpha) * 255.0f)));
-                    const ImU32 beamApex = IM_COL32(
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)), 0);
-                    // 左束：窄斜带，四点取自素材的上下两端 ——
-                    //   底边 y=1080 处 x∈[0,96]（素材 y=1020 为 [18,108]）
-                    //   顶端 y=60 处收细到 x∈[856,876]（素材 y=180 为 [753,780]）
-                    // 底亮顶透明，对应「底角亮、向汇聚点衰减」。
-                    addQuadGradient(overlay,
-                                    ImVec2(px(0.0f), py(1080.0f)), ImVec2(px(96.0f), py(1080.0f)),
-                                    ImVec2(px(876.0f), py(FEVER_BEAM_APEX_Y)),
-                                    ImVec2(px(856.0f), py(FEVER_BEAM_APEX_Y)),
-                                    beamEdge, beamEdge, beamApex, beamApex);
-                    // 右束镜像
-                    addQuadGradient(overlay,
-                                    ImVec2(px(1920.0f), py(1080.0f)), ImVec2(px(1824.0f), py(1080.0f)),
-                                    ImVec2(px(1044.0f), py(FEVER_BEAM_APEX_Y)),
-                                    ImVec2(px(1064.0f), py(FEVER_BEAM_APEX_Y)),
-                                    beamEdge, beamEdge, beamApex, beamApex);
+                    auto feverWidthAt = [&](float y) {
+                        constexpr int kN = static_cast<int>(sizeof(FEVER_BEAM_WIDTH) / sizeof(FEVER_BEAM_WIDTH[0]));
+                        if (y <= FEVER_BEAM_WIDTH[0][0]) return FEVER_BEAM_WIDTH[0][1];
+                        if (y >= FEVER_BEAM_WIDTH[kN - 1][0]) return FEVER_BEAM_WIDTH[kN - 1][1];
+                        for (int i = 1; i < kN; ++i) {
+                            if (y <= FEVER_BEAM_WIDTH[i][0]) {
+                                const float y0 = FEVER_BEAM_WIDTH[i - 1][0];
+                                const float y1 = FEVER_BEAM_WIDTH[i][0];
+                                const float k = (y - y0) / (y1 - y0);
+                                return FEVER_BEAM_WIDTH[i - 1][1] +
+                                       (FEVER_BEAM_WIDTH[i][1] - FEVER_BEAM_WIDTH[i - 1][1]) * k;
+                            }
+                        }
+                        return FEVER_BEAM_WIDTH[kN - 1][1];
+                    };
+                    auto feverColorAt = [&](float, float a) {
+                        return IM_COL32(
+                            static_cast<int>(std::lround(FEVER_BEAM_RGB[0] * 255.0f)),
+                            static_cast<int>(std::lround(FEVER_BEAM_RGB[1] * 255.0f)),
+                            static_cast<int>(std::lround(FEVER_BEAM_RGB[2] * 255.0f)),
+                            static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
+                    };
+                    drawBeamGlow(overlay, px, py, 960.0f,
+                                 FEVER_BEAM_APEX_HALF_SEP, FEVER_BEAM_SLOPE,
+                                 beamAlpha * 0.75f,
+                                 CHANCE_BEAM_SEGMENTS,
+                                 feverWidthAt,
+                                 feverColorAt);
                 }
             }
 
