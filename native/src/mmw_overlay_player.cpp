@@ -2454,6 +2454,9 @@ void main() {
     // superFeverIconRoot (2.462, 4.105)，SpriteRenderer.m_Size 分别 1.7407×0.5370 /
     // 3.0648×0.5370（世界单位，1 单位 = 100px，原点 = 画面中心）。
     // 像素坐标 = (960 + 100·x, 540 − 100·y)。
+    // 淡入时长取自原包 `FadeInFeverLineText` 的 duration 参数
+    // （FadeInFeverChance 的延续 lambda 传 0.2f）。
+    constexpr float FEVER_POINTER_FADE_SEC = 0.20f;
     constexpr float FEVER_POINTER_CENTER_X = 1303.2f;
     constexpr float FEVER_POINTER_CENTER_Y = 243.5f;
     constexpr float FEVER_POINTER_WIDTH = 174.0f;
@@ -3538,19 +3541,25 @@ void main() {
         }
 
         // ---- 计量条上的 Fever / SuperFever 指针 ----
-        // 与原包一致：指针与光束/文字同一套开关，只在 FeverChance 态出现。
+        // 原包口径：两个指针文字由 `FadeInFeverLineText` 在 `FadeInFeverChance`
+        // 里一起淡入（时长 0.2s），**不是**按状态二选一。
+        // 故两个都画，各自从 FeverChance 起点起 0.2s 淡入。
         if (chanceActive && gPlayer.feverDisplayEnabled) {
-            const char* pointerKey = superCharging ? "super_fever_pointer" : "fever_pointer";
-            const float pcx = superCharging ? SUPER_POINTER_CENTER_X : FEVER_POINTER_CENTER_X;
-            const float pcy = superCharging ? SUPER_POINTER_CENTER_Y : FEVER_POINTER_CENTER_Y;
-            const float pw = superCharging ? SUPER_POINTER_WIDTH : FEVER_POINTER_WIDTH;
-            const float ph = superCharging ? SUPER_POINTER_HEIGHT : FEVER_POINTER_HEIGHT;
-            if (const Texture* pointer = findTexture(hudTextures, pointerKey)) {
-                // 指针随充能进度淡入，与计量条同节奏。
-                const float pointerAlpha = clamp01(feverProgress) * overlayAlpha;
-                drawHudImage(overlay, *pointer,
-                             px(pcx - pw * 0.5f), py(pcy - ph * 0.5f),
-                             ps(pw), ps(ph), pointerAlpha);
+            const float pointerFade = clamp01(chanceLocalSec / FEVER_POINTER_FADE_SEC) * overlayAlpha;
+            if (pointerFade > 0.001f) {
+                const struct { const char* key; float cx, cy, w, h; } pointers[] = {
+                    {"fever_pointer", FEVER_POINTER_CENTER_X, FEVER_POINTER_CENTER_Y,
+                     FEVER_POINTER_WIDTH, FEVER_POINTER_HEIGHT},
+                    {"super_fever_pointer", SUPER_POINTER_CENTER_X, SUPER_POINTER_CENTER_Y,
+                     SUPER_POINTER_WIDTH, SUPER_POINTER_HEIGHT},
+                };
+                for (const auto& p : pointers) {
+                    if (const Texture* tex = findTexture(hudTextures, p.key)) {
+                        drawHudImage(overlay, *tex,
+                                     px(p.cx - p.w * 0.5f), py(p.cy - p.h * 0.5f),
+                                     ps(p.w), ps(p.h), pointerFade);
+                    }
+                }
             }
         }
 
