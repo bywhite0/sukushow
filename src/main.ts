@@ -239,6 +239,7 @@ const applyTechScore=()=>{const v=Number(el<HTMLSelectElement>('tech-score').val
 el<HTMLSelectElement>('tech-score').onchange=applyTechScore;applyTechScore();
 const applyHudOptions=()=>{
  hud.setEnablePerfectPlus(el<HTMLInputElement>('opt-perfect-plus').checked);
+ hud.setEnableApContinue(input('opt-ap-continue').checked);
  const jo=Number(el<HTMLSelectElement>('opt-judgement-output').value);
  hud.setJudgementOutput((jo>=0&&jo<=6?jo:0) as 0|1|2|3|4|5|6);
  const fs=Number(el<HTMLSelectElement>('opt-fast-slow').value);
@@ -254,7 +255,7 @@ el<HTMLSelectElement>('opt-fast-slow').onchange=applyHudOptions;
 input('opt-judge-y').oninput=()=>{el('opt-judge-y-value').textContent=input('opt-judge-y').value;applyHudOptions();};
 input('opt-fs-y').oninput=()=>{el('opt-fs-y-value').textContent=input('opt-fs-y').value;applyHudOptions();};
 input('opt-fever').onchange=applyHudOptions;
-input('opt-ap-continue').onchange=()=>persistSettings();
+input('opt-ap-continue').onchange=applyHudOptions;
 input('opt-mv').onchange=()=>persistSettings();
 input('opt-skill-view').onchange=()=>persistSettings();
 input('opt-skill-cutin').onchange=()=>persistSettings();

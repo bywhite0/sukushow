@@ -24,6 +24,25 @@ import {
   AP_RATE_BURST_RING_INNER,
   AP_RATE_BURST_ROOT_GAIN,
   AP_RATE_BURST_CORE_ALPHA_GAIN,
+  apContinueAfterHit,
+  apContinueEffectVisible,
+  comboEffectUpperAlpha,
+  comboEffectLowerAlpha,
+  comboEffectOutlineBox,
+  comboEffectUpperOutlineScale,
+  comboEffectRefreshLoop,
+  COMBO_EFFECT_LOWER_START_A,
+  COMBO_EFFECT_UPPER_START_A,
+  COMBO_EFFECT_LOWER_BURST,
+  COMBO_EFFECT_UPPER_BURST,
+  COMBO_EFFECT_UPPER_LIFE,
+  COMBO_EFFECT_UPPER_ACTIVATE_DELAY,
+  COMBO_GLOW_BURST,
+  COMBO_GLOW_LIFE,
+  comboGlowUpperCurve,
+  comboGlowLowerCurve,
+  COMBO_GLOW_UPPER_ALPHA,
+  COMBO_GLOW_LOWER_ALPHA,
   scoreAddTweenX,
   scoreAddTweenAlpha,
   SCORE_ADD_LIFE,
@@ -249,6 +268,18 @@ function mountOutlinedText(host: HTMLElement, text: string, asHtml = false): voi
   host.replaceChildren(ol, face);
 }
 
+/** 数字 1 的描边蒙版（着色器窄字形采样，见 comboEffectOutlineBox）；其余数字用 CSS 里的整张图。 */
+const COMBO_EFFECT_DIGIT1_MASK = 'url(/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png)';
+
+/** AP 継続特效的四层（见 LiveHud.comboFx）。 */
+type ComboFxLayerKey = 'lowerOutline' | 'upperOutline' | 'lowerGlow' | 'upperGlow';
+interface ComboFxLayer {
+  el: HTMLElement;
+  kind: 'outline' | 'glow';
+  /** [0]=个位 … [3]=千位；parts = 同簇粒子副本；digit = 当前已铺的数字（-1 未铺）。 */
+  slots: { el: HTMLElement; parts: HTMLElement[]; digit: number }[];
+}
+
 export class LiveHud {
   private readonly stage: HTMLElement;
   private readonly root: HTMLElement;
@@ -285,6 +316,7 @@ export class LiveHud {
   private judgementYOpt = RG_OPTION_DEFAULTS.judgementY;
   private fastSlowYOpt = RG_OPTION_DEFAULTS.fastSlowY;
   private enableFeverDisplay: boolean = RG_OPTION_DEFAULTS.enableFeverDisplay;
+  private enableApContinue: boolean = RG_OPTION_DEFAULTS.enableApContinue;
   private feverWindow: FeverWindow | null = null;
   private judgePop: HTMLElement | null = null;
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
@@ -297,6 +329,29 @@ export class LiveHud {
   };
   private comboBounceAt = -1;
   private comboFlashAt = -1;
+  /**
+   * AP 継続（`ScoreResolver.isApContinue` @0x158）：本局至今是否全程 Perfect 以上。
+   * `add` 每次判定 `&= (type & 0xFE) == 4`；`Clear` / 重开重置为 true。
+   */
+  private isApContinue = true;
+  /**
+   * AP 継続特效四层（每层 4 个数字槽，与数字行同矩形同布局）：
+   * - lowerOutline：SpriteRoot/Sprite0~3/ComboEffectOutLine_02（循环，4 颗加法叠加）
+   * - upperOutline：SpriteUpperRoot/Sprite0~3/ComboEffectOutLine_01（跨百单次，5 颗加法叠加）
+   * - lowerGlow：OutLine_02 下的 ComboEffectBG_01（循环，Alpha 混合，sortingOrder 10 ⇒ 最上）
+   * - upperGlow：OutLine_01 下的 ComboEffectBG_01（单次，加法，sortingOrder 1 ⇒ 在数字后面）
+   */
+  private comboFx: Record<ComboFxLayerKey, ComboFxLayer> | null = null;
+  /** 下层（描边 + 底光）循环的时间基：开局 / Clear 起算，isRefreshLoop（combo 位数变化）时重启。 */
+  private comboFxLowerAt = 0;
+  /** 上层时间基 = DoEffectCombo（跨百）时刻；-1 = 未在播。 */
+  private comboFxUpperAt = -1;
+  /** DoEffectCombo 写入上层的未掩码 combo，以及当时的 isApContinue（决定渲染器开关）。 */
+  private comboFxUpperCombo = 0;
+  private comboFxUpperOn = false;
+  /** ComboRectTween 当前缩放（下层粒子只随它展开槽位，尺寸不变）。 */
+  private comboRectScale = 1;
+  private comboRectTransform = '';
   private apRateFlashAt = -1;
   private prevComboForFlash = 0;
   private lastPaintedApRate = -1;
@@ -385,6 +440,8 @@ export class LiveHud {
       const jType = autoPlayJudgementType(this.enablePerfectPlus);
       if (hits > 0) {
         const prevCombo = this.combo;
+        // AP 継続：`isApContinue &= (type & 0xFE) == 4`（ScoreResolver.Add @0x49A1460）。
+        this.isApContinue = apContinueAfterHit(this.isApContinue, jType);
         this.scoreEngine.addMany(jType, hits);
         this.combo = this.scoreEngine.combo;
         this.apRate = this.scoreEngine.apRate;
@@ -420,6 +477,7 @@ export class LiveHud {
     this.paintCondition(time);
     this.paintComboBounce(time);
     this.paintComboFlash(time);
+    this.paintComboEffect(time);
     this.paintApRateFlash(time);
     this.paintApRateBurst(time);
     this.paintAddScore(time);
@@ -481,6 +539,10 @@ export class LiveHud {
     this.comboBounceAt = -1;
     this.comboFlashAt = -1;
     this.apRateFlashAt = -1;
+    // Clear() 把 isApContinue 重置为 true（ScoreResolver @0x49A2634）。
+    this.isApContinue = true;
+    this.comboFxLowerAt = time;
+    this.comboFxUpperAt = -1;
     this.addScoreAt = -1;
     this.prevComboForFlash = 0;
     this.lastPaintedApRate = -1;
@@ -598,7 +660,13 @@ export class LiveHud {
     if (shouldComboHundredFlash(prevCombo, this.combo)) {
       this.comboFlashAt = time;
       this.rebuildComboFlashDigits();
+      // DoEffectCombo：上层按未掩码 combo 设数字、isRefreshLoop=true；渲染器开关取此刻的 isApContinue。
+      this.comboFxUpperAt = time;
+      this.comboFxUpperCombo = this.combo;
+      this.comboFxUpperOn = this.isApContinue;
     }
+    // isRefreshLoop（Add @0x49A19A8）= 新旧 combo 位数不同 ⇒ 下层描边与底光一起 Stop(true, Clear)+Play()。
+    if (comboEffectRefreshLoop(prevCombo, this.combo)) this.comboFxLowerAt = time;
     this.prevComboForFlash = this.combo;
     // ApRateFlash only when apRate value changes
     if (this.apRate !== this.lastPaintedApRate) {
@@ -635,6 +703,114 @@ export class LiveHud {
         mountSprite(slot, 'ui_sc2_ingame_num_combo_0', '0');
       }
       this.comboFlashDigits.append(slot);
+    }
+  }
+
+  private paintComboEffect(time: number): void {
+    const fx = this.comboFx;
+    if (!fx) return;
+    // 下层（SpriteRoot）：UpdateCombo 每次按掩码后的 combo（<10 视为 0）与 isApContinue 开关渲染器；
+    //   粒子模拟不因渲染器关闭而停，只有 isRefreshLoop（位数变化）才 Stop+Play ⇒ 相位取 comboFxLowerAt。
+    //   描边与底光同一次 withChildren 重启，共用相位。
+    const lowerOn = this.enableApContinue && apContinueEffectVisible(this.combo, this.isApContinue);
+    const lowerCombo = lowerOn ? this.combo : 0;
+    const lowerAge = Math.max(0, time - this.comboFxLowerAt);
+    // 粒子 scalingMode = Local：ComboRectTween 只把槽位展开，粒子本身不放大 ⇒ 子元素反向缩放。
+    const invRect = 1 / this.comboRectScale;
+    this.paintComboFxLayer(
+      fx.lowerOutline, lowerCombo, this.comboRectTransform,
+      comboEffectLowerAlpha(lowerAge) * COMBO_EFFECT_LOWER_START_A,
+      () => invRect,
+    );
+    this.paintComboFxLayer(
+      fx.lowerGlow, lowerCombo, this.comboRectTransform,
+      comboGlowLowerCurve(lowerAge) * COMBO_GLOW_LOWER_ALPHA,
+      () => invRect,
+    );
+
+    // 上层（SpriteUpperRoot）：DoEffectCombo 时写入未掩码 combo，0.1167s 激活后开播；
+    //   描边寿命 0.25s、底光 0.8s。位置随 SpriteUpperRoot 缩放展开，
+    //   描边尺寸只认自身缩放曲线，底光尺寸不变。
+    let upperCombo = 0;
+    let upperAge = -1;
+    let animAge = 0;
+    let rootS = 1;
+    if (this.comboFxUpperAt >= 0) {
+      animAge = time - this.comboFxUpperAt;
+      upperAge = animAge - COMBO_EFFECT_UPPER_ACTIVATE_DELAY;
+      if (animAge < 0 || upperAge >= COMBO_GLOW_LIFE) {
+        this.comboFxUpperAt = -1;
+        upperAge = -1;
+      } else if (upperAge >= 0 && this.comboFxUpperOn && this.enableApContinue) {
+        upperCombo = this.comboFxUpperCombo;
+        rootS = comboFlashScale(animAge);
+      }
+    }
+    const rootT = upperCombo > 0 ? `scale(${rootS})` : '';
+    this.paintComboFxLayer(
+      fx.upperOutline, upperAge < COMBO_EFFECT_UPPER_LIFE ? upperCombo : 0, rootT,
+      comboEffectUpperAlpha(upperAge) * COMBO_EFFECT_UPPER_START_A,
+      (slot) => comboEffectUpperOutlineScale(slot, animAge) / rootS,
+    );
+    this.paintComboFxLayer(
+      fx.upperGlow, upperCombo, rootT,
+      comboGlowUpperCurve(upperAge) * COMBO_GLOW_UPPER_ALPHA,
+      () => 1 / rootS,
+    );
+  }
+
+  /**
+   * 按 UpdateCombo 的槽位规则铺一层：[0]=个位，剩余值 m > 0 才打开该槽，m = trunc(m × 0.1)。
+   * `opacity` 是**单颗**粒子的不透明度；同簇的加法副本各自带同一值，由 plus-lighter 叠加。
+   */
+  private paintComboFxLayer(
+    layer: ComboFxLayer,
+    combo: number,
+    layerTransform: string,
+    opacity: number,
+    partScale: (slot: number) => number,
+  ): void {
+    const on = combo > 0;
+    layer.el.hidden = !on;
+    if (!on) return;
+    layer.el.style.transform = layerTransform;
+    const isGlow = layer.kind === 'glow';
+    const op = String(opacity);
+    let m = combo;
+    for (let i = 0; i < layer.slots.length; i++) {
+      const s = layer.slots[i];
+      if (m <= 0) {
+        s.el.hidden = true;
+        continue;
+      }
+      const d = m % 10;
+      s.el.hidden = false;
+      if (!isGlow && s.digit !== d) {
+        const b = comboEffectOutlineBox(d);
+        const size = `${b.maskW}px ${b.maskH}px`;
+        const pos = `${b.maskX}px 0px`;
+        const img = b.image === 'digit1' ? COMBO_EFFECT_DIGIT1_MASK : '';
+        for (const p of s.parts) {
+          p.style.maskImage = img;
+          p.style.webkitMaskImage = img;
+          p.style.left = `${b.left}px`;
+          p.style.top = `${b.top}px`;
+          p.style.width = `${b.width}px`;
+          p.style.height = `${b.height}px`;
+          p.style.maskSize = size;
+          p.style.webkitMaskSize = size;
+          p.style.maskPosition = pos;
+          p.style.webkitMaskPosition = pos;
+        }
+        s.digit = d;
+      }
+      const k = partScale(i);
+      const tf = isGlow ? `translate(-50%,-50%) scale(${k})` : `scale(${k})`;
+      for (const p of s.parts) {
+        p.style.opacity = op;
+        p.style.transform = tf;
+      }
+      m = Math.trunc(m * 0.1);
     }
   }
 
@@ -805,21 +981,34 @@ export class LiveHud {
     }
   }
 
+  /**
+   * ComboRectTween 的缩放：数字行直接缩放；AP 継続下层同步展开槽位，
+   * 粒子尺寸不随之放大（scalingMode = Local），由 paintComboEffect 反向缩放子元素。
+   */
+  private applyComboScale(scale: number | null): void {
+    const t = scale === null ? '' : `scale(${scale})`;
+    this.comboRow.style.transform = t;
+    this.comboRectTransform = t;
+    this.comboRectScale = scale === null ? 1 : scale;
+  }
+
   private paintComboBounce(time: number): void {
     if (this.comboBounceAt < 0) {
-      this.comboRow.style.transform = '';
+      this.applyComboScale(null);
       return;
     }
     const age = time - this.comboBounceAt;
     if (age < 0 || age >= COMBO_TWEEN) {
-      this.comboRow.style.transform = '';
+      this.applyComboScale(null);
       this.comboBounceAt = -1;
       return;
     }
     // ComboRectTween: scale = 0.8 + 0.4*u - 0.2*u*u (0.8 → 1.0).
     const u = Math.min(age, COMBO_TWEEN) * (1 / COMBO_TWEEN);
     const scale = 0.8 + 0.4 * u - 0.2 * u * u;
-    this.comboRow.style.transform = `scale(${scale})`;
+    // 描边层在原包里是数字槽的子节点，会跟着 ComboRectTween 一起缩放；
+    // 这里是兄弟节点，必须显式同步，否则弹跳期间会与数字错开。
+    this.applyComboScale(scale);
   }
 
   private buildScore(safe: HTMLElement): void {
@@ -1064,6 +1253,11 @@ export class LiveHud {
     this.applyJudgeSprite(autoPlayJudgementType(on));
   }
 
+  /** `IConfigResolver.EnableApContinue`（默认 true）：关掉后不显示 AP 継続描边。 */
+  setEnableApContinue(on: boolean): void {
+    this.enableApContinue = on;
+  }
+
   setJudgementOutput(opt: JudgementOutputOption): void {
     this.judgementOutput = opt;
   }
@@ -1255,7 +1449,8 @@ export class LiveHud {
     root.className = 'hud-combo';
     const row = document.createElement('div');
     row.className = 'hud-combo-digits';
-    place(row, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, 54, 360, 120);
+    // SpriteRoot / SpriteUpperRoot 的 anchoredPosition.x = −44（Label/APRate 才是 −40）。
+    place(row, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
     this.comboDigits.length = 0;
     for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
       const slot = document.createElement('div');
@@ -1292,16 +1487,53 @@ export class LiveHud {
     const flash = document.createElement('div');
     flash.className = 'hud-combo-flash';
     flash.style.opacity = '0';
-    place(flash, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, 54, 360, 120);
+    place(flash, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
     const flashDigits = document.createElement('div');
     flashDigits.className = 'hud-combo-flash-digits';
     flash.append(flashDigits);
     const burst = document.createElement('div');
     burst.className = 'hud-aprate-burst';
     place(burst, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 280, 280);
-    root.append(row, label, apRate, apRateUpper, flash, burst);
+    // AP 継続特效四层：与 SpriteRoot / SpriteUpperRoot 同矩形（360×120 @ -44,54），
+    // 槽位与 .hud-combo-digits 一致（row-reverse + −13 间距）。每槽的子元素是同簇粒子副本。
+    const mkFxLayer = (cls: string, kind: 'outline' | 'glow', parts: number): ComboFxLayer => {
+      const el = document.createElement('div');
+      el.className = `hud-combo-fx ${cls}`;
+      el.hidden = true;
+      place(el, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
+      const slots: ComboFxLayer['slots'] = [];
+      for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'hud-combo-fx-slot';
+        slot.hidden = true;
+        const ps: HTMLElement[] = [];
+        for (let k = 0; k < parts; k++) {
+          const p = document.createElement('div');
+          p.className = kind === 'outline' ? 'hud-combo-fx-outline' : 'hud-combo-fx-glow';
+          slot.append(p);
+          ps.push(p);
+        }
+        el.append(slot);
+        slots.push({ el: slot, parts: ps, digit: -1 });
+      }
+      return { el, kind, slots };
+    };
+    const fx: Record<ComboFxLayerKey, ComboFxLayer> = {
+      // 描边：加法混合，4 / 5 颗同位粒子 ⇒ 4 / 5 个 plus-lighter 副本。
+      lowerOutline: mkFxLayer('is-lower-outline', 'outline', COMBO_EFFECT_LOWER_BURST),
+      upperOutline: mkFxLayer('is-upper-outline', 'outline', COMBO_EFFECT_UPPER_BURST),
+      // 下层底光：Alpha 混合的 2 颗同位粒子 ⇒ 2 个普通合成的副本（逐像素 1 − (1 − a)²）。
+      lowerGlow: mkFxLayer('is-lower-glow', 'glow', COMBO_GLOW_BURST),
+      // 上层底光：加法混合 2 颗 ⇒ 2 个 plus-lighter 副本。
+      upperGlow: mkFxLayer('is-upper-glow', 'glow', COMBO_GLOW_BURST),
+    };
+    root.append(
+      fx.upperGlow.el, row, label, apRate, apRateUpper, flash,
+      fx.lowerOutline.el, fx.upperOutline.el, fx.lowerGlow.el, burst,
+    );
     this.comboFlashEl = flash;
     this.comboFlashDigits = flashDigits;
+    this.comboFx = fx;
     this.apRateBurstEl = burst;
     safe.append(root);
     return { row, label, apRate, apRateValue };

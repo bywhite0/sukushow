@@ -190,6 +190,77 @@
   opacity:0;
 }
 
+/* AP 継続（ScoreResolver.isApContinue）：combo >= 10 且本局全程 Perfect 以上。
+   四层各一排数字槽，布局与 .hud-combo-digits 相同（row-reverse、−13 间距、槽 90×120）。
+   层序按 sortingOrder：上底光 1（DOM 在数字行之前）→ 数字 3/4 → 描边 9 → 下底光 10。 */
+.hud-combo-fx{
+  display:flex;
+  flex-direction:row-reverse;
+  align-items:center;
+  justify-content:center;
+  overflow:visible;
+  pointer-events:none;
+  transform-origin:center center;
+}
+.hud-combo-fx[hidden]{display:none}
+.hud-combo-fx.is-lower-outline,
+.hud-combo-fx.is-upper-outline,
+.hud-combo-fx.is-lower-glow{z-index:6}
+/* 加法混合：描边材质 #9（Blend SrcAlpha One）、上层底光材质 #21（Mobile/Particles/Additive）。
+   层内副本用 plus-lighter 相加，层本身再以 plus-lighter 叠到下面的画面上。 */
+.hud-combo-fx.is-lower-outline,
+.hud-combo-fx.is-upper-outline,
+.hud-combo-fx.is-upper-glow{mix-blend-mode:plus-lighter}
+.hud-combo-fx-slot{
+  position:relative;
+  width:90px;
+  height:120px;
+  flex:0 0 auto;
+  margin:0;
+  overflow:visible;
+}
+.hud-combo-fx-slot + .hud-combo-fx-slot{margin-right:-13px}
+/* 描边面片 85×109，位置 / mask 由 comboEffectOutlineBox 按数字写入。
+   贴图纯白，颜色 = ColorModule rgb (0.04245, 0.58693, 1)。 */
+.hud-combo-fx-outline{
+  position:absolute;
+  opacity:0;
+  mix-blend-mode:plus-lighter;
+  transform-origin:center center;
+  background-color:rgb(11,150,255);
+  -webkit-mask-image:url(/rg/fx/tex/ui_sc2_ingame_num_combo_Effect.png);
+  mask-image:url(/rg/fx/tex/ui_sc2_ingame_num_combo_Effect.png);
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+}
+/* 底光：SizeModule 关闭 ⇒ 尺寸恒为 size3D。片元 = 贴图 × 顶点色。 */
+.hud-combo-fx-glow{
+  position:absolute;
+  left:50%;
+  top:50%;
+  opacity:0;
+  transform:translate(-50%,-50%);
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+  -webkit-mask-size:100% 100%;
+  mask-size:100% 100%;
+}
+/* 上层：200×250，颜色 (0.4575, 0.7675, 1) × 贴图纯白，加法。 */
+.hud-combo-fx.is-upper-glow .hud-combo-fx-glow{
+  width:200px;
+  height:250px;
+  mix-blend-mode:plus-lighter;
+  background-color:rgb(117,196,255);
+  -webkit-mask-image:url(/rg/fx/tex/sc2_effect_combo_glow_002.png);
+  mask-image:url(/rg/fx/tex/sc2_effect_combo_glow_002.png);
+}
+/* 下层：230×280，Alpha 混合。颜色 = (0.4575, 0.7675, 1) × 贴图 RGB，逐像素预乘在 _lower 图里。 */
+.hud-combo-fx.is-lower-glow .hud-combo-fx-glow{
+  width:230px;
+  height:280px;
+  background:url(/rg/fx/tex/sc2_effect_combo_glow_002_alpha_lower.png) center / 100% 100% no-repeat;
+}
+
 /* Cross-100 ComboAnimation overlay — same rect/layout as SpriteRoot digits */
 .hud-combo-flash{
   pointer-events:none;

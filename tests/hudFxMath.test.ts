@@ -23,6 +23,26 @@ import {
   AP_RATE_BURST_ACTIVATE_DELAY,
   AP_RATE_BURST_ROOT,
   AP_RATE_BURST_CORE,
+  isPerfectOrAbove,
+  apContinueAfterHit,
+  apContinueEffectVisible,
+  comboEffectUpperAlpha,
+  comboEffectLowerAlpha,
+  COMBO_EFFECT_UPPER_LIFE,
+  COMBO_EFFECT_LOWER_LIFE,
+  COMBO_EFFECT_SHEET_W,
+  COMBO_EFFECT_DIGIT_RECT,
+  comboEffectDigitWidth,
+  comboEffectOutlineBox,
+  comboEffectUpperOutlineScale,
+  comboDigitCount,
+  comboEffectRefreshLoop,
+  additiveStack,
+  alphaBlendStack,
+  COMBO_EFFECT_UPPER_ACTIVATE_DELAY,
+  comboGlowUpperCurve,
+  comboGlowLowerCurve,
+  COMBO_GLOW_LIFE,
 } from '../src/hudFxMath';
 
 describe('radialFillAmount', () => {
@@ -45,15 +65,21 @@ describe('shouldComboHundredFlash', () => {
 });
 
 describe('comboFlash curves', () => {
-  it('scale 1→1.6@0.7→1.7 over 0.7833s', () => {
-    expect(comboFlashScale(0)).toBeCloseTo(1, 5);
-    expect(comboFlashScale(0.7833333611488342 * 0.7)).toBeCloseTo(1.6, 4);
+  it('scale：1 到 1/30s，三次段 1.6@0.7s，1.7@47/60s 后保持', () => {
+    expect(comboFlashScale(0)).toBe(1);
+    expect(comboFlashScale(0.02)).toBe(1);
+    expect(comboFlashScale(0.7 - 1e-9)).toBeCloseTo(1.6, 3);
+    expect(comboFlashScale(0.7)).toBeCloseTo(1.6, 5);
     expect(comboFlashScale(0.7833333611488342)).toBeCloseTo(1.7, 5);
+    expect(comboFlashScale(2)).toBeCloseTo(1.7, 6);
+    // 三次段不是线性：第一段中点（1/30 + 1/3 s）≈ 1.2556，低于线性插值的 1.3（先慢后快）
+    expect(comboFlashScale(1 / 30 + 1 / 3)).toBeCloseTo(1.2556, 3);
   });
   it('alpha: 0→1@1/30, hold to 1/6, poly fade to 0', () => {
     expect(comboFlashAlpha(0)).toBe(0);
-    expect(comboFlashAlpha(1 / 30 - 1e-6)).toBe(0);
-    expect(comboFlashAlpha(1 / 30)).toBe(1);
+    // 键时刻取 float32 原值：1/30 存成 0.0333333351。
+    expect(comboFlashAlpha(0.03333333507180214 - 1e-9)).toBe(0);
+    expect(comboFlashAlpha(0.03333333507180214)).toBe(1);
     expect(comboFlashAlpha(1 / 6 - 1e-6)).toBe(1);
     expect(comboFlashAlpha(0.4)).toBeGreaterThan(0);
     expect(comboFlashAlpha(0.4)).toBeLessThan(1);
@@ -179,5 +205,150 @@ describe('apRateBurstTravel（LimitVelocityOverLifetime 位移积分）', () => 
     const c = apRateBurstTravel(700, 0, 0.65, 200, 0.3)[0];
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
+  });
+});
+
+describe('AP 継続（isApContinue）', () => {
+  it('Perfect(4) 与 PerfectPlus(5) 算「以上」', () => {
+    expect(isPerfectOrAbove(4)).toBe(true);
+    expect(isPerfectOrAbove(5)).toBe(true);
+  });
+
+  it('Great(3) 及以下不算（(type & 0xFE) == 4 的判据）', () => {
+    for (const t of [0, 1, 2, 3]) expect(isPerfectOrAbove(t)).toBe(false);
+  });
+
+  it('一旦掉出 Perfect 就永久关闭，后续 Perfect 不能恢复', () => {
+    let s = true;
+    s = apContinueAfterHit(s, 4);
+    expect(s).toBe(true);
+    s = apContinueAfterHit(s, 3);   // Great
+    expect(s).toBe(false);
+    s = apContinueAfterHit(s, 5);   // 再 Perfect+ 也不回来
+    expect(s).toBe(false);
+  });
+
+  it('特效门槛是 combo >= 10（与数字行同门槛）', () => {
+    expect(apContinueEffectVisible(9, true)).toBe(false);
+    expect(apContinueEffectVisible(10, true)).toBe(true);
+    expect(apContinueEffectVisible(120, true)).toBe(true);
+  });
+
+  it('isApContinue 为假时永不显示', () => {
+    expect(apContinueEffectVisible(999, false)).toBe(false);
+  });
+});
+
+describe('AP 継続描边层的透明度曲线', () => {
+  it('上层 _01：0 → 峰值 → 0，寿命 0.25s', () => {
+    expect(comboEffectUpperAlpha(0)).toBe(0);
+    expect(comboEffectUpperAlpha(COMBO_EFFECT_UPPER_LIFE)).toBe(0);
+    expect(comboEffectUpperAlpha(COMBO_EFFECT_UPPER_LIFE * 2)).toBe(0);
+    // 峰值出现在 atime1 = 10156/65535 ≈ 0.155 处
+    const peak = comboEffectUpperAlpha((10156 / 65535) * COMBO_EFFECT_UPPER_LIFE);
+    expect(peak).toBeCloseTo(1, 3);
+    // 上升段单调增
+    expect(comboEffectUpperAlpha(0.02)).toBeGreaterThan(comboEffectUpperAlpha(0.01));
+  });
+
+  it('下层 _02：在 0.3529 与 0.1176 之间循环脉动', () => {
+    const hi = 0.3529411852359772;
+    const lo = 0.11764705926179886;
+    expect(comboEffectLowerAlpha(0)).toBeCloseTo(hi, 6);
+    expect(comboEffectLowerAlpha(COMBO_EFFECT_LOWER_LIFE * 0.5)).toBeCloseTo(lo, 6);
+    expect(comboEffectLowerAlpha(COMBO_EFFECT_LOWER_LIFE)).toBeCloseTo(hi, 6);
+    // 全周期都落在 [lo, hi]
+    for (let t = 0; t < 1; t += 0.01) {
+      const v = comboEffectLowerAlpha(t * COMBO_EFFECT_LOWER_LIFE);
+      expect(v).toBeGreaterThanOrEqual(lo - 1e-9);
+      expect(v).toBeLessThanOrEqual(hi + 1e-9);
+    }
+  });
+});
+
+describe('AP 継続描边贴图切片', () => {
+  it('10 个数字槽，1 是窄字形（70px），其余 90px', () => {
+    expect(COMBO_EFFECT_DIGIT_RECT).toHaveLength(10);
+    expect(comboEffectDigitWidth(1)).toBe(70);
+    for (const d of [0, 2, 3, 4, 5, 6, 7, 8, 9]) expect(comboEffectDigitWidth(d)).toBe(90);
+  });
+
+  it('切片与数字精灵矩形一致，且首尾相接铺满 880px', () => {
+    expect(COMBO_EFFECT_DIGIT_RECT[0].x).toBe(0);
+    for (let d = 1; d < 10; d++) {
+      const prev = COMBO_EFFECT_DIGIT_RECT[d - 1];
+      expect(COMBO_EFFECT_DIGIT_RECT[d].x).toBe(prev.x + prev.w);
+    }
+    const last = COMBO_EFFECT_DIGIT_RECT[9];
+    expect(last.x + last.w).toBe(COMBO_EFFECT_SHEET_W);
+  });
+
+  it('面片 85×109 居中在 90×120 槽内；1 铺满面片并改用预采样蒙版', () => {
+    const b0 = comboEffectOutlineBox(0);
+    expect(b0.width).toBeCloseTo(85, 6);
+    expect(b0.left).toBeCloseTo(2.5, 6);
+    expect(b0.top).toBeCloseTo(5.5, 6);
+    expect(b0.height).toBeCloseTo(109, 6);
+    expect(b0.image).toBe('sheet');
+    const b1 = comboEffectOutlineBox(1);
+    expect(b1.image).toBe('digit1');
+    expect(b1.width).toBe(85);
+    expect(b1.left).toBeCloseTo(2.5, 6);
+    expect(b1.maskW).toBe(85);
+    expect(b1.maskH).toBe(109);
+    expect(b1.maskX).toBe(0);
+    expect(comboEffectOutlineBox(2).maskX).toBeCloseTo(-160 * 85 / 90, 4);
+    expect(comboEffectOutlineBox(9).maskX).toBeCloseTo(-790 * 85 / 90, 4);
+  });
+});
+
+describe('AP 継続刷新与叠加', () => {
+  it('isRefreshLoop = combo 位数变化', () => {
+    expect(comboDigitCount(9)).toBe(1);
+    expect(comboDigitCount(10)).toBe(2);
+    expect(comboDigitCount(1000)).toBe(4);
+    expect(comboEffectRefreshLoop(9, 10)).toBe(true);
+    expect(comboEffectRefreshLoop(10, 11)).toBe(false);
+    expect(comboEffectRefreshLoop(99, 100)).toBe(true);
+    expect(comboEffectRefreshLoop(57, 0)).toBe(true);
+  });
+
+  it('同位粒子叠加：加法 a·n，Alpha 混合 1−(1−a)^n', () => {
+    expect(additiveStack(0.3, 4)).toBeCloseTo(1.2, 6);
+    expect(alphaBlendStack(0.5, 2)).toBeCloseTo(0.75, 6);
+    expect(alphaBlendStack(0, 2)).toBe(0);
+  });
+
+  it('上层 OutLine_01 在 7/60s 激活', () => {
+    expect(COMBO_EFFECT_UPPER_ACTIVATE_DELAY).toBeCloseTo(0.11666, 4);
+  });
+
+  it('上层描边缩放：Sprite0–2 同 root，Sprite3 自有曲线停在 1.6', () => {
+    expect(comboEffectUpperOutlineScale(0, 0.5)).toBeCloseTo(comboFlashScale(0.5), 6);
+    expect(comboEffectUpperOutlineScale(3, 0)).toBe(1);
+    expect(comboEffectUpperOutlineScale(3, 0.7)).toBeCloseTo(1.6, 4);
+    expect(comboEffectUpperOutlineScale(3, 0.78)).toBeCloseTo(1.6, 4);
+  });
+});
+
+describe('combo 底光（ComboEffectBG_01）', () => {
+  it('上层 alpha：0 → 0.5333@0.155 → 0（单次）', () => {
+    expect(comboGlowUpperCurve(0)).toBe(0);
+    expect(comboGlowUpperCurve(COMBO_GLOW_LIFE)).toBe(0);
+    const peak = comboGlowUpperCurve((10156 / 65535) * COMBO_GLOW_LIFE);
+    expect(peak).toBeCloseTo(0.5333333611488342, 4);
+  });
+
+  it('下层 alpha：0.3529 → 0.1647@0.5 → 0.3529（循环）', () => {
+    const hi = 0.3529411852359772;
+    const lo = 0.16470588743686676;
+    expect(comboGlowLowerCurve(0)).toBeCloseTo(hi, 6);
+    expect(comboGlowLowerCurve(COMBO_GLOW_LIFE * 0.5)).toBeCloseTo(lo, 6);
+    expect(comboGlowLowerCurve(COMBO_GLOW_LIFE)).toBeCloseTo(hi, 6);
+    for (let t = 0; t < 1; t += 0.02) {
+      const v = comboGlowLowerCurve(t * COMBO_GLOW_LIFE);
+      expect(v).toBeGreaterThanOrEqual(lo - 1e-9);
+      expect(v).toBeLessThanOrEqual(hi + 1e-9);
+    }
   });
 });

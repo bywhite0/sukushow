@@ -50,6 +50,7 @@ const FX_TEX_EXTRA = [
   'APRate_OutlineEffect',
   'Default-Particle',
   'sc2_outgameLvUp_glitter_lyric_01',
+  'sc2_effect_combo_glow_002_alpha',
 ];
 
 const numbered = (prefix, from, to) =>

@@ -18,13 +18,20 @@ function evalStreamedPoly(dx: number, a: number, b: number, c: number, d: number
   return ((a * dx + b) * dx + c) * dx + d;
 }
 
-/** ComboAnimation 0.7833s — scale 1→1.6@0.7→1.7 (piecewise linear on normalized t). */
+/** ComboAnimation（#96）StreamedClip 键时刻，取 float32 原值。 */
+const CLIP96_T1 = 0.03333333507180214;
+const CLIP96_T_ALPHA = 0.1666666716337204;
+const CLIP96_T2 = 0.699999988079071;
+
+/**
+ * ComboAnimation（sharedassets56 #96）SpriteUpperRoot localScale（StreamedClip 三次段，系数为 float32 原值）：
+ * 1（到 1/30s）→ (−2.85, 3.25, 0, 1) 到 1.6 @0.7s → (−268.8, 30.4, 0.5333, 1.6) 到 1.7 @47/60s，之后保持 1.7。
+ */
 export function comboFlashScale(age: number, duration = 0.7833333611488342): number {
-  if (age <= 0) return 1;
-  if (age >= duration) return 1.7;
-  const t = age / duration;
-  if (t <= 0.7) return 1 + (1.6 - 1) * (t / 0.7);
-  return 1.6 + (1.7 - 1.6) * ((t - 0.7) / 0.3);
+  if (age <= CLIP96_T1) return 1;
+  if (age >= duration) return 1.7000000476837158;
+  if (age < CLIP96_T2) return evalStreamedPoly(age - CLIP96_T1, -2.8500008583068848, 3.2500007152557373, 0, 1);
+  return evalStreamedPoly(age - CLIP96_T2, -268.7996520996094, 30.399972915649414, 0.533333420753479, 1.600000023841858);
 }
 
 /**
@@ -33,9 +40,9 @@ export function comboFlashScale(age: number, duration = 0.7833333611488342): num
  */
 export function comboFlashAlpha(age: number, duration = 0.7833333611488342): number {
   if (age <= 0 || age >= duration) return 0;
-  if (age < 1 / 30) return 0;
-  if (age < 1 / 6) return 1;
-  return evalStreamedPoly(age - 1 / 6, 8.5286, -7.889, 0, 1);
+  if (age < CLIP96_T1) return 0;
+  if (age < CLIP96_T_ALPHA) return 1;
+  return evalStreamedPoly(age - CLIP96_T_ALPHA, 8.528615951538086, -7.888969421386719, 0, 1);
 }
 
 function smoothstep(x: number): number {
@@ -63,6 +70,259 @@ export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
 export const COMBO_FLASH_DURATION = 0.7833333611488342;
 export const AP_RATE_FLASH_DURATION = 0.75;
 
+/* ---------------------------------------------------------------------------
+ * AP 継続（ScoreResolver.isApContinue，offset 0x158）。
+ *
+ * `Add` 里每次判定都做一次 `isApContinue &= (type & 0xFE) == 4`
+ * （`0x49A1460`，`NoteJudgementTypes` Perfect=4 / PerfectPlus=5）⇒ 只要出现一次
+ * Great 以下就**永久**关闭，直到 `Clear` 把它重置为 true（`0x49A2634`）。
+ * 即「本局至今全程 Perfect 以上」。
+ *
+ * `UpdateCombo`（`0x49A1B40` → `0x49A4394`）里 `combo >= 1 && isApContinue` 才把
+ * 8 个 `ComboEffectOutLine` 的渲染器打开；否则关闭。
+ * ------------------------------------------------------------------------- */
+
+/** Perfect 及以上（`(type & 0xFE) == 4`）。 */
+export function isPerfectOrAbove(type: number): boolean {
+  return (type & 0xfe) === 4;
+}
+
+/** 单次判定后推进 AP 継続状态。一旦为 false 不会因后续 Perfect 而恢复。 */
+export function apContinueAfterHit(current: boolean, type: number): boolean {
+  return current && isPerfectOrAbove(type);
+}
+
+/**
+ * AP 継続特效是否显示。
+ *
+ * `UpdateCombo(int,bool)`（`0x49A1B40`）入口先做 `w21 = combo < 10 ? 0 : combo`，
+ * 再把 `w21` 传给本层；层内 `cmp w22, #1 / b.lt` ⇒ 掩码后 <1 即整层关闭。
+ * 合起来就是 **combo >= 10 且 isApContinue**（与数字行同一门槛）。
+ */
+export function apContinueEffectVisible(combo: number, isApContinue: boolean): boolean {
+  return combo >= 10 && isApContinue;
+}
+
+/** 描边颜色 = `ColorModule` 渐变 rgb（两层同色）；贴图 `ui_sc2_ingame_num_combo_Effect` 本身纯白。 */
+export const COMBO_EFFECT_RGB = { r: 0.04245281219482422, g: 0.5869302749633789, b: 1 } as const;
+/** `_02`（下层）寿命 0.8s、`looping`；`_01`（上层）0.25s、单次。 */
+export const COMBO_EFFECT_LOWER_LIFE = 0.8;
+export const COMBO_EFFECT_UPPER_LIFE = 0.25;
+/** 描边 `startColor.a`：`_02` = 186/255，`_01` = 1。 */
+export const COMBO_EFFECT_LOWER_START_A = 0.729411780834198;
+export const COMBO_EFFECT_UPPER_START_A = 1;
+/**
+ * Burst 数（`EmissionModule.m_Bursts[0]`，t=0）：描边 `_02` 4 颗、`_01` 5 颗；两层底光各 2 颗。
+ * `ShapeModule` 是半径 1e-4 的圆、`startSpeed` 0 ⇒ 同一簇粒子完全重叠。
+ */
+export const COMBO_EFFECT_LOWER_BURST = 4;
+export const COMBO_EFFECT_UPPER_BURST = 5;
+export const COMBO_GLOW_BURST = 2;
+/**
+ * 上层激活延迟：ComboAnimation（sharedassets56 #96）里 `Sprite0~3/ComboEffectOutLine_01`
+ * 的 `m_IsActive` 在 0.1167s（第 7 帧 @60fps）才 0→1；粒子是 `playOnAwake`，
+ * `DoEffectCombo` 里那次 `Stop+Play` 发生在未激活期间，真正开播是这次激活。
+ */
+export const COMBO_EFFECT_UPPER_ACTIVATE_DELAY = 7 / 60;
+
+function lerp(a: number, b: number, u: number): number {
+  return a + (b - a) * u;
+}
+
+/**
+ * `_01`（上层）`colorOverLifetime` alpha：键位 `atime` 0 / 10156 / 65535（归一化后
+ * 0 / 0.155 / 1.0）对应 0 → 1 → 0，单次。
+ */
+export function comboEffectUpperAlpha(age: number): number {
+  const t = age / COMBO_EFFECT_UPPER_LIFE;
+  if (t <= 0) return 0;
+  if (t >= 1) return 0;
+  const peak = 10156 / 65535;
+  return t < peak ? t / peak : (1 - t) / (1 - peak);
+}
+
+/**
+ * `_02`（下层）`colorOverLifetime` alpha：键位 0 / 0.25 / 0.5 / 0.75 / 1.0 对应
+ * 0.3529412 → 0.1176471（中段保持）→ 0.3529412，`looping` 常驻脉动。
+ */
+export function comboEffectLowerAlpha(age: number): number {
+  const t = ((age / COMBO_EFFECT_LOWER_LIFE) % 1 + 1) % 1;
+  const hi = 0.3529411852359772;
+  const lo = 0.11764705926179886;
+  if (t < 0.25) return lerp(hi, lo, t / 0.25);
+  if (t < 0.75) return lo;
+  return lerp(lo, hi, (t - 0.75) / 0.25);
+}
+
+/**
+ * 加法混合（描边 `RhythmGame/Num Combo Effect` = Blend SrcAlpha One；
+ * 上层底光 `Mobile/Particles/Additive`）下 N 颗同位粒子的叠加：亮度 = N × a（逐通道饱和）。
+ * 预览按 N 个 `mix-blend-mode: plus-lighter` 副本实现；此函数给测试与估算用。
+ */
+export function additiveStack(a: number, n: number): number {
+  return a * n;
+}
+
+/**
+ * Alpha 混合（下层底光 `Mobile/Particles/Alpha Blended` = SrcAlpha OneMinusSrcAlpha）
+ * 下 N 颗同色同位粒子的等效不透明度：1 − (1 − a)^N（逐像素，a = 贴图 alpha × 顶点 alpha）。
+ * 预览直接叠 N 个元素让浏览器逐像素合成；此函数给测试与估算用。
+ */
+export function alphaBlendStack(a: number, n: number): number {
+  return 1 - Math.pow(1 - a, n);
+}
+
+/**
+ * `CharNumber.GetDigit`：在 `iTables = {9, 99, 999, …}` 里找第一个 ≥ n 的下标，位数 = 下标 + 1。
+ * `ScoreResolver.Add`（0x49A1908–0x49A19AC）对新旧 combo 各算一次，
+ * `isRefreshLoop = GetDigit(old) != GetDigit(new)`。
+ */
+export function comboDigitCount(n: number): number {
+  let limit = 9;
+  let digits = 1;
+  while (n > limit && digits < 10) {
+    limit = limit * 10 + 9;
+    digits++;
+  }
+  return digits;
+}
+
+/** `UpdateCombo(int,bool)` 的 isRefreshLoop：位数变化时下层描边 + 底光 `Stop(true, Clear)` 后 `Play()`。 */
+export function comboEffectRefreshLoop(prevCombo: number, combo: number): boolean {
+  return comboDigitCount(prevCombo) !== comboDigitCount(combo);
+}
+
+/**
+ * 数字列在 `ui_sc2_ingame_num_combo_Effect`（880×120）里的矩形。
+ * 与着色器 `ImmCB_0` 列起点表一致：0, 0.102273, 0.181818, 0.284091 … 1.0（× 880）。
+ * `1` 是窄字形（70px），其余 90px。
+ */
+export const COMBO_EFFECT_SHEET_W = 880;
+export const COMBO_EFFECT_SHEET_H = 120;
+export const COMBO_EFFECT_DIGIT_RECT: readonly { x: number; w: number }[] = [
+  { x: 0, w: 90 },    // 0
+  { x: 90, w: 70 },   // 1
+  { x: 160, w: 90 },  // 2
+  { x: 250, w: 90 },  // 3
+  { x: 340, w: 90 },  // 4
+  { x: 430, w: 90 },  // 5
+  { x: 520, w: 90 },  // 6
+  { x: 610, w: 90 },  // 7
+  { x: 700, w: 90 },  // 8
+  { x: 790, w: 90 },  // 9
+];
+
+/** 数字槽的布局尺寸（与 `.hud-cdigit` 一致）。 */
+export const COMBO_EFFECT_SLOT_W = 90;
+export const COMBO_EFFECT_SLOT_H = 120;
+/** 描边粒子面片 `size3D` 0.85 × 1.09（100px/单位）。 */
+export const COMBO_EFFECT_QUAD_W = 85;
+export const COMBO_EFFECT_QUAD_H = 109;
+
+/** 该数字列的宽度（1 是窄字形）。 */
+export function comboEffectDigitWidth(digit: number): number {
+  return COMBO_EFFECT_DIGIT_RECT[digit].w;
+}
+
+/**
+ * 描边在槽内的绘制框（px，相对 90×120 槽左上角）与 mask 参数。
+ *
+ * 着色器（`RhythmGame/Num Combo Effect` 片元）：列宽 w = ImmCB[d+1] − ImmCB[d]；
+ * - w ≥ 0.1（90px 列）：u = start + w × uv.x ⇒ 整列 90×120 铺满 85×109 面片；
+ * - w ≤ 0.1（`1` 的 70px 列）：u = start + w × min(max(uv.x − 1/9, 0.02) × 9/7, 1)
+ *   ⇒ 整块面片都采样：左侧 1/9 + 0.02 固定取 s = 0.0257 那一列，右侧 1/9 固定取列边界
+ *   u = 0.181818（双线性与 `2` 的首列各半），中间 7/9 线性映射。
+ *   这种非线性采样用 CSS mask 表达不了，改用 scripts/gen-combo-fx-tex.py 按同一公式预先采样的
+ *   `ui_sc2_ingame_num_combo_Effect_1.png`，铺满整块面片（image = 'digit1'）。
+ * 90px 列：横向缩放 85/90，纵向 109/120，居中于槽：
+ *   宽 = 90 × 85/90 = 85，left = 2.5，top = (120 − 109) / 2。
+ */
+export function comboEffectOutlineBox(digit: number): {
+  left: number; top: number; width: number; height: number;
+  maskW: number; maskH: number; maskX: number;
+  image: 'sheet' | 'digit1';
+} {
+  const r = COMBO_EFFECT_DIGIT_RECT[digit];
+  const sx = COMBO_EFFECT_QUAD_W / 90;
+  const sy = COMBO_EFFECT_QUAD_H / COMBO_EFFECT_SHEET_H;
+  if (r.w < 90) {
+    return {
+      left: (COMBO_EFFECT_SLOT_W - COMBO_EFFECT_QUAD_W) / 2,
+      top: (COMBO_EFFECT_SLOT_H - COMBO_EFFECT_QUAD_H) / 2,
+      width: COMBO_EFFECT_QUAD_W,
+      height: COMBO_EFFECT_QUAD_H,
+      maskW: COMBO_EFFECT_QUAD_W,
+      maskH: COMBO_EFFECT_QUAD_H,
+      maskX: 0,
+      image: 'digit1',
+    };
+  }
+  const width = r.w * sx;
+  return {
+    left: (COMBO_EFFECT_SLOT_W - width) / 2,
+    top: (COMBO_EFFECT_SLOT_H - COMBO_EFFECT_QUAD_H) / 2,
+    width,
+    height: COMBO_EFFECT_QUAD_H,
+    maskW: COMBO_EFFECT_SHEET_W * sx,
+    maskH: COMBO_EFFECT_SHEET_H * sy,
+    maskX: r.x === 0 ? 0 : -r.x * sx,
+    image: 'sheet',
+  };
+}
+
+/**
+ * 上层描边自身的缩放（ComboAnimation #96 `Sprite{i}/ComboEffectOutLine_01` localScale）。
+ * 粒子 `scalingMode = Local`：尺寸只认自身 localScale，不继承 SpriteUpperRoot 的缩放；
+ * 位置仍随父级缩放展开。Sprite0–2 与 SpriteUpperRoot 同一条曲线；Sprite3 在 0.7s 后停在 1.6。
+ */
+export function comboEffectUpperOutlineScale(slot: number, age: number): number {
+  if (slot === 3) {
+    if (age <= CLIP96_T1) return 1;
+    if (age >= CLIP96_T2) return 1.600000023841858;
+    return evalStreamedPoly(age - CLIP96_T1, -4.050001621246338, 4.05000114440918, 0, 1);
+  }
+  return comboFlashScale(age);
+}
+
+/* ---------------------------------------------------------------------------
+ * 底光（ComboEffectBG_01）——每个描边下挂一枚柔和光斑（2 颗同位粒子）。
+ *
+ * `SizeModule` 两层都是 **disabled** ⇒ 尺寸恒为 `size3D`：上 2.0×2.5、下 2.3×2.8。
+ * `scalingMode = Local` 且 ComboAnimation 里 BG 自身 scale 恒 1 ⇒ 上层底光不随跨百动画放大。
+ * 材质：上 #21 `Mobile/Particles/Additive`（贴图 glow_002，RGB 纯白）；
+ *       下 #22 `Mobile/Particles/Alpha Blended`（贴图 glow_002_alpha，RGB 逐像素在 202–255 间变化）。
+ * 片元 = 贴图 × 顶点色，故下层颜色 = startColor × 贴图 RGB（逐像素）：
+ * 由 scripts/gen-combo-fx-tex.py 预乘成 `sc2_effect_combo_glow_002_alpha_lower.png`。
+ * 层级（`sortingOrder` 越小越靠后）：**上底光 1 → 数字 3/4 → 描边 9 → 下底光 10**。
+ * ------------------------------------------------------------------------- */
+
+/** 底光颜色 rgb（两层同色）。 */
+export const COMBO_GLOW_RGB = { r: 0.4575, g: 0.7675, b: 1 } as const;
+export const COMBO_GLOW_UPPER_W = 200;
+export const COMBO_GLOW_UPPER_H = 250;
+export const COMBO_GLOW_UPPER_ALPHA = 0.27450981736183167;
+export const COMBO_GLOW_LOWER_W = 230;
+export const COMBO_GLOW_LOWER_H = 280;
+export const COMBO_GLOW_LOWER_ALPHA = 0.5882353186607361;
+export const COMBO_GLOW_LIFE = 0.8;
+
+/** 上层底光 `colorOverLifetime` alpha：0 → 0.5333@0.155 → 0（单次）。 */
+export function comboGlowUpperCurve(age: number): number {
+  const t = age / COMBO_GLOW_LIFE;
+  if (t <= 0 || t >= 1) return 0;
+  const peak = 10156 / 65535;
+  const a = t < peak ? t / peak : (1 - t) / (1 - peak);
+  return 0.5333333611488342 * a;
+}
+
+/** 下层底光 `colorOverLifetime` alpha：0.3529 → 0.1647@0.5 → 0.3529（`looping`）。 */
+export function comboGlowLowerCurve(age: number): number {
+  const t = ((age / COMBO_GLOW_LIFE) % 1 + 1) % 1;
+  const hi = 0.3529411852359772;
+  const lo = 0.16470588743686676;
+  if (t < 0.5) return hi + (lo - hi) * (t / 0.5);
+  return lo + (hi - lo) * ((t - 0.5) / 0.5);
+}
 
 
 /**
