@@ -483,6 +483,9 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     const chanceSuper = await grabChance(0.9, 0.25, true)
     // super 关、同样进度：用于对照配色确实变了
     const chanceFullAt1 = await grabChance(0.9, 0.25, false)
+    // 指针：同一进度、super 开关两态（指针贴图与尺寸都不同）
+    const pointerSuperOff = await grabChance(0.9, 0.05, false)
+    const pointerSuperOn = await grabChance(0.9, 0.05, true)
     // 计量条：原包只在 FeverChance 态可见（StartProgress 里才 SetActive(true)），
     // 故阈值之下不应出现、阈值之上应随进度变化。同一动画时刻取图以隔离计量条。
     const gaugeBelow = await grabChance(0.5, 0.05)
@@ -513,6 +516,12 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
         },
         { a, b },
       )
+
+    // 指针：super 开关应改变指针区（贴图与尺寸不同）。
+    const pointerDiff = await pixelDiffBetween(
+      (pointerSuperOff as any).onUrls[0],
+      (pointerSuperOn as any).onUrls[0],
+    )
 
     // 计量条：阈值之下与「刚过阈值」应有差异（前者无计量条、后者有）。
     const gaugeAppears = await pixelDiffBetween(
@@ -553,6 +562,7 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     for (const [name, r] of Object.entries({
       chanceFull, chanceBelow, chanceJustCrossed, chanceSuper, chanceFullAt1,
       gaugeBelow, gaugeJustOver, gaugeHigh,
+      pointerSuperOff, pointerSuperOn,
     })) {
       const url = (r as any).onUrls[0] as string
       fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
@@ -583,6 +593,9 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     // ---- SuperFever 开关：进度满时打开应画出，且配色与非 super 不同 ----
     expect(chanceSuper.middle, 'SuperFever 打开时应画出光带').toBeGreaterThan(5000)
     expect(superPixelDiff, 'SuperFever 配色应与普通版不同').toBeGreaterThan(1000)
+
+    // ---- Fever / SuperFever 指针：随配置开关切换 ----
+    expect(pointerDiff, 'super 开关应改变指针').toBeGreaterThan(500)
 
     // ---- 充能计量条：只在 FeverChance 态可见，且随进度填充 ----
     expect(gaugeAppears, '跨过阈值后应出现计量条').toBeGreaterThan(300)

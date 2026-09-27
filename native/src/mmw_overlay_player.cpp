@@ -2449,6 +2449,19 @@ void main() {
         {0.0f, 11.0f}, {240.0f, 29.0f}, {480.0f, 47.0f},
         {720.0f, 63.0f}, {960.0f, 81.0f}, {1080.0f, 90.0f},
     };
+    // ---- 计量条上的 Fever / SuperFever 指针 ----
+    // 取自原包场景：feverIconRoot localPosition (3.432, 2.965)、
+    // superFeverIconRoot (2.462, 4.105)，SpriteRenderer.m_Size 分别 1.7407×0.5370 /
+    // 3.0648×0.5370（世界单位，1 单位 = 100px，原点 = 画面中心）。
+    // 像素坐标 = (960 + 100·x, 540 − 100·y)。
+    constexpr float FEVER_POINTER_CENTER_X = 1303.2f;
+    constexpr float FEVER_POINTER_CENTER_Y = 243.5f;
+    constexpr float FEVER_POINTER_WIDTH = 174.0f;
+    constexpr float FEVER_POINTER_HEIGHT = 54.0f;
+    constexpr float SUPER_POINTER_CENTER_X = 1206.2f;
+    constexpr float SUPER_POINTER_CENTER_Y = 129.5f;
+    constexpr float SUPER_POINTER_WIDTH = 306.0f;
+    constexpr float SUPER_POINTER_HEIGHT = 54.0f;
     // 轨道底色偏暗、已充能部分亮；横截面内侧偏青紫、外侧偏金黄（取自素材）。
     // 轨道透明度：原素材是霓虹感轨道，取 0.45 才在光束上看得清（判断值，可调）。
     constexpr float CHANCE_GAUGE_TRACK_ALPHA = 0.45f;
@@ -3524,6 +3537,23 @@ void main() {
             endAdditive(overlay);
         }
 
+        // ---- 计量条上的 Fever / SuperFever 指针 ----
+        // 与原包一致：指针与光束/文字同一套开关，只在 FeverChance 态出现。
+        if (chanceActive && gPlayer.feverDisplayEnabled) {
+            const char* pointerKey = superCharging ? "super_fever_pointer" : "fever_pointer";
+            const float pcx = superCharging ? SUPER_POINTER_CENTER_X : FEVER_POINTER_CENTER_X;
+            const float pcy = superCharging ? SUPER_POINTER_CENTER_Y : FEVER_POINTER_CENTER_Y;
+            const float pw = superCharging ? SUPER_POINTER_WIDTH : FEVER_POINTER_WIDTH;
+            const float ph = superCharging ? SUPER_POINTER_HEIGHT : FEVER_POINTER_HEIGHT;
+            if (const Texture* pointer = findTexture(hudTextures, pointerKey)) {
+                // 指针随充能进度淡入，与计量条同节奏。
+                const float pointerAlpha = clamp01(feverProgress) * overlayAlpha;
+                drawHudImage(overlay, *pointer,
+                             px(pcx - pw * 0.5f), py(pcy - ph * 0.5f),
+                             ps(pw), ps(ph), pointerAlpha);
+            }
+        }
+
         if (feverActive) {
             // 边框：左右两条通高竖条（宽 11px）+ 上下四角的渐变淡出臂，
             // 顶/底中段留空 —— 开口框，不是闭合矩形。颜色为白，亮度恒定。
@@ -4232,6 +4262,8 @@ void main() {
         }
         addHudTexture("intro_grad", "overlay/start_grad.png");
         addHudTexture("custom_score_icon", "overlay/custom-score/icon.png");
+        addHudTexture("fever_pointer", "overlay/fever-native/fever-pointer.png");
+        addHudTexture("super_fever_pointer", "overlay/fever-native/super-fever-pointer.png");
         addHudTexture("ap_text", "overlay/ap-native/all-perfect.png");
         addHudTexture("ap_text_line", "overlay/ap-native/all-perfect-line.png");
         addHudTexture("ap_flare", "overlay/ap-native/flare.png");

@@ -54,6 +54,8 @@ const OVERLAY_TEXTURES = [
   'overlay/ap-native/flare.png',
   'overlay/ap-native/flash.png',
   'overlay/ap-native/sparkle.png',
+  'overlay/fever-native/fever-pointer.png',
+  'overlay/fever-native/super-fever-pointer.png',
 ]
 
 const RANKS = ['d', 'c', 'b', 'a', 's'] as const
