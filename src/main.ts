@@ -23,7 +23,7 @@ import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from '
 import { parseUrlPreviewParams } from './lib/url'
 import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from './llll/songAssets'
 import { createSongPicker } from './ui/songPicker'
-import { feverChanceForSong, feverForSong } from './llll/fever'
+import { feverForSong } from './llll/fever'
 import { setupPwaUpdatePrompt } from './lib/pwa'
 
 const app = document.querySelector<HTMLDivElement>('#app')
@@ -66,6 +66,7 @@ app.innerHTML = `
 <label class="setting" for="guide-alpha"><span>Guide 浓度<output id="guide-alpha-value">50</output></span><input id="guide-alpha" type="range" min="0" max="100" step="1" value="50"></label>
 <label class="setting" for="effect-opacity"><span>特效不透明度<output id="effect-opacity-value">100</output></span><input id="effect-opacity" type="range" min="0" max="100" step="1" value="100"></label>
 <label class="check"><input id="fever-display" type="checkbox" checked>Fever 特效</label>
+<label class="check"><input id="super-fever" type="checkbox">SuperFever 配色（充能满时切换）</label>
 <label class="setting" for="effect-profile"><span>特效配置</span><select id="effect-profile"><option value="0" selected>Profile 0</option><option value="1">Profile 1</option></select></label>
 <p class="setting" id="fever-status"><small>Fever：未加载曲目。</small></p>
 </section>
@@ -165,6 +166,7 @@ function readSettings(): PreviewSettings {
     guideAlpha: Number(input('guide-alpha').value),
     effectOpacity: Number(input('effect-opacity').value),
     feverDisplay: input('fever-display').checked,
+    superFever: input('super-fever').checked,
     bgmVolume: Number(input('bgm-volume').value),
     soundVolume: Number(input('sound-volume').value),
     rate: Number(select('rate').value),
@@ -196,6 +198,7 @@ function applySettingsToForm(settings: PreviewSettings) {
   setRange('guide-alpha', settings.guideAlpha ?? 50)
   setRange('effect-opacity', settings.effectOpacity ?? 100)
   input('fever-display').checked = settings.feverDisplay ?? true
+  input('super-fever').checked = settings.superFever ?? false
   setRange('bgm-volume', settings.bgmVolume ?? 100)
   setRange('sound-volume', settings.soundVolume ?? 100)
   select('rate').value = String(settings.rate ?? 1)
@@ -209,12 +212,13 @@ function applyRuntimeConfig() {
   player.setPreviewConfig(config)
   player.setAudioVolumes(config.bgmVolume, config.soundVolume)
   player.setFeverDisplay(input('fever-display').checked)
+  player.setSuperFeverEnabled(input('super-fever').checked)
 }
 
 for (const id of [
   'mirror', 'lines', 'flick-anim', 'hold-anim', 'note-skin', 'effect-profile',
   'stage-cover', 'stage-opacity', 'bg-brightness', 'hold-alpha', 'guide-alpha',
-  'effect-opacity', 'fever-display', 'bgm-volume', 'sound-volume', 'note-speed',
+  'effect-opacity', 'fever-display', 'super-fever', 'bgm-volume', 'sound-volume', 'note-speed',
 ]) {
   const node = input(id)
   const handler = () => {
@@ -241,28 +245,54 @@ function setDuration(durationSec: number) {
  * 与自家 llll-preview-web「未知歌曲不估算」同口径。
  */
 function applyFeverWindow(songId: string | null) {
+  applyFeverCharge(currentChartForCharge, songId)
   const window = feverForSong(songId)
   if (window) {
     player.setFeverWindow(window.start, window.end)
   } else {
     player.setFeverWindow(-1, -1)
   }
-  // FeverChance 的时段也是代理值，与 Fever 同源同口径（见 src/llll/fever.ts）。
-  const chance = feverChanceForSong(songId)
-  if (chance) {
-    player.setFeverChanceWindow(chance.start, chance.end)
-  } else {
-    player.setFeverChanceWindow(-1, -1)
-  }
+  // FeverChance 不再用时间窗，改走充能（见 applyFeverCharge / tickFeverCharge）。
   const status = document.getElementById('fever-status')
   if (status) {
+    const n = currentChartForCharge
+      ? currentChartForCharge.notes.filter((note) => note.time < window!.start).length
+      : 0
     status.innerHTML = window
       ? `<small>Fever：${window.start.toFixed(3)} – ${window.end.toFixed(3)} 秒` +
-        (chance
-          ? `；FeverChance：${chance.start.toFixed(3)} – ${chance.end.toFixed(3)} 秒</small>`
-          : '；FeverChance：本曲无前一段</small>')
+        (n
+          ? `；FeverChance 充能：需 ${Math.ceil(n * 0.7)} / ${n} 个音符</small>`
+          : '；FeverChance 充能：本曲无前置音符</small>')
       : '<small>Fever：本曲无数据（不估算）。</small>'
   }
+}
+
+/**
+ * FeverChance 充能：分母 = Fever 段起点之前的可判定音符数（静态），
+ * 分子 = 其中已经过去的那些（每帧推进）。口径照 PJSK 的
+ * `progress = feverCount / totalFeverCount`。
+ *
+ * 音符时刻用谱面自身的 `time`（秒）——与 feverMetadata 同域（都相对音频起点），
+ * 不需要再减 lead-in。窗口判定用「Fever 起点」而不是总时长：总时长含收尾静音，
+ * 拿它当分母会让进度永远充不满。
+ */
+/** loadChart 刚加载的谱面；applyFeverWindow 用它算充能分母。 */
+let currentChartForCharge: Chart | null = null
+
+function applyFeverCharge(chart: Chart | null, songId: string | null) {
+  const window = feverForSong(songId)
+  if (!chart || !window) {
+    player.setFeverChargeTimes([])
+    player.setFeverCharge(0, 0)
+    return
+  }
+  // 分母 = Fever 段起点之前的音符时刻（升序）；分子由 renderFrame 每帧按时刻重算。
+  player.setFeverChargeTimes(
+    chart.notes
+      .map((note) => note.time)
+      .filter((t) => t < window.start)
+      .sort((a, b) => a - b),
+  )
 }
 
 // ---- 资源预载 ----
@@ -303,6 +333,9 @@ async function loadChart(
 ) {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
+  // 充能分母要在加载谱面时就备好；曲目 Id 在 loadChart 里拿不到，
+  // 故由调用方随后用 applyFeverWindow 刷状态行，分母本身用当前曲目。
+  currentChartForCharge = chart
 
   // BGM 与曲绘缺失不该阻断渲染：失败一律退回 null。
   const bgmUrl = assets.bgmUrl ?? currentSongAssets.bgmUrl
@@ -685,10 +718,18 @@ declare global {
       loadChart: typeof loadChart
       demoChart: typeof demoChart
       renderLoop: () => void
+      /** 当前谱面（自动化验证用：充能分母需要按谱面算）。 */
+      getChart: () => Chart | null
     }
   }
 }
-window.__LLL_PJSK__ = { player, loadChart, demoChart, renderLoop }
+window.__LLL_PJSK__ = {
+  player,
+  loadChart,
+  demoChart,
+  renderLoop,
+  getChart: () => currentChart,
+}
 installLaneProbe()
 setupPwaUpdatePrompt()
 

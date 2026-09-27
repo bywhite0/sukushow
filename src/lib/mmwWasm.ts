@@ -283,15 +283,22 @@ export class MmwWasmPlayer {
   }
 
   /**
-   * FeverChance 时段（歌曲秒，绝对时刻）。start<0 或 end<=start 视为本曲无该时段。
+   * 推进 FeverChance 充能。
    *
-   * 口径是代理值（Fever 段之前那一段），见 src/llll/fever.ts 的 FeverChanceWindow。
+   * 口径照 PJSK：`progress = feverCount / totalFeverCount`，
+   * 其中 totalFeverCount = Fever 段起点之前的可判定音符数，
+   * feverCount = 其中已经过去的那些。分母由谱面静态算好，分子每帧推进。
    */
-  setFeverChanceWindow(startSec: number, endSec: number) {
-    this.assertReady().ccall('setPlayerFeverChanceWindow', null, ['number', 'number'], [
-      startSec,
-      endSec,
+  setFeverCharge(feverCount: number, totalFeverCount: number) {
+    this.assertReady().ccall('setPlayerFeverCharge', null, ['number', 'number'], [
+      feverCount,
+      totalFeverCount,
     ])
+  }
+
+  /** SuperFever 视觉开关（llll 侧无原版判定依据，由用户指定）。 */
+  setSuperFeverEnabled(enabled: boolean) {
+    this.assertReady().ccall('setPlayerSuperFeverEnabled', null, ['number'], [enabled ? 1 : 0])
   }
 
   /** Fever 显示开关；只影响特效，不改变逻辑状态。 */
@@ -299,7 +306,26 @@ export class MmwWasmPlayer {
     this.assertReady().ccall('setPlayerFeverDisplay', null, ['number'], [enabled ? 1 : 0])
   }
 
+  /**
+   * 充能分母（Fever 段起点之前的音符时刻，升序）。
+   *
+   * 分子在每次渲染前按当前时刻重算——充能是**渲染态的派生量**，
+   * 不能交给某个循环代为推进：直接调 `renderFrame()` 的路径会绕过循环。
+   */
+  private feverChargeTimes: number[] = []
+
+  setFeverChargeTimes(times: number[]) {
+    this.feverChargeTimes = times
+  }
+
   renderFrame() {
+    if (this.feverChargeTimes.length) {
+      const snapshot = this.getStateSnapshot()
+      const chartTime = snapshot.currentTimeSec - snapshot.effectiveLeadInSec
+      let n = 0
+      while (n < this.feverChargeTimes.length && this.feverChargeTimes[n] <= chartTime) n += 1
+      this.setFeverCharge(n, this.feverChargeTimes.length)
+    }
     this.assertReady().ccall('renderPlayerFrame', null, [], [])
   }
 

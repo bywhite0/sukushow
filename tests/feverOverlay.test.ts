@@ -291,9 +291,37 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       () => (window as any).__LLL_PJSK__.player.getStateSnapshot().effectiveLeadInSec,
     )
     expect(meta, `曲目 ${SONG} 应在 feverMetadata 里`).toBeTruthy()
-    expect(meta.chanceStart, 'FeverChance 代理窗口应有起点').toBeTruthy()
-    // 代理口径的硬契约：chance 段紧邻 Fever 起点。
-    expect(meta.chanceEnd).toBe(meta.start)
+
+    // 充能分母 = Fever 起点之前的音符数。谱面从页面里取（与实现同源）。
+    const totalCharge = await page.evaluate(
+      (start: number) => {
+        const chart = (window as any).__LLL_PJSK__.getChart?.()
+        if (!chart) return -1
+        return chart.notes.filter((n: any) => n.time < start).length
+      },
+      meta.start,
+    )
+    expect(totalCharge, '本曲应有 Fever 前的音符（充能分母）').toBeGreaterThan(0)
+
+    // 充能是**播放态**的量：rAF 循环每帧按当前时刻重算，
+    // 所以测试不能手动摆进度（会被覆盖），要 seek 到与目标进度对应的音符时刻。
+    const chargeTimes: number[] = await page.evaluate(
+      (start: number) =>
+        (window as any).__LLL_PJSK__
+          .getChart()
+          .notes.filter((n: any) => n.time < start)
+          .map((n: any) => n.time)
+          .sort((a: number, b: number) => a - b),
+      meta.start,
+    )
+    /** 目标进度对应的「谱面时刻」（进度恰好等于 count / total 的那一刻）。 */
+    const timeForProgress = (progress: number) => {
+      const idx = Math.min(
+        chargeTimes.length - 1,
+        Math.max(0, Math.round(chargeTimes.length * progress) - 1),
+      )
+      return chargeTimes[idx]
+    }
 
     await page.evaluate(() => {
       ;(window as any).__LLL_PJSK__.player.setPreviewConfig({
@@ -369,24 +397,50 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
         }
       }, urls)
 
-    const shootChanceDataUrl = async (local: number, display: boolean) => {
+    /**
+     * 按「充能进度」截图。
+     *
+     * @param progress  目标进度（0..1）
+     * @param animLocal 动画已进行的秒数（0 = 刚跨过阈值那一刻）
+     * @param superOn   是否打开 SuperFever 开关
+     */
+    const shootChanceDataUrl = async (
+      progress: number,
+      animLocal: number,
+      display: boolean,
+      superOn: boolean,
+    ) => {
+      // 目标进度对应的谱面时刻；animLocal 是要额外前进的秒数。
+      const targetChartTime = timeForProgress(progress)
+      const resetChartTime = chargeTimes[0] - 1.0
       await page.evaluate(
-        ({ sec, display, s, e, cs, ce }: any) => {
+        ({ s, e, resetTime, targetTime, animLocal, lead, display, superOn }: any) => {
           const p = (window as any).__LLL_PJSK__.player
           p.pause()
           p.setFeverWindow(s, e)
-          p.setFeverChanceWindow(cs, ce)
+          p.setSuperFeverEnabled(superOn)
           p.setFeverDisplay(display)
-          p.seek(sec)
+          // 三步走。注意「重置」必须退到**任何前置音符之前**：
+          // 若退到临近 Fever 起点处，前置音符早已过了大半、进度仍在阈值之上，
+          // 动画起点不会被重置，beamT 直接跑到 1（那一刻 alpha 恰好为 0）。
+          p.seek(resetTime + lead)
+          p.renderFrame()
+          // ② 在目标时刻渲染 → 动画起点被钉在此刻
+          p.seek(targetTime + lead)
+          p.renderFrame()
+          // ③ 再前进 animLocal 秒 → 动画真正跑起来
+          p.seek(targetTime + animLocal + lead)
           p.renderFrame()
         },
         {
-          sec: meta.chanceStart + local + lead,
-          display,
           s: meta.start,
           e: meta.end,
-          cs: meta.chanceStart,
-          ce: meta.chanceEnd,
+          resetTime: resetChartTime,
+          targetTime: targetChartTime,
+          animLocal,
+          lead,
+          display,
+          superOn,
         },
       )
       await page.waitForTimeout(360)
@@ -394,12 +448,12 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       return `data:image/png;base64,${buf.toString('base64')}`
     }
 
-    const grabChance = async (local: number) => {
+    const grabChance = async (progress: number, animLocal: number, superOn = false) => {
       const onUrls: string[] = []
       const offUrls: string[] = []
       for (let i = 0; i < 4; i++) {
-        onUrls.push(await shootChanceDataUrl(local, true))
-        offUrls.push(await shootChanceDataUrl(local, false))
+        onUrls.push(await shootChanceDataUrl(progress, animLocal, true, superOn))
+        offUrls.push(await shootChanceDataUrl(progress, animLocal, false, superOn))
       }
       return {
         on: await measureState(onUrls),
@@ -408,35 +462,69 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       }
     }
 
-    const chancePeak = await grabChance(0.25)
-    const chanceAfter = await grabChance(1.5)
-    const chanceBefore = await grabChance(0.02)
+    // 充能满（含 super 关） / 未达阈值 / 刚跨阈值（动画起点） / super 开
+    const chanceFull = await grabChance(0.9, 0.25)
+    const chanceBelow = await grabChance(0.5, 0.25)
+    const chanceJustCrossed = await grabChance(0.75, 0.02)
+    const chanceSuper = await grabChance(0.9, 0.25, true)
+    // super 关、同样进度：用于对照配色确实变了
+    const chanceFullAt1 = await grabChance(0.9, 0.25, false)
+
+    /** 同进度下 super 与非 super 的像素差异（必须在关页面之前算）。 */
+    const superPixelDiff = await page.evaluate(
+      async ({ a, b }: any) => {
+        const load = async (u: string) => createImageBitmap(await (await fetch(u)).blob())
+        const [x, y] = await Promise.all([load(a), load(b)])
+        const cv = new OffscreenCanvas(x.width, x.height)
+        const ctx = cv.getContext('2d', { willReadFrequently: true })!
+        ctx.clearRect(0, 0, cv.width, cv.height)
+        ctx.drawImage(x, 0, 0)
+        const A = ctx.getImageData(0, 0, cv.width, cv.height).data
+        ctx.clearRect(0, 0, cv.width, cv.height)
+        ctx.drawImage(y, 0, 0)
+        const B = ctx.getImageData(0, 0, cv.width, cv.height).data
+        let n = 0
+        for (let i = 0; i < A.length; i += 4) {
+          const d =
+            Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])
+          if (d > 60) n++
+        }
+        return n
+      },
+      { a: (chanceSuper as any).onUrls[0], b: (chanceFullAt1 as any).onUrls[0] },
+    )
     await browser.close()
 
-    for (const [name, r] of Object.entries({ chancePeak, chanceAfter, chanceBefore })) {
+    for (const [name, r] of Object.entries({
+      chanceFull, chanceBelow, chanceJustCrossed, chanceSuper, chanceFullAt1,
+    })) {
       const url = (r as any).onUrls[0] as string
       fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
     }
 
-    // ---- 主峰：叶形光带 + 文字都应画出来 ----
-    expect(chancePeak.middle, '主峰应画出光带与文字').toBeGreaterThan(5000)
+    // ---- 充能达阈值：叶形光带 + 文字都应画出来 ----
+    expect(chanceFull.middle, '充能达阈值应画出光带与文字').toBeGreaterThan(5000)
 
-    // ---- 光带确实张开到两个底角 ----
-    // 判据按**基线倍数**而不是绝对增量：光束是带长尾的辉光，能量铺得很开，
-    // 贴边处的绝对亮度本来就不高（个位数），用固定增量会随增益调整而失准。
-    expect(chancePeak.on.bottomLeft, '左下角应有光带').toBeGreaterThan(
-      Math.max(chanceAfter.on.bottomLeft * 4, 3),
+    // ---- 未达阈值：不该有光带 ----
+    expect(chanceBelow.middle, '未达阈值不应有光带').toBeLessThan(chanceFull.middle * 0.2)
+
+    // ---- 光带确实张开到两个底角（判据按基线倍数，见提交说明） ----
+    expect(chanceFull.on.bottomLeft, '左下角应有光带').toBeGreaterThan(
+      Math.max(chanceBelow.on.bottomLeft * 4, 3),
     )
-    expect(chancePeak.on.bottomRight, '右下角应有光带').toBeGreaterThan(
-      Math.max(chanceAfter.on.bottomRight * 4, 3),
+    expect(chanceFull.on.bottomRight, '右下角应有光带').toBeGreaterThan(
+      Math.max(chanceBelow.on.bottomRight * 4, 3),
     )
 
-    // ---- chance 期间不画 Fever 边框：左右竖条应缺席 ----
-    expect(chancePeak.on.leftBar, 'chance 期间不应有左侧通高竖条').toBeLessThan(100)
-    expect(chancePeak.on.rightBar, 'chance 期间不应有右侧通高竖条').toBeLessThan(100)
+    // ---- 充能期间不画 Fever 边框：左右竖条应缺席 ----
+    expect(chanceFull.on.leftBar, '充能期间不应有左侧通高竖条').toBeLessThan(100)
+    expect(chanceFull.on.rightBar, '充能期间不应有右侧通高竖条').toBeLessThan(100)
 
-    // ---- 时序：0.02s 未起（素材 0.05s 才出现）；1.5s 后内容消失（素材内容 1.20s） ----
-    expect(chanceBefore.middle, '0.02s 光带未起').toBeLessThan(chancePeak.middle * 0.2)
-    expect(chanceAfter.middle, '1.5s 后光带应已收尽').toBe(0)
+    // ---- 动画起点：刚跨阈值时尚未铺满（亮度应低于已经跑了一会儿的） ----
+    expect(chanceJustCrossed.middle, '刚跨阈值时光带尚弱').toBeLessThan(chanceFull.middle)
+
+    // ---- SuperFever 开关：进度满时打开应画出，且配色与非 super 不同 ----
+    expect(chanceSuper.middle, 'SuperFever 打开时应画出光带').toBeGreaterThan(5000)
+    expect(superPixelDiff, 'SuperFever 配色应与普通版不同').toBeGreaterThan(1000)
   }, 300000)
 })

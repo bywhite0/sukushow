@@ -38,6 +38,13 @@ export type PreviewSettings = {
   effectOpacity: number
   /** Fever 显示（只影响特效，不改变逻辑状态） */
   feverDisplay: boolean
+  /**
+   * SuperFever 视觉开关。
+   *
+   * ⚠ llll 侧没有 superfever 的原版判定依据（PJSK 靠多人局人数），
+   * 故由用户指定：开启后充能满（progress >= 1.0）即切到 super 版配色。
+   */
+  superFever: boolean
   /** BGM 音量（百分比 0..100） */
   bgmVolume: number
   /** 音效音量（百分比 0..100） */
@@ -61,6 +68,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   guideAlpha: 50,
   effectOpacity: 100,
   feverDisplay: true,
+  superFever: false,
   bgmVolume: 100,
   soundVolume: 100,
   rate: 1,
@@ -100,6 +108,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     guideAlpha: clamp(num('guideAlpha', d.guideAlpha), 0, 100),
     effectOpacity: clamp(num('effectOpacity', d.effectOpacity), 0, 100),
     feverDisplay: bool('feverDisplay', d.feverDisplay),
+    superFever: bool('superFever', d.superFever),
     bgmVolume: clamp(num('bgmVolume', d.bgmVolume), 0, 100),
     soundVolume: clamp(num('soundVolume', d.soundVolume), 0, 100),
     rate: [0.5, 0.75, 1, 1.25, 1.5, 2].includes(rateValue) ? rateValue : d.rate,

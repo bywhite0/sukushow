@@ -243,9 +243,15 @@ namespace
         // 不改变逻辑状态（与 llll 客户端 EnableFeverDisplay 同口径）。
         double feverStartSec = -1.0;
         double feverEndSec = -1.0;
-        // FeverChance 时段（歌曲秒）；-1 表示本曲无该时段。
-        double feverChanceStartSec = -1.0;
-        double feverChanceEndSec = -1.0;
+        // FeverChance 充能：分子由 JS 每帧推进（已过去的音符数），分母由谱面静态算好。
+        // 进度口径见 MultiFeverView 的充能逻辑：progress = feverCount / totalFeverCount。
+        double feverCount = 0.0;
+        double totalFeverCount = 0.0;
+        // 进度首次跨过阈值的时刻（歌曲秒），用于给入场动画定起点；<0 表示尚未跨过。
+        double feverChanceAnimStartSec = -1.0;
+        // SuperFever 的视觉切换开关。⚠ llll 侧没有 superfever 的原版判定依据
+        // （PJSK 靠多人局人数），故做成配置项、由用户指定，不伪装成原版口径。
+        bool superFeverEnabled = false;
         bool feverDisplayEnabled = true;
     };
 
@@ -2412,6 +2418,9 @@ void main() {
 
     // ---- FeverChance（入场）----
     // 取值依据是客户端的 FeverChance 特效素材 fx_fever_chance_v2（1920×1080）。
+    // 充能阈值：照 PJSK 的 requireFeverProgress 缺省（0.7f）。
+    constexpr float CHANCE_PROGRESS_THRESHOLD = 0.70f;
+    // 入场动画的持续时间（仅用于把动画从跨阈值那一刻开始播；光束本身持续到 Fever 开始）。
     constexpr float CHANCE_DURATION_SEC = 1.20f;      // 内容长度（容器 2.32s）
     constexpr float CHANCE_PEAK_SEC = 0.25f;          // 主峰
     constexpr float CHANCE_END_SEC = 0.40f;           // 光束收尽
@@ -3317,14 +3326,29 @@ void main() {
         const bool feverActive = feverLocalSec >= 0.0f && feverLocalSec < feverEndLocalSec;
         const bool textActive =
             feverLocalSec >= 0.0f && feverLocalSec < FEVER_TEXT_DURATION_SEC;
-        const float chanceStartLocalSec =
-            static_cast<float>(gPlayer.feverChanceStartSec) - static_cast<float>(gPlayer.feverStartSec);
-        const float chanceEndLocalSec =
-            static_cast<float>(gPlayer.feverChanceEndSec) - static_cast<float>(gPlayer.feverStartSec);
-        const bool chanceActive = gPlayer.feverChanceStartSec >= 0.0 &&
-                                  gPlayer.feverChanceEndSec > gPlayer.feverChanceStartSec &&
-                                  feverLocalSec >= chanceStartLocalSec &&
-                                  feverLocalSec < chanceEndLocalSec;
+        // ---- 充能（FeverChance）----
+        // progress = feverCount / totalFeverCount（照 PJSK MultiScoreLogic.UpdateFever 的口径）。
+        const float feverProgress = gPlayer.totalFeverCount > 0.0
+            ? static_cast<float>(gPlayer.feverCount / gPlayer.totalFeverCount)
+            : 0.0f;
+        const bool charging = feverProgress >= CHANCE_PROGRESS_THRESHOLD;
+        // SuperFever 由**配置开关**决定（不设进度阈值）：progress 到 1.0 的时刻
+        // 就是最后一个前置音符，距 Fever 起点只剩零点几秒，按进度判定等于看不见。
+        // llll 侧没有 superfever 的原版判定依据，故整个充能阶段由开关选配色。
+        const bool superCharging = charging && gPlayer.superFeverEnabled;
+        // 动画起点：进度首次跨过阈值的时刻。整场动画不能从 0 秒就开始跑，
+        // 否则真正的入场时刻只剩一个尾巴。
+        if (charging && gPlayer.feverChanceAnimStartSec < 0.0) {
+            gPlayer.feverChanceAnimStartSec = chartTimeSec;
+        }
+        if (!charging) {
+            gPlayer.feverChanceAnimStartSec = -1.0;
+        }
+        // 充能阶段持续到 Fever 开始为止（不按 1.2s 自动收尽）。
+        const bool chanceActive = charging && feverLocalSec < 0.0;
+        const float chanceLocalSec = chanceActive && gPlayer.feverChanceAnimStartSec >= 0.0
+            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
+            : 0.0f;
         if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive && !chanceActive)) {
             return;
         }
@@ -3340,7 +3364,7 @@ void main() {
         // 逐段绘制而非单个四边形 —— 宽度与颜色都沿轴变化，单四边形只能线性插值，
         // 表达不了「中间最宽」的叶形轮廓。
         if (chanceActive) {
-            const float localSec = feverLocalSec - chanceStartLocalSec;
+            const float localSec = chanceLocalSec;
             const float beamT = clamp01(localSec / CHANCE_DURATION_SEC);
             const float beamAlpha = beamT < 0.05f
                 ? 0.0f
@@ -3390,6 +3414,17 @@ void main() {
                             break;
                         }
                     }
+                }
+                // SuperFever 配色（素材 fx_super_fever_v2）：紫 → 白核，
+                // 中段纯白、两端偏紫；普通版是整条纯紫（fx_fever_v2）。
+                if (superCharging) {
+                    const float k = clamp01(1.0f - std::fabs(y - 600.0f) / 600.0f);
+                    const float sr = 0.45f + (1.00f - 0.45f) * k;
+                    const float sg = 0.33f + (1.00f - 0.33f) * k;
+                    const float sb = 0.58f + (1.00f - 0.58f) * k;
+                    r = sr;
+                    g = sg;
+                    b = sb;
                 }
                 return IM_COL32(static_cast<int>(std::lround(r * 255.0f)),
                                 static_cast<int>(std::lround(g * 255.0f)),
@@ -3502,7 +3537,7 @@ void main() {
 
         // FeverChance 的「FEVER CHANCE!」字样：暖金、字号比 FEVER! 小一号。
         if (chanceActive && fonts.title != nullptr) {
-            const float localSec = feverLocalSec - chanceStartLocalSec;
+            const float localSec = chanceLocalSec;
             const float progress = clamp01(localSec / CHANCE_DURATION_SEC);
             const float peak = clamp01(CHANCE_PEAK_SEC / CHANCE_DURATION_SEC);
             const float alpha = progress < peak
@@ -3514,8 +3549,12 @@ void main() {
                 fonts.title->CalcTextSizeA(chanceFontSize, FLT_MAX, 0.0f, chanceText);
             const float chanceX = CHANCE_TEXT_CENTER_X - chanceSize.x * 0.5f;
             const float chanceY = CHANCE_TEXT_CENTER_Y - chanceSize.y * 0.5f;
+            // SuperFever 时文字走银白（super 版素材中段是纯白），普通版是暖金。
+            const int textR = superCharging ? 255 : 230;
+            const int textG = superCharging ? 254 : 189;
+            const int textB = superCharging ? 255 : 78;
             const ImU32 chanceColor = IM_COL32(
-                230, 189, 78,
+                textR, textG, textB,
                 static_cast<int>(std::lround(
                     clamp01(alpha * CHANCE_TEXT_PEAK_ALPHA * overlayAlpha) * 255.0f)));
             beginAdditive(overlay);
@@ -4951,10 +4990,19 @@ extern "C"
         gPlayer.feverEndSec = endSec;
     }
 
-    EMSCRIPTEN_KEEPALIVE void setPlayerFeverChanceWindow(double startSec, double endSec)
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverCharge(double feverCount, double totalFeverCount)
     {
-        gPlayer.feverChanceStartSec = startSec;
-        gPlayer.feverChanceEndSec = endSec;
+        gPlayer.feverCount = feverCount;
+        gPlayer.totalFeverCount = totalFeverCount;
+        // 换曲/重开时进度归零，动画起点随之重置。
+        if (totalFeverCount <= 0.0 || feverCount <= 0.0) {
+            gPlayer.feverChanceAnimStartSec = -1.0;
+        }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerSuperFeverEnabled(int enabled)
+    {
+        gPlayer.superFeverEnabled = enabled != 0;
     }
 
     EMSCRIPTEN_KEEPALIVE void setPlayerFeverDisplay(int enabled)
