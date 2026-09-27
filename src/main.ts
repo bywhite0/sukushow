@@ -10,6 +10,7 @@ import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
 import { StartAnimation } from './startAnim';
+import { ComboResult, COMBO_RESULT_CLIP_DURATION } from './comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
 import { createSongPicker } from './songPicker';
 import {
@@ -184,6 +185,7 @@ try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=n
 const format=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;
 function metadata(){input('timeline').max=String(chart.duration);}metadata();
 const startAnim=new StartAnimation(el('stage'));
+const comboResult=new ComboResult(el('stage'));
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
@@ -215,19 +217,21 @@ input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offse
 input('chart-file').onchange=async()=>{
  const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
  try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ chart=next;finishTime=finishTimeForFile(file.name);comboResult.hide();setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
-el('demo').onclick=()=>{generation++;chart=demoChart();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
+el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();startAnim.cancel();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
 let baseDuration = chart.duration;
+/** 曲终时刻 FinishTime = MusicsRecord.PlayTime(ms) / 1000（LiveEnd.Is = FinishTime ≤ t）；无曲目元数据时为 null，不播曲终横幅。 */
+let finishTime: number | null = null;
 function applyFever(win: FeverWindow | null, source: string) {
  hud.setFeverWindow(win);
- chart.duration = Math.max(baseDuration, win?.end ?? 0);
+ chart.duration = Math.max(baseDuration, win?.end ?? 0, finishTime === null ? 0 : finishTime + COMBO_RESULT_CLIP_DURATION);
  player?.transport.setDuration(chart.duration);
  metadata();
  el('fever-status').textContent = win ? `${source}：${win.start}–${win.end} 秒` : '未配置 Fever';
@@ -340,14 +344,29 @@ el<HTMLInputElement>('opt-mastery').onchange=applyScoreCfg;
 applyScoreCfg();
 
 let frame=0;
+let comboLastT=0;
+/**
+ * 曲终横幅：t ≥ FinishTime 时显示 clip 时刻 t − FinishTime（随走带时间，拖动可复现）；
+ * 播放中正向越过 FinishTime 时播一次 se_rhythm_finish_0004（自动演奏恒为 AllPerfect）。
+ */
+function syncComboResult(t:number,playing:boolean){
+ if(finishTime===null||t<finishTime){if(comboResult.visible)comboResult.hide();comboLastT=t;return;}
+ if(playing&&comboLastT<finishTime&&t-finishTime<0.25)se?.playFinish(0);
+ comboResult.render(t-finishTime);
+ comboLastT=t;
+}
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.setIdle(input('opt-start-anim').checked&&!player.transport.playing&&t<=1e-6);const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);syncComboResult(t,was&&player.transport.playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.setIdle(input('opt-start-anim').checked&&!player.transport.playing&&t<=1e-6);const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
  frame=requestAnimationFrame(animate);
 }animate();
-window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();},{once:true});
+window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();},{once:true});
 
 /* ── 选曲：本地 assets（scripts/link-assets.py）+ 可搜索曲目列表，同 llll-pjsk-preview ── */
 let songList:SongList|null=null;
+function finishTimeForFile(name:string):number|null{
+ const hit=songList?findSongByChartFile(songList,name):null;
+ return hit&&hit.song.playTime>0?hit.song.playTime/1000:null;
+}
 /** 本地打开的谱面若是 rhythmgame_chart_<id>_<n>.bytes，就按曲目列表补上曲名 / 难度 / 封面。 */
 function startInfoForFile(name:string){
  const hit=songList?findSongByChartFile(songList,name):null;
@@ -367,7 +386,7 @@ async function loadSongById(songId:string,difficulty:string){
  const {bgmUrl,coverUrl}=songAssets(song);
  const bgm=await fetchBytes(bgmUrl);
  if(id!==generation)return;
- chart=next;player?.clear();setChartFever(chartFile);
+ chart=next;player?.clear();finishTime=song.playTime>0?song.playTime/1000:null;comboResult.hide();setChartFever(chartFile);
  el('chart-name').textContent=`${song.title} [${difficulty}]`;
  setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
  player?.transport.setDuration(chart.duration);metadata();

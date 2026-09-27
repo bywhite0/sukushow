@@ -11,7 +11,7 @@ for (const missingSe of [false, true]) {
     const play = page.getByRole('button', { name: '播放', exact: true });
     await expect(play).toBeEnabled();
     await play.click();
-    await expect.poll(async () => Number(await page.locator('canvas').getAttribute('data-time'))).toBeGreaterThan(0.1);
+    await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeGreaterThan(0.1);
     await page.getByRole('button', { name: '暂停', exact: true }).click();
     await expect(play).toBeVisible();
     expect(errors).toEqual([]);

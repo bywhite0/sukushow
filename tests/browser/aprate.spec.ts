@@ -82,7 +82,7 @@ test('APRateEffect 贴图爆发：与徽章同心、峰值大于徽章、尺寸�
   await expect(page.locator('#message')).toContainText('就绪');
   await page.locator('#chart-file').setInputFiles({ name: 'aprate.json', mimeType: 'application/json', buffer: chart });
   await expect(page.locator('#message')).toContainText('已加载');
-  await expect.poll(async () => Number(await page.locator('canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '1.9'; e.dispatchEvent(new Event('input')); });
 
   // 先启动录制，再播放 —— 否则会错过第一段爆发。
@@ -129,7 +129,7 @@ test('爆发结束后节点被清空，不残留', async ({ page }) => {
   await expect(page.locator('#message')).toContainText('就绪');
   await page.locator('#chart-file').setInputFiles({ name: 'aprate.json', mimeType: 'application/json', buffer: chart });
   await expect(page.locator('#message')).toContainText('已加载');
-  await expect.poll(async () => Number(await page.locator('canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '1.9'; e.dispatchEvent(new Event('input')); });
   await page.getByRole('button', { name: '播放', exact: true }).click();
 
@@ -149,7 +149,7 @@ test('爆发主体是粉色四角星粒子，且确实飞散到徽章之外', as
   await expect(page.locator('#message')).toContainText('就绪');
   await page.locator('#chart-file').setInputFiles({ name: 'aprate.json', mimeType: 'application/json', buffer: chart });
   await expect(page.locator('#message')).toContainText('已加载');
-  await expect.poll(async () => Number(await page.locator('canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '1.9'; e.dispatchEvent(new Event('input')); });
   await page.getByRole('button', { name: '播放', exact: true }).click();
 
