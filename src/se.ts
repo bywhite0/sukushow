@@ -110,7 +110,9 @@ export function buildLineHashTables(chart: Chart): {
 }
 
 export interface SeOutput {
-  play(cueIndex: number, volume: number): void;
+  play(cueIndex: number, volume: number, offset?: number): void;
+  /** 停掉已发出的单发音：tap = 仅击中类（tap 总线），all = 含开场 / 曲终。 */
+  stopOneShots?(scope: 'tap' | 'all'): void;
   startHold(volume: number): void;
   stopHold(): void;
   pauseHold(): void;
@@ -127,6 +129,7 @@ export class WebAudioSeOutput implements SeOutput {
   private readonly tapGain: GainNode;
   private readonly seGain: GainNode;
   private holdSource: AudioBufferSourceNode | null = null;
+  private readonly oneShots = new Set<{ src: AudioBufferSourceNode; tap: boolean }>();
   private holdGain: GainNode | null = null;
   private loadPromise: Promise<void> | null = null;
   private disposed = false;
@@ -176,18 +179,40 @@ export class WebAudioSeOutput implements SeOutput {
     return this.tapGain;
   }
 
-  play(cueIndex: number, volume: number): void {
+  play(cueIndex: number, volume: number, offset = 0): void {
     if (this.disposed) return;
     const buf = this.buffers.get(cueIndex);
     if (!buf) return;
+    const from = Math.max(0, offset);
+    if (from >= buf.duration) return;
     void this.context.resume();
     const src = this.context.createBufferSource();
     const g = this.context.createGain();
     g.gain.value = Math.max(0, volume);
     src.buffer = buf;
     src.connect(g);
-    g.connect(this.busFor(cueIndex));
-    src.start();
+    const bus = this.busFor(cueIndex);
+    g.connect(bus);
+    const rec = { src, tap: bus === this.tapGain };
+    this.oneShots.add(rec);
+    src.onended = () => {
+      this.oneShots.delete(rec);
+      src.disconnect();
+      g.disconnect();
+    };
+    src.start(0, from);
+  }
+
+  stopOneShots(scope: 'tap' | 'all'): void {
+    for (const rec of [...this.oneShots]) {
+      if (scope !== 'all' && !rec.tap) continue;
+      this.oneShots.delete(rec);
+      try {
+        rec.src.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
   }
 
   startHold(volume: number): void {
@@ -275,8 +300,9 @@ export class SeResolver {
     return vol;
   }
 
-  private playImpl(index: number, vol: number): void {
-    this.output.play(index, vol);
+  private playImpl(index: number, vol: number, offset = 0): void {
+    if (offset > 0) this.output.play(index, vol, offset);
+    else this.output.play(index, vol);
   }
 
   addSingle(type: NoteJudgementType, lineHash: number): void {
@@ -315,8 +341,9 @@ export class SeResolver {
     }
   }
 
-  playStart(): void {
-    this.playImpl(SE_CUE.start, this.defaultSourceVolume);
+  /** 开场 SE；offset = 已走过的秒数（从过场中途开播 / 暂停恢复时接着放）。 */
+  playStart(offset = 0): void {
+    this.playImpl(SE_CUE.start, this.defaultSourceVolume, offset);
   }
 
   /** ComboResultSeNames: AP→0004 … Finish→0001 (index 0..3). */
@@ -333,10 +360,19 @@ export class SeResolver {
       this.holdPlayback = false;
     }
     this.holdCount = 0;
+    // 跳转：已发出的击中音不再拖尾（开场 / 曲终 SE 由调用方决定）。
+    this.output.stopOneShots?.('tap');
   }
 
+  /** 暂停：hold 持续音静音，已发出的单发音全部停掉，暂停画面不再出声。 */
   pause(): void {
     if (this.holdPlayback) this.output.pauseHold();
+    this.output.stopOneShots?.('all');
+  }
+
+  /** 停掉所有单发音（含开场 / 曲终）。 */
+  stopAll(): void {
+    this.output.stopOneShots?.('all');
   }
 
   resume(): void {

@@ -9,7 +9,7 @@ import { AudioPlayer } from './audio';
 import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
-import { StartAnimation } from './startAnim';
+import { StartAnimation, START_CLIP_DURATION } from './startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from './comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
 import { createSongPicker } from './songPicker';
@@ -185,34 +185,51 @@ applySettingsToForm(loadPreviewSettings());
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
-const format=(s:number)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;
-function metadata(){input('timeline').max=String(chart.duration);}metadata();
+const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
+function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart.duration);}metadata();
 const startAnim=new StartAnimation(el('stage'));
 const comboResult=new ComboResult(el('stage'));
 comboResult.setKind(readSettings().comboResult);
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
-/** ReadyAsync：开场 SE → ShowAsync 播完 → bgm.Play。仅从头开播时走过场；再按播放键跳过过场直接开播。 */
+/**
+ * ReadyAsync：开场 SE → ShowAsync（过场 clip）→ bgm.Play。过场计入进度条：开启时走带从
+ * −START_CLIP_DURATION 起，0 秒 = BGM / 谱面起点，所以重播、暂停、拖动都能复现过场。
+ */
+function applyIntro(){
+ if(!player)return;
+ const tr=player.transport,atStart=tr.time<=tr.start+1e-6;
+ tr.setStart(input('opt-start-anim').checked?-START_CLIP_DURATION:0);
+ if(atStart&&!tr.playing)player.seek(tr.start);
+ metadata();
+}
+/** 从 time 开播时补放开场 SE：过场中按已走过的秒数接着放；无过场时仅从头开播才放。 */
+function kickStartSe(){
+ if(!player||!se)return;
+ const tr=player.transport,off=tr.time-tr.start;
+ if(tr.start<0?tr.time<0:off<=0.05)se.playStart(Math.max(0,off));
+}
+function seekTo(t:number){
+ if(!player)return;
+ player.seek(t);se?.clear();se?.stopAll();
+ if(player.transport.playing)kickStartSe();
+}
 async function toggle(){
  if(!player)return;
- if(startAnim.active){startAnim.skip();return;}
  try{
-  if(player.transport.playing){player.pause();se?.pause();return;}
-  const fromTop=player.transport.time<=0.05;
-  if(fromTop&&input('opt-start-anim').checked){
-   await player.context.resume();
-   se?.playStart();
-   if(!await startAnim.play())return;
-   await player.play();se?.resume();
-   return;
+  if(player.transport.playing){
+   // 过场中按键 = 跳过开场，直接到 0 秒开播（开场 SE 不打断）。
+   if(player.transport.time<0){player.seek(0);return;}
+   player.pause();se?.pause();return;
   }
-  await player.play();se?.resume();if(fromTop)se?.playStart();
+  await player.play();se?.resume();kickStartSe();
  }catch(e){message(`播放失败：${String(e)}`,true);}
 }
+applyIntro();
 el('play').onclick=()=>void toggle();
-el('restart').onclick=()=>{startAnim.cancel();player?.seek(0);se?.clear();};
-input('timeline').oninput=()=>{startAnim.cancel();player?.seek(Number(input('timeline').value));se?.clear();};
+el('restart').onclick=()=>seekTo(player?.transport.start??0);
+input('timeline').oninput=()=>seekTo(Number(input('timeline').value));
 el<HTMLSelectElement>('rate').onchange=()=>{player?.setRate(Number(el<HTMLSelectElement>('rate').value));persistSettings();};
 input('speed').oninput=()=>{speed=Number(input('speed').value);el('speed-value').textContent=speed.toFixed(1);persistSettings();};
 input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();};input('lines').onchange=()=>{lines=input('lines').checked;persistSettings();};
@@ -226,7 +243,7 @@ input('chart-file').onchange=async()=>{
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
 el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();startAnim.cancel();player?.seek(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
+document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud(el('stage'));
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
@@ -290,7 +307,7 @@ input('opt-judge-y').oninput=()=>{el('opt-judge-y-value').textContent=input('opt
 input('opt-fs-y').oninput=()=>{el('opt-fs-y-value').textContent=input('opt-fs-y').value;applyHudOptions();};
 input('opt-fever').onchange=applyHudOptions;
 input('opt-ap-continue').onchange=applyHudOptions;
-input('opt-start-anim').onchange=()=>persistSettings();
+input('opt-start-anim').onchange=()=>{applyIntro();persistSettings();};
 el<HTMLSelectElement>('opt-combo-result').onchange=()=>{comboResult.setKind(readSettings().comboResult);persistSettings();};
 input('opt-mv').onchange=()=>persistSettings();
 input('opt-skill-view').onchange=()=>persistSettings();
@@ -361,7 +378,18 @@ function syncComboResult(t:number,playing:boolean){
  comboLastT=t;
 }
 function animate(){
- if(player&&renderer){const was=player.transport.playing,t=player.transport.time;if(was&&!player.transport.playing)player.pause();hud.sync(chart,t);syncComboResult(t,was&&player.transport.playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.setIdle(input('opt-start-anim').checked&&!player.transport.playing&&t<=1e-6);const skip=startAnim.active;el('play').textContent=skip?'⏭ 跳过开场':player.transport.playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':player.transport.playing?'暂停':'播放');}
+ if(player&&renderer){
+  const tr=player.transport,was=tr.playing,t=tr.time;
+  if(was&&!tr.playing){player.pause();se?.pause();}
+  const playing=tr.playing;
+  hud.sync(chart,t,playing);syncComboResult(t,was&&playing);
+  renderer.setPlaying(playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);
+  input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;
+  // 过场：停在起点未播放 = 待机静止帧；[start, 0) 内按走带时间取 clip 帧（可暂停 / 拖动）。
+  startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);
+  const skip=playing&&t<0;
+  el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');
+ }
  frame=requestAnimationFrame(animate);
 }animate();
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();},{once:true});
@@ -383,7 +411,7 @@ async function loadSongById(songId:string,difficulty:string){
  if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
  const chartFile=song.charts[difficulty];
  if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
- const id=++generation;startAnim.cancel();
+ const id=++generation;
  message(`正在加载 ${song.title} [${difficulty}]…`);
  const res=await fetch(`/assets/chart/${chartFile}`);
  if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);

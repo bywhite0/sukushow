@@ -34,5 +34,6 @@ describe('原版空间数学',()=>{
 describe('播放状态与连续性',()=>{
  it('暂停、恢复、倍速切换均不跳时间',()=>{let now=0;const t=new Transport(()=>now);t.setDuration(10);t.play();now=2;expect(t.time).toBe(2);t.setRate(2);expect(t.time).toBe(2);now=3;expect(t.time).toBe(4);t.pause();now=5;expect(t.time).toBe(4);t.play();now=6;expect(t.time).toBe(6);});
  it('边界 seek、结束和重播',()=>{let now=0;const t=new Transport(()=>now);t.setDuration(3);t.seek(-3);expect(t.time).toBe(0);t.play();now=4;expect(t.time).toBe(3);expect(t.playing).toBe(false);t.play();expect(t.time).toBe(0);});
+ it('走带起点可为负（开场过场计入进度条），重播回到起点',()=>{let now=0;const t=new Transport(()=>now);t.setDuration(3);t.setStart(-2);t.seek(-5);expect(t.time).toBe(-2);t.play();now=1;expect(t.time).toBe(-1);now=6;expect(t.time).toBe(3);t.play();expect(t.time).toBe(-2);expect(()=>t.setStart(1)).toThrow();});
  it('拒绝非有限输入',()=>{const t=new Transport(()=>0);expect(()=>t.seek(NaN)).toThrow();expect(()=>t.setRate(0)).toThrow();});
 });

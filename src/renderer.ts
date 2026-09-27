@@ -124,6 +124,9 @@ export class PreviewRenderer {
   private feverMovePos: THREE.BufferAttribute | null = null;
   private feverMoveCol: THREE.BufferAttribute | null = null;
   private phase = new Map<number, number>();
+  /** 走带是否在播放：暂停时粒子与 hold 呼吸光冻结。 */
+  private playing = true;
+  private lastFieldTime = NaN;
   private observer: ResizeObserver;
   private disposed = false;
   constructor(private canvas: HTMLCanvasElement) {
@@ -427,7 +430,9 @@ export class PreviewRenderer {
     this.drawTrack(slope.spawn);
     this.lines.reset();
     this.paintFeverOutline(time);
-    this.fx?.sync(chart, time, mirror);
+    this.fx?.sync(chart, time, mirror, this.playing);
+    const advance = this.playing && time !== this.lastFieldTime;
+    this.lastFieldTime = time;
     this.fx?.setFever(this.feverOn, time - this.feverStart);
     let visible = 0;
     for (const root of chart.roots) {
@@ -437,7 +442,8 @@ export class PreviewRenderer {
       const active = time >= root.time;
       let phase = this.phase.get(root.uid) ?? PHASE_START;
       const alpha = holdAlpha(active, phase);
-      this.phase.set(root.uid, alpha.phase);
+      // HoldNote 呼吸光按帧推进；暂停 / 时间不动时冻结。
+      if (advance) this.phase.set(root.uid, alpha.phase);
       const segments: number[][] = [];
       let segment: Note | undefined = root;
       while (segment) { const v = holdSegment(segment, time, slope, mirror, this.laneWidthOpt); if (v.length) segments.push(v); segment = segment.next; }
@@ -552,6 +558,9 @@ export class PreviewRenderer {
     this.uiRoot.scale.set(s, s, 1);
   }
 
+  setPlaying(playing: boolean) {
+    this.playing = playing;
+  }
   setFeverState(on: boolean, feverStart: number) {
     this.feverOn = on;
     this.feverStart = feverStart;

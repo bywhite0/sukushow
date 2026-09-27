@@ -12,11 +12,16 @@ import {
 import { parseChart } from '../src/chart';
 
 class FakeOut implements SeOutput {
-  plays: { index: number; vol: number }[] = [];
+  plays: { index: number; vol: number; offset?: number }[] = [];
+  stops: string[] = [];
+  holdPauses = 0;
   holdStarts = 0;
   holdStops = 0;
-  play(index: number, volume: number) {
-    this.plays.push({ index, vol: volume });
+  play(index: number, volume: number, offset?: number) {
+    this.plays.push(offset === undefined ? { index, vol: volume } : { index, vol: volume, offset });
+  }
+  stopOneShots(scope: 'tap' | 'all') {
+    this.stops.push(scope);
   }
   startHold(_volume: number) {
     this.holdStarts++;
@@ -24,7 +29,9 @@ class FakeOut implements SeOutput {
   stopHold() {
     this.holdStops++;
   }
-  pauseHold() {}
+  pauseHold() {
+    this.holdPauses++;
+  }
   resumeHold() {}
   setTapVolume() {}
   setSeVolume() {}
@@ -179,5 +186,31 @@ describe('buildLineHashTables', () => {
     expect(h1).toBeTruthy();
     expect(h1).toBe(h2);
     expect(tables.first.get(3) ?? 0).toBe(0);
+  });
+});
+
+describe('暂停 / 跳转时的 SE', () => {
+  it('pause 静音 hold 并停掉全部单发音；clear 只停击中音', () => {
+    const out = new FakeOut();
+    const se = new SeResolver(out);
+    se.process();
+    se.addHold();
+    se.applyHold();
+    se.pause();
+    expect(out.holdPauses).toBe(1);
+    expect(out.stops).toEqual(['all']);
+    se.clear();
+    expect(out.holdStops).toBe(1);
+    expect(out.stops).toEqual(['all', 'tap']);
+  });
+  it('playStart 可从过场中途接着放', () => {
+    const out = new FakeOut();
+    const se = new SeResolver(out);
+    se.playStart(1.25);
+    se.playStart();
+    expect(out.plays).toEqual([
+      { index: SE_CUE.start, vol: 1, offset: 1.25 },
+      { index: SE_CUE.start, vol: 1 },
+    ]);
   });
 });
