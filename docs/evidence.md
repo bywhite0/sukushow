@@ -177,3 +177,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - 同时押：`buildLineHashTables`（|Δ|<0.004 且 Count≥2 → trunc(t×1e7)）。
 - 音量：打击音走 NoteTap（`vol-tap`），开场/曲终走 SE（`vol-se`）；与原版 CRI category 出口乘子对应。
 
+
+## 开场过场（RhythmGameStart）
+
+- **时序**：`ReadyAsync` 先播开场 SE（cue 21），再 `ShowAsync` 播完 `sc2_ingame_start_jacket`，然后 `bgm.Play`；开局没有 3-2-1 倒数。预览只在从头开播（t≤0.05）时走过场，过场期间再按播放键跳过（不开播）；重开、拖进度、方向键、换谱都会取消。侧栏「开场过场」可关。
+- **曲线**：sharedassets56 AnimationClip #103，60 fps，3.6666667 s。StreamedClip 逐键 (a,b,c,d)，段内 `v=((a·u+b)·u+c)·u+d`。`src/startAnimClip.ts` 由 `scripts/gen-start-anim-clip.py` 生成（float32 原系数，只合并逐帧烘焙的全零重复键）。描边条 anchoredPosition 从 (−41,41) 在 1.75 s 到 (0,0)；Bg alpha 曲线到 3.0 s 保持 1（覆盖序列化的 0.698），3.0–3.667 s 全部淡出。
+- **布局**（level56，1920×1080，原点居中）：DifficultyRoot (0,384) 236×72，三层 ProceduralImage 半径 50（外圈 (0.608,0.569,0.682)、White、难度色），Base01 `ui_sc2_result_base_01` 218×36 底对齐 x+1，DifficultyName EB 32 字距 −1；Jacket (0,22) 576×576，MaskRight/MaskBtm 30 宽遮罩里的 50 宽条，难度色 α≤0.8，封面在条之上；ScoreLabel (0,−387) 1200×64，RODIN B 40 字距 −3.5。
+- **alpha 不级联**：uGUI 的 CanvasRenderer alpha 不传给子节点，所以每层 alpha 只写进自己的填充色、文字色或图片 opacity。
+- **难度色**：ColorPreset.GetDifficultyColor，NORMAL #36D6E0 / HARD #FFB32F / EXPERT #FD5B91 / MASTER #9370D5。未指定难度时按 MASTER；没有封面时不画封面（原版是封面图，预览不补白块）。
