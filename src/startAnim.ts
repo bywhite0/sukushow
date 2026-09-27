@@ -19,6 +19,12 @@ import { START_CLIP_CURVES, START_CLIP_DURATION, type ClipKey, type StartCurveNa
 
 export { START_CLIP_DURATION };
 
+/**
+ * 0 秒待机显示的静止帧（秒）。clip 1.75–3.0 s 所有曲线静止（描边条到位、全员不透明），
+ * 取其起点；原版过场之后再无 HUD 入场动画，HUD 在 3.0–3.667 s 的整体淡出中露出。
+ */
+export const START_IDLE_TIME = 1.75;
+
 /** ColorPreset.GetDifficultyColor（表 @0x1AA4430）。 */
 export const DIFFICULTY_COLORS: Record<string, readonly [number, number, number]> = {
   NORMAL: [0x36, 0xd6, 0xe0],
@@ -68,6 +74,34 @@ function div(className: string, parent?: HTMLElement): HTMLDivElement {
   return node;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** [x0, y0, x1, y1]，jacket 局部坐标（576 方框左上为原点，y 向下）。 */
+export type DotRect = readonly [number, number, number, number];
+/**
+ * DotOutlineMask 下两块 RectMask：MaskRight x 576–606 / y 30–606，MaskBtm x 30–576 / y 576–606。
+ * 两者贴封面的内缘各多伸 1px 到封面下，避免与封面边缘之间出现抗锯齿缝。
+ */
+export const DOT_MASK_RIGHT: DotRect = [575, 30, 606, 606];
+export const DOT_MASK_BTM: DotRect = [30, 575, 576, 606];
+
+function intersect(a: DotRect, b: DotRect): DotRect | null {
+  const r: DotRect = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+  return r[2] > r[0] && r[3] > r[1] ? r : null;
+}
+
+/** 两根点缀条（right 50×576 右对齐 / btm 596×50 左对齐）平移后经各自遮罩裁切的可见矩形。 */
+export function dotOutlineRects(f: StartFrame): DotRect[] {
+  const right: DotRect = [556 + f.right_x, 30 - f.right_y, 606 + f.right_x, 606 - f.right_y];
+  const btm: DotRect = [30 + f.btm_x, 556 - f.btm_y, 626 + f.btm_x, 606 - f.btm_y];
+  return [intersect(right, DOT_MASK_RIGHT), intersect(btm, DOT_MASK_BTM)].filter((r): r is DotRect => r !== null);
+}
+
+export function dotOutlinePath(f: StartFrame): string {
+  const n = (v: number) => +v.toFixed(3);
+  return dotOutlineRects(f).map(([x0, y0, x1, y1]) => `M${n(x0)} ${n(y0)}H${n(x1)}V${n(y1)}H${n(x0)}Z`).join('');
+}
+
 export class StartAnimation {
   readonly root: HTMLDivElement;
   private readonly logic: HTMLDivElement;
@@ -77,8 +111,7 @@ export class StartAnimation {
   private readonly diffColor: HTMLDivElement;
   private readonly base01: HTMLImageElement;
   private readonly diffName: HTMLDivElement;
-  private readonly right: HTMLDivElement;
-  private readonly btm: HTMLDivElement;
+  private readonly dotPath: SVGPathElement;
   private readonly jacket: HTMLImageElement;
   private readonly title: HTMLDivElement;
   private readonly resize: ResizeObserver | null;
@@ -86,6 +119,7 @@ export class StartAnimation {
   private hasJacket = false;
   private raf = 0;
   private finish: ((done: boolean) => void) | null = null;
+  private idle = false;
 
   constructor(private readonly stage: HTMLElement) {
     this.root = div('start-anim');
@@ -105,10 +139,15 @@ export class StartAnimation {
     this.diffName = div('sa-diff-name', this.diffColor);
 
     const jacketBox = div('sa-jacket', this.logic);
-    const maskRight = div('sa-mask-right', jacketBox);
-    this.right = div('sa-right', maskRight);
-    const maskBtm = div('sa-mask-btm', jacketBox);
-    this.btm = div('sa-btm', maskBtm);
+    // right/btm 两条：按各自 RectMask 裁出可见矩形后合成一条 SVG 路径一次填充，
+    // 拼接边在同一路径内抵消，不会出现两层抗锯齿叠加的亮线/色点。
+    const dots = document.createElementNS(SVG_NS, 'svg');
+    dots.setAttribute('class', 'sa-dots');
+    dots.setAttribute('viewBox', '0 0 606 606');
+    dots.setAttribute('aria-hidden', 'true');
+    this.dotPath = document.createElementNS(SVG_NS, 'path');
+    dots.append(this.dotPath);
+    jacketBox.append(dots);
     this.jacket = document.createElement('img');
     this.jacket.className = 'sa-jacket-image';
     this.jacket.alt = '';
@@ -137,6 +176,23 @@ export class StartAnimation {
     if (info.jacketUrl) this.jacket.src = info.jacketUrl;
     else this.jacket.removeAttribute('src');
     this.jacket.hidden = !this.hasJacket;
+    if (this.idle) this.renderAt(START_IDLE_TIME);
+  }
+
+  get idling(): boolean {
+    return this.idle;
+  }
+
+  /** 0 秒待机：显示过场静止帧盖住 HUD；播放中调用无效。 */
+  setIdle(on: boolean): void {
+    if (this.active || on === this.idle) return;
+    this.idle = on;
+    this.root.hidden = !on;
+    if (on) {
+      this.root.dataset.state = 'idle';
+      this.layout();
+      this.renderAt(START_IDLE_TIME);
+    } else delete this.root.dataset.state;
   }
 
   private layout(): void {
@@ -157,10 +213,9 @@ export class StartAnimation {
     this.diffName.style.color = rgba([255, 255, 255], f.difficultyName_a);
     this.jacket.style.opacity = clamp01(f.jacket_a).toFixed(4);
     // anchoredPosition 为 y 向上；DOM y 向下。
-    this.right.style.backgroundColor = rgba(c, f.right_a);
-    this.right.style.transform = `translate(${f.right_x}px,${-f.right_y}px)`;
-    this.btm.style.backgroundColor = rgba(c, f.btm_a);
-    this.btm.style.transform = `translate(${f.btm_x}px,${-f.btm_y}px)`;
+    this.dotPath.setAttribute('d', dotOutlinePath(f));
+    this.dotPath.setAttribute('fill', `rgb(${c[0]},${c[1]},${c[2]})`);
+    this.dotPath.setAttribute('fill-opacity', clamp01(f.right_a).toFixed(4));
     this.title.style.color = rgba([255, 255, 255], f.scoreLabel_a);
   }
 
@@ -171,6 +226,8 @@ export class StartAnimation {
   play(now: () => number = () => performance.now() / 1000): Promise<boolean> {
     this.cancel();
     const t0 = now();
+    this.idle = false;
+    this.root.dataset.state = 'playing';
     this.root.hidden = false;
     this.layout();
     this.renderAt(0);
@@ -179,6 +236,7 @@ export class StartAnimation {
         cancelAnimationFrame(this.raf);
         this.finish = null;
         this.root.hidden = true;
+        delete this.root.dataset.state;
         resolve(done);
       };
       const step = () => {
@@ -197,6 +255,11 @@ export class StartAnimation {
 
   cancel(): void {
     this.finish?.(false);
+  }
+
+  /** 跳过过场：立即结束并按「播完」返回 true，调用方随即开播。 */
+  skip(): void {
+    this.finish?.(true);
   }
 
   dispose(): void {

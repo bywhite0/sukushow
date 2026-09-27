@@ -185,6 +185,11 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **布局**（level56，1920×1080，原点居中）：DifficultyRoot (0,384) 236×72，三层 ProceduralImage 半径 50（外圈 (0.608,0.569,0.682)、White、难度色），Base01 `ui_sc2_result_base_01` 218×36 底对齐 x+1，DifficultyName EB 32 字距 −1；Jacket (0,22) 576×576，MaskRight/MaskBtm 30 宽遮罩里的 50 宽条，难度色 α≤0.8，封面在条之上；ScoreLabel (0,−387) 1200×64，RODIN B 40 字距 −3.5。
 - **alpha 不级联**：uGUI 的 CanvasRenderer alpha 不传给子节点，所以每层 alpha 只写进自己的填充色、文字色或图片 opacity。
 - **难度色**：ColorPreset.GetDifficultyColor，NORMAL #36D6E0 / HARD #FFB32F / EXPERT #FD5B91 / MASTER #9370D5。未指定难度时按 MASTER；没有封面时不画封面（原版是封面图，预览不补白块）。
+
+- **0 秒待机画面**：未播放且时间为 0（载入、重开、拖回开头）时，显示 clip 静止段起点 1.75 s 的帧（1.75–3.0 s 全部曲线静止，黑底/封面/曲名/难度全不透明），`data-state=idle`；按播放从 clip 0 s 起播，拖离 0 秒即隐藏。受「开场过场」开关控制。
+- **HUD 入场**：原版无独立入场动画。`MainLogicResolver.EnableCanvases @0x499231C` 在 ReadyAsync 中以 `false` 调用，只 SetActive 三块全局画布（静态单例 +0x50/+0x38/+0x40），与 HUD 无关；HUD 层级（hud_hierarchy）根节点无 Animator/CanvasGroup，sharedassets56 也无 HUD 入场 clip。HUD 场景加载即存在，被过场 Canvas（sortingOrder 30，不透明黑底）盖住，随 3.0–3.667 s 整体淡出露出——预览同此。
+- **点缀条渲染**：right/btm 两条按 MaskRight / MaskBtm 裁出可见矩形后合成一条 SVG 路径填充（alpha 两条逐帧相同），拼接边在同一路径内抵消；两遮罩贴封面内缘各多伸 1px 到封面下。避免 DOM 双层抗锯齿在交界处出现亮线/色点（Unity 按像素栅格化无此问题）。
+
 ## 选曲与本地资源
 
 - 与 llll-pjsk-preview 相同：`public/song-list.json` 由 `scripts/gen-song-list.py` 从 4L masterdata（Musics / Units / MusicScores）与资源目录生成，236 首里 154 首有谱面；难度等级只取 MusicScores。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DIFFICULTY_COLORS, START_CLIP_DURATION, sampleStartClip } from '../src/startAnim';
+import { DIFFICULTY_COLORS, START_CLIP_DURATION, sampleStartClip, START_IDLE_TIME, dotOutlineRects } from '../src/startAnim';
 
 describe('开场过场 sc2_ingame_start_jacket', () => {
   it('时长 3.6666667 s（220 帧 @60fps）', () => {
@@ -24,6 +24,21 @@ describe('开场过场 sc2_ingame_start_jacket', () => {
   });
   it('封面 1.667 s 已完全显示', () => {
     expect(sampleStartClip(100 / 60).jacket_a).toBeCloseTo(1, 3);
+  });
+  it('待机帧取 1.75 s：曲线静止段起点，与 2.9 s 同帧且全员不透明', () => {
+    expect(START_IDLE_TIME).toBe(1.75);
+    const a = sampleStartClip(START_IDLE_TIME), b = sampleStartClip(2.9);
+    for (const k of Object.keys(a) as (keyof typeof a)[]) expect(a[k]).toBeCloseTo(b[k], 6);
+    expect(a.bg_a).toBe(1);
+    expect(a.jacket_a).toBeCloseTo(1, 6);
+    expect(a.scoreLabel_a).toBeCloseTo(1, 6);
+  });
+  it('right/btm 两条 alpha 曲线逐时刻相同（可由同一父层乘 alpha）', () => {
+    for (let t = 0; t <= 3.7; t += 1 / 120) expect(sampleStartClip(t).right_a).toBe(sampleStartClip(t).btm_a);
+  });
+  it('点缀条：0 s 全在遮罩外，待机帧恰好填满两块遮罩', () => {
+    expect(dotOutlineRects(sampleStartClip(0))).toEqual([]);
+    expect(dotOutlineRects(sampleStartClip(START_IDLE_TIME))).toEqual([[575, 30, 606, 606], [30, 575, 576, 606]]);
   });
   it('超出区间夹取端点', () => {
     expect(sampleStartClip(-1)).toEqual(sampleStartClip(0));
