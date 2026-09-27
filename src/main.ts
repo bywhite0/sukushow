@@ -10,6 +10,8 @@ import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
 import { StartAnimation } from './startAnim';
+import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
+import { createSongPicker } from './songPicker';
 import {
   loadPreviewSettings,
   savePreviewSettings,
@@ -17,7 +19,7 @@ import {
 } from './settingsPersist';
 const app=document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML=`
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
+<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -213,7 +215,7 @@ input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offse
 input('chart-file').onchange=async()=>{
  const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
  try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo({title:file.name,difficulty:null,jacketUrl:null});player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ chart=next;setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
 el('demo').onclick=()=>{generation++;chart=demoChart();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
@@ -343,3 +345,57 @@ function animate(){
  frame=requestAnimationFrame(animate);
 }animate();
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();},{once:true});
+
+/* ── 选曲：本地 assets（scripts/link-assets.py）+ 可搜索曲目列表，同 llll-pjsk-preview ── */
+let songList:SongList|null=null;
+/** 本地打开的谱面若是 rhythmgame_chart_<id>_<n>.bytes，就按曲目列表补上曲名 / 难度 / 封面。 */
+function startInfoForFile(name:string){
+ const hit=songList?findSongByChartFile(songList,name):null;
+ return hit?{title:hit.song.title,difficulty:hit.difficulty,jacketUrl:songAssets(hit.song).coverUrl}:{title:name,difficulty:null,jacketUrl:null};
+}
+/** 按曲目 Id 打开：谱面 + BGM；封面 / 曲名 / 难度色交给开场过场。 */
+async function loadSongById(songId:string,difficulty:string){
+ const song=await findSong(songId);
+ if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
+ const chartFile=song.charts[difficulty];
+ if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
+ const id=++generation;startAnim.cancel();
+ message(`正在加载 ${song.title} [${difficulty}]…`);
+ const res=await fetch(`/assets/chart/${chartFile}`);
+ if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);
+ const next=decodeChart(new Uint8Array(await res.arrayBuffer()));
+ const {bgmUrl,coverUrl}=songAssets(song);
+ const bgm=await fetchBytes(bgmUrl);
+ if(id!==generation)return;
+ chart=next;player?.clear();setChartFever(chartFile);
+ el('chart-name').textContent=`${song.title} [${difficulty}]`;
+ setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
+ player?.transport.setDuration(chart.duration);metadata();
+ let hasBgm=false;
+ if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
+ if(id!==generation)return;
+ el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
+ message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}），点击播放。`);
+}
+async function initSongPicker(){
+ try{songList=await loadSongList();}catch(e){console.warn('[llll-preview] 曲目列表加载失败：',e);return;}
+ const openSong=async(songId:string,difficulty:string)=>{
+  try{
+   await loadSongById(songId,difficulty);
+   const url=new URL(location.href);url.searchParams.set('song',songId);url.searchParams.set('difficulty',difficulty);history.replaceState(null,'',url);
+  }catch(e){message(`曲目加载失败：${String(e)}`,true);}
+ };
+ const picker=createSongPicker({list:songList,onChange:(songId,difficulty)=>{void openSong(songId,difficulty);}});
+ el('song-picker-mount').replaceChildren(picker.root);
+ // ?song=&difficulty=&offset=（offset 为毫秒，只作用于本次打开，不写入设置）。
+ const search=new URLSearchParams(location.search);
+ const songId=search.get('song');
+ if(!songId)return;
+ const offset=search.get('offset');
+ if(offset!==null&&offset!==''&&Number.isFinite(Number(offset))){input('offset').value=offset;player?.setOffset(Number(offset)/1000);}
+ const difficulty=search.get('difficulty')??'MASTER';
+ picker.select(songId,difficulty,false);
+ try{await loadSongById(songId,picker.currentDifficulty()??difficulty);}
+ catch(e){message(`曲目 ${songId} 加载失败：${String(e)}。已保留演示谱。`,true);}
+}
+void initSongPicker();

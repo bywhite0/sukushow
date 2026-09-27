@@ -10,8 +10,13 @@ export class AudioPlayer {
   constructor(){this.gain.connect(this.context.destination);}
   async load(file:File){
     if(file.size>128*1024*1024)throw new Error('音频超过 128 MiB');
+    return this.loadBuffer(await file.arrayBuffer());
+  }
+  /** 直接解码已下载的字节（选曲从 /assets/audio 取 BGM）。 */
+  async loadBuffer(data:ArrayBuffer){
+    if(data.byteLength>128*1024*1024)throw new Error('音频超过 128 MiB');
     const id=++this.generation;
-    const buffer=await this.context.decodeAudioData(await file.arrayBuffer());
+    const buffer=await this.context.decodeAudioData(data);
     if(id!==this.generation)return false;
     this.buffer=buffer;this.sync();return true;
   }

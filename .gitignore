@@ -7,3 +7,9 @@ local-assets/
 *.log
 .env*
 !.env.example
+
+# 本地资源（谱面 / BGM / 曲绘）：体积大且不可再分发，由 scripts/link-assets.py 链接进来
+public/assets/jacket/
+public/assets/audio/
+public/assets/chart/
+scripts/link-assets.local.json
