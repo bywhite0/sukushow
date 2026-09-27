@@ -350,6 +350,11 @@
 .hud-aprate-upper.is-on{visibility:visible}
 
 /* 开场过场 RhythmGameStart（Canvas sortingOrder 30，盖住 HUD）。坐标 = level56 RectTransform，原点为画面中心、y 向下。 */
+.combo-result{position:absolute;inset:0;pointer-events:none}
+.combo-result[hidden]{display:none}
+/* 容器不建层叠上下文；各层直接与 .stage（isolation:isolate）里的画面合成。Glow 在黑罩之下，其余粒子在其上，两层都是加色。 */
+.stage .cr-layer{position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
+.stage .cr-glow,.stage .cr-fx{mix-blend-mode:plus-lighter}
 .start-anim{position:absolute;inset:0;z-index:4;overflow:hidden;pointer-events:none;user-select:none;font-family:"FOT-Rodin Pro","Microsoft YaHei","PingFang SC",sans-serif}
 .start-anim[hidden]{display:none}
 .sa-bg{position:absolute;inset:0}

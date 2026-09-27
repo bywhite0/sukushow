@@ -10,9 +10,9 @@ test('从头播放先放开场过场，约 3.7 s 后开播；再按跳过直接�
  await expect(page.locator('.start-anim')).toHaveAttribute('data-state','playing');
  await expect(page.locator('.sa-title')).toHaveText('演示谱面');
  await expect(page.getByRole('button',{name:'跳过开场',exact:true})).toBeVisible();
- expect(Number(await page.locator('canvas').getAttribute('data-time'))).toBeLessThan(.05);
+ expect(Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeLessThan(.05);
  await expect(page.locator('.start-anim')).toBeHidden({timeout:8_000});
- await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-time'))).toBeGreaterThan(.1);
+ await expect.poll(async()=>Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeGreaterThan(.1);
  await page.getByRole('button',{name:'暂停',exact:true}).click();
  await page.locator('#restart').click();
  await expect(page.locator('.start-anim')).toHaveAttribute('data-state','idle');
@@ -21,7 +21,7 @@ test('从头播放先放开场过场，约 3.7 s 后开播；再按跳过直接�
  await page.getByRole('button',{name:'跳过开场',exact:true}).click();
  await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeVisible();
  await expect(page.locator('.start-anim')).toBeHidden();
- await expect.poll(async()=>Number(await page.locator('canvas').getAttribute('data-time'))).toBeGreaterThan(.1);
+ await expect.poll(async()=>Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeGreaterThan(.1);
  await page.waitForTimeout(500);
  await expect(page.locator('.start-anim')).toBeHidden();
  expect(errors).toEqual([]);

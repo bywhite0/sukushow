@@ -197,3 +197,18 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - BGM 与封面按曲目条目的 `soundId` / `jacketId` 取（翻唱或改编版本与曲目 Id 不同，不拼接猜测）。
 - 选曲后：谱面走 `decodeChart`；Fever 由谱面文件名 `rhythmgame_chart_<id>_<n>.bytes` 自动匹配；开场过场拿到曲名、难度（决定难度色）和封面。手动打开的谱面若是同名文件，也会按曲目列表补上这三项。
 - URL：`?song=<id>&difficulty=<NORMAL|HARD|EXPERT|MASTER>&offset=<毫秒>`；选曲时同步回 URL，`offset` 只作用于本次打开，不写入设置。
+## 曲终横幅（RhythmGameComboResult）
+
+- 结果档位：`GetResultIndex` 为 AP→0、FC→1、Clear→2、Finish→3。自动演奏恒为 AP，所以预览只接了 AP 横幅（`roots[0]`）。
+- 触发时刻：FinishTime = `MusicsRecord.PlayTime`（毫秒）/ 1000，取 `song-list.json` 的 `playTime`；例如 103119 为 112.37 s。进度条时长延长到 FinishTime + 4 s（片段时长）。
+- 出现时 `ShowAsync` 激活对应 root，播放 SE `se_rhythm_finish_0004`，再播 4 s 动画片段。预览在播放中正向越过 FinishTime（0.25 s 内）时播放该 SE。
+- 画布为 World Space、Default 层、order 10；Bg 为黑色 α 0.698。
+- 层序：Glow 发射器位于 Default 层 order 1，画在画布下；其余发射器位于更高的 sorting layer，画在画布上。
+- 粒子材质均为加色（tex × 顶点色，SrcAlpha One），预览用 `lighter` / `plus-lighter` 合成。
+- 动画曲线与节点来自 banners.json；发射器参数直接取 level56 的 ParticleSystem/Renderer：burst cycles/interval、startDelay、LimitVelocity 的 dampen 与 magnitude 随机范围、Circle 半径/厚度、Hermite 尺寸曲线（time/value/inSlope/outSlope × scalar）、渐变、maxParticleSize、sortingOrder。生成脚本 `scripts/gen-combo-result-clip.py` 对不支持的模块直接断言失败。
+
+推断项（原包无法直接对应到网页的部分）：
+- maxParticleSize 按视口高度（1080 参考）换算。
+- Circle 发射在厚度 > 0 时按面积均匀取半径。
+- 随机数不是 Unity 的 RNG，粒子具体分布与原版不同，统计参数一致。
+- 横幅按播放时间轴驱动（可拖动进度条回看），原版按实时播放。

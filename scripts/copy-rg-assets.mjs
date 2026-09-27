@@ -24,6 +24,7 @@ const outSprites = join(outRoot, 'sprites');
 const outFxJson = join(outRoot, 'fx', 'fx.json');
 const outFxTex = join(outRoot, 'fx', 'tex');
 const outMeta = join(outRoot, 'sprite_meta.json');
+const outBanner = join(outRoot, 'banner');
 const outFonts = join(outRoot, 'fonts');
 
 /** @returns {{ unityRoot: string, spriteMetaSrc: string }} */
@@ -92,6 +93,20 @@ const SPRITES = [
   'ui_sc2_button_rank_shine',
   'ui_sc2_button_rank',
   'ui_sc2_ingame_rank_base',
+];
+
+/** 曲终横幅 RhythmGameComboResult · AllPerfect 用到的贴图（UI Image + 粒子材质 _MainTex），见 src/comboResultClip.ts。 */
+const BANNER_TEX = [
+  'ui_sc2_ingame_end_line',
+  'ui_sc2_ingame_end_star01',
+  'ui_sc2_ingame_end_star02',
+  'ui_sc2_ingame_end_allperfect',
+  'ui_sc2_ingame_end_AllperfectTitle',
+  'sc2_ingameStartEnd_glitter_lyric_01',
+  'sc2_Result_effect_impact01',
+  'sc2_Result_effect_glow_02',
+  'sc2_Result_Particle_light03',
+  'sc2_result_effect_glitter_lyric_01',
 ];
 
 const rel = (abs) => abs.slice(repoRoot.length + 1).replaceAll('\\', '/');
@@ -254,6 +269,19 @@ async function main() {
     }
     if (!(await isPng(src))) {
       missing.push(`fx tex ${name}.png (present but not a PNG: ${src})`);
+      continue;
+    }
+    await copyFile(src, dest);
+    copied.push(rel(dest));
+  }
+
+  await mkdir(outBanner, { recursive: true });
+  const bannerDirs = [join(unityRoot, 'Art', 'Resources', 'BannerTex')];
+  for (const name of BANNER_TEX) {
+    const src = await findPng(bannerDirs, name);
+    const dest = join(outBanner, `${name}.png`);
+    if (!(await isPng(src))) {
+      missing.push(`banner tex ${name}.png (not in BannerTex: ${src})`);
       continue;
     }
     await copyFile(src, dest);
