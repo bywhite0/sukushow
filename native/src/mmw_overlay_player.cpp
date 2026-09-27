@@ -3362,11 +3362,7 @@ void main() {
         const float chanceLocalSec = chanceActive && gPlayer.feverChanceAnimStartSec >= 0.0
             ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
             : 0.0f;
-        // 计量条从充能一开始就可见，故它也要参与「是否继续绘制」的判断——
-        // 否则阈值之前 chanceActive 为假，这里会直接 return，计量条永远画不出来。
-        const bool gaugeActive = feverProgress > 0.0f && feverLocalSec < 0.0f;
-        if (!gPlayer.feverDisplayEnabled ||
-            (!feverActive && !textActive && !chanceActive && !gaugeActive)) {
+        if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive && !chanceActive)) {
             return;
         }
 
@@ -3462,9 +3458,10 @@ void main() {
         }
 
         // ---- 充能计量条 ----
-        // 从充能一开始就可见（不等到阈值），否则看不到进度在涨。
+        // 只在 FeverChance 态可见（原包在 StartProgress 里才 SetActive(true)，
+        // 且 UpdateFeverGauge 仅在 feverState ∈ {1,2} 时更新）。
         // 已充能部分从底端（外侧）向上填充。
-        if (gaugeActive && gPlayer.feverDisplayEnabled) {
+        if (chanceActive && gPlayer.feverDisplayEnabled) {
             auto gaugeWidthAt = [&](float y) {
                 constexpr int kN =
                     static_cast<int>(sizeof(CHANCE_GAUGE_WIDTH) / sizeof(CHANCE_GAUGE_WIDTH[0]));
@@ -3481,8 +3478,15 @@ void main() {
                 }
                 return CHANCE_GAUGE_WIDTH[kN - 1][1];
             };
+            // 填充比例归一化到**本项目的 FeverChance 区间**（阈值 → 1.0）：
+            // 原包按 requireFeverProgress 归一，但那是「充能开始 → 阈值」那一段，
+            // 本项目没有 PJSK 的 FeverBeginEvent、拿不到那个起点，故按本区间归一，
+            // 使条在读得到的区间里走满 0→100%。
+            const float chanceSpanProgress = clamp01(
+                (feverProgress - CHANCE_PROGRESS_THRESHOLD) /
+                std::max(1.0f - CHANCE_PROGRESS_THRESHOLD, 0.0001f));
             // 已充能到哪一行：从底端(y=1080)向上推进。
-            const float fillTopY = 1080.0f * (1.0f - clamp01(feverProgress));
+            const float fillTopY = 1080.0f * (1.0f - chanceSpanProgress);
             constexpr int kGaugeSegments = 48;
             beginAdditive(overlay);
             for (int side = 0; side < 2; ++side) {

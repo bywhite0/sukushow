@@ -112,6 +112,13 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
       null,
       { timeout: 90000 },
     )
+    // 等谱面真的加载出来，而不是等固定时长：
+    // 机器有负载时固定等待会不够，后面读 getChart() 会拿到 null。
+    await page.waitForFunction(
+      () => Boolean((window as any).__LLL_PJSK__?.getChart?.()),
+      null,
+      { timeout: 90000 },
+    )
     await page.waitForTimeout(15000)
 
     const fever = await page.evaluate(
@@ -275,6 +282,13 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     await page.goto(`${BASE}?song=${SONG}&difficulty=MASTER`, { waitUntil: 'load' })
     await page.waitForFunction(
       () => Boolean((window as any).__LLL_PJSK__?.player),
+      null,
+      { timeout: 90000 },
+    )
+    // 等谱面真的加载出来，而不是等固定时长：
+    // 机器有负载时固定等待会不够，后面读 getChart() 会拿到 null。
+    await page.waitForFunction(
+      () => Boolean((window as any).__LLL_PJSK__?.getChart?.()),
       null,
       { timeout: 90000 },
     )
@@ -469,10 +483,11 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     const chanceSuper = await grabChance(0.9, 0.25, true)
     // super 关、同样进度：用于对照配色确实变了
     const chanceFullAt1 = await grabChance(0.9, 0.25, false)
-    // 计量条：同一动画时刻、不同进度 —— 填充高度应不同（证明进度有显示）。
-    const gaugeLow = await grabChance(0.1, 0.05)
-    const gaugeMid = await grabChance(0.5, 0.05)
-    const gaugeHigh = await grabChance(0.9, 0.05)
+    // 计量条：原包只在 FeverChance 态可见（StartProgress 里才 SetActive(true)），
+    // 故阈值之下不应出现、阈值之上应随进度变化。同一动画时刻取图以隔离计量条。
+    const gaugeBelow = await grabChance(0.5, 0.05)
+    const gaugeJustOver = await grabChance(0.75, 0.05)
+    const gaugeHigh = await grabChance(0.95, 0.05)
 
     /** 两态之间的像素差异（必须在关页面之前算）。 */
     const pixelDiffBetween = (a: string, b: string) =>
@@ -499,13 +514,14 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
         { a, b },
       )
 
-    // 充能计量条必须随进度变化，且**在阈值之前就可见**（否则看不到进度在涨）。
-    const gaugeBelowThreshold = await pixelDiffBetween(
-      (gaugeLow as any).onUrls[0],
-      (gaugeMid as any).onUrls[0],
+    // 计量条：阈值之下与「刚过阈值」应有差异（前者无计量条、后者有）。
+    const gaugeAppears = await pixelDiffBetween(
+      (gaugeBelow as any).onUrls[0],
+      (gaugeJustOver as any).onUrls[0],
     )
-    const gaugeFullRange = await pixelDiffBetween(
-      (gaugeLow as any).onUrls[0],
+    // 阈值之上，进度越高填充越多 ⇒ 两态应有差异。
+    const gaugeFills = await pixelDiffBetween(
+      (gaugeJustOver as any).onUrls[0],
       (gaugeHigh as any).onUrls[0],
     )
 
@@ -536,7 +552,7 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
 
     for (const [name, r] of Object.entries({
       chanceFull, chanceBelow, chanceJustCrossed, chanceSuper, chanceFullAt1,
-      gaugeLow, gaugeMid, gaugeHigh,
+      gaugeBelow, gaugeJustOver, gaugeHigh,
     })) {
       const url = (r as any).onUrls[0] as string
       fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
@@ -568,10 +584,8 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     expect(chanceSuper.middle, 'SuperFever 打开时应画出光带').toBeGreaterThan(5000)
     expect(superPixelDiff, 'SuperFever 配色应与普通版不同').toBeGreaterThan(1000)
 
-    // ---- 充能计量条：进度必须有显示，且阈值之前就能看到 ----
-    expect(gaugeBelowThreshold, '0.1 → 0.5（仍在阈值之下）计量条应有变化').toBeGreaterThan(500)
-    expect(gaugeFullRange, '0.1 → 0.9 计量条应有明显变化').toBeGreaterThan(
-      gaugeBelowThreshold,
-    )
+    // ---- 充能计量条：只在 FeverChance 态可见，且随进度填充 ----
+    expect(gaugeAppears, '跨过阈值后应出现计量条').toBeGreaterThan(300)
+    expect(gaugeFills, '阈值之上进度越高填充越多').toBeGreaterThan(100)
   }, 300000)
 })
