@@ -469,6 +469,45 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     const chanceSuper = await grabChance(0.9, 0.25, true)
     // super 关、同样进度：用于对照配色确实变了
     const chanceFullAt1 = await grabChance(0.9, 0.25, false)
+    // 计量条：同一动画时刻、不同进度 —— 填充高度应不同（证明进度有显示）。
+    const gaugeLow = await grabChance(0.1, 0.05)
+    const gaugeMid = await grabChance(0.5, 0.05)
+    const gaugeHigh = await grabChance(0.9, 0.05)
+
+    /** 两态之间的像素差异（必须在关页面之前算）。 */
+    const pixelDiffBetween = (a: string, b: string) =>
+      page.evaluate(
+        async ({ a, b }: any) => {
+          const load = async (u: string) => createImageBitmap(await (await fetch(u)).blob())
+          const [x, y] = await Promise.all([load(a), load(b)])
+          const cv = new OffscreenCanvas(x.width, x.height)
+          const ctx = cv.getContext('2d', { willReadFrequently: true })!
+          ctx.clearRect(0, 0, cv.width, cv.height)
+          ctx.drawImage(x, 0, 0)
+          const A = ctx.getImageData(0, 0, cv.width, cv.height).data
+          ctx.clearRect(0, 0, cv.width, cv.height)
+          ctx.drawImage(y, 0, 0)
+          const B = ctx.getImageData(0, 0, cv.width, cv.height).data
+          let n = 0
+          for (let i = 0; i < A.length; i += 4) {
+            const d =
+              Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])
+            if (d > 60) n++
+          }
+          return n
+        },
+        { a, b },
+      )
+
+    // 充能计量条必须随进度变化，且**在阈值之前就可见**（否则看不到进度在涨）。
+    const gaugeBelowThreshold = await pixelDiffBetween(
+      (gaugeLow as any).onUrls[0],
+      (gaugeMid as any).onUrls[0],
+    )
+    const gaugeFullRange = await pixelDiffBetween(
+      (gaugeLow as any).onUrls[0],
+      (gaugeHigh as any).onUrls[0],
+    )
 
     /** 同进度下 super 与非 super 的像素差异（必须在关页面之前算）。 */
     const superPixelDiff = await page.evaluate(
@@ -497,6 +536,7 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
 
     for (const [name, r] of Object.entries({
       chanceFull, chanceBelow, chanceJustCrossed, chanceSuper, chanceFullAt1,
+      gaugeLow, gaugeMid, gaugeHigh,
     })) {
       const url = (r as any).onUrls[0] as string
       fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
@@ -508,13 +548,14 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     // ---- 未达阈值：不该有光带 ----
     expect(chanceBelow.middle, '未达阈值不应有光带').toBeLessThan(chanceFull.middle * 0.2)
 
-    // ---- 光带确实张开到两个底角（判据按基线倍数，见提交说明） ----
-    expect(chanceFull.on.bottomLeft, '左下角应有光带').toBeGreaterThan(
-      Math.max(chanceBelow.on.bottomLeft * 4, 3),
-    )
-    expect(chanceFull.on.bottomRight, '右下角应有光带').toBeGreaterThan(
-      Math.max(chanceBelow.on.bottomRight * 4, 3),
-    )
+    // ---- 光带确实张开到两个底角 ----
+    // 判据用**差值**：两个进度都有计量条（共有项），差值正好隔离出光带的贡献。
+    // 不能用「基线的固定倍数」——计量条会把基线抬起来，倍数判据随之失准。
+    expect(chanceFull.on.bottomLeft - chanceBelow.on.bottomLeft, '左下角应有光带').toBeGreaterThan(15)
+    expect(
+      chanceFull.on.bottomRight - chanceBelow.on.bottomRight,
+      '右下角应有光带',
+    ).toBeGreaterThan(15)
 
     // ---- 充能期间不画 Fever 边框：左右竖条应缺席 ----
     expect(chanceFull.on.leftBar, '充能期间不应有左侧通高竖条').toBeLessThan(100)
@@ -526,5 +567,11 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     // ---- SuperFever 开关：进度满时打开应画出，且配色与非 super 不同 ----
     expect(chanceSuper.middle, 'SuperFever 打开时应画出光带').toBeGreaterThan(5000)
     expect(superPixelDiff, 'SuperFever 配色应与普通版不同').toBeGreaterThan(1000)
+
+    // ---- 充能计量条：进度必须有显示，且阈值之前就能看到 ----
+    expect(gaugeBelowThreshold, '0.1 → 0.5（仍在阈值之下）计量条应有变化').toBeGreaterThan(500)
+    expect(gaugeFullRange, '0.1 → 0.9 计量条应有明显变化').toBeGreaterThan(
+      gaugeBelowThreshold,
+    )
   }, 300000)
 })

@@ -2443,6 +2443,19 @@ void main() {
     // 横截面以**宽度**归一：s = |dx| / (宽度/2)，环带按 s 切分。
     // 环带必须**互不重叠**：加色混合下重叠会累加成假亮，嵌套画会得到过亮的核心。
     struct BeamGlowBand { float s0; float s1; float alpha; };
+    // ---- 充能计量条（gauge）----
+    // 形状取自素材 fx_fever_gauge：沿光束中心线的一条轨道，随下行变宽。
+    constexpr float CHANCE_GAUGE_WIDTH[][2] = {
+        {0.0f, 11.0f}, {240.0f, 29.0f}, {480.0f, 47.0f},
+        {720.0f, 63.0f}, {960.0f, 81.0f}, {1080.0f, 90.0f},
+    };
+    // 轨道底色偏暗、已充能部分亮；横截面内侧偏青紫、外侧偏金黄（取自素材）。
+    // 轨道透明度：原素材是霓虹感轨道，取 0.45 才在光束上看得清（判断值，可调）。
+    constexpr float CHANCE_GAUGE_TRACK_ALPHA = 0.45f;
+    constexpr float CHANCE_GAUGE_FILL_ALPHA = 0.95f;
+    constexpr float CHANCE_GAUGE_INNER_RGB[3] = {60.0f / 255.0f, 120.0f / 255.0f, 115.0f / 255.0f};
+    constexpr float CHANCE_GAUGE_OUTER_RGB[3] = {122.0f / 255.0f, 127.0f / 255.0f, 80.0f / 255.0f};
+
     // 环带 alpha 取自素材横截面的归一化均值，与实现同一测量口径，可逐点对账：
     //   s:  0.0    0.4    0.8    1.2    1.6    2.0    2.4    2.8    3.2    3.6    4.0
     //   v: 1.00   0.73   0.40   0.28   0.22   0.15   0.11   0.07   0.05   0.02   0.01
@@ -3349,7 +3362,11 @@ void main() {
         const float chanceLocalSec = chanceActive && gPlayer.feverChanceAnimStartSec >= 0.0
             ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
             : 0.0f;
-        if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive && !chanceActive)) {
+        // 计量条从充能一开始就可见，故它也要参与「是否继续绘制」的判断——
+        // 否则阈值之前 chanceActive 为假，这里会直接 return，计量条永远画不出来。
+        const bool gaugeActive = feverProgress > 0.0f && feverLocalSec < 0.0f;
+        if (!gPlayer.feverDisplayEnabled ||
+            (!feverActive && !textActive && !chanceActive && !gaugeActive)) {
             return;
         }
 
@@ -3442,6 +3459,65 @@ void main() {
                              [&](float y, float a) { return colorAt(y, a); });
                 endAdditive(overlay);
             }
+        }
+
+        // ---- 充能计量条 ----
+        // 从充能一开始就可见（不等到阈值），否则看不到进度在涨。
+        // 已充能部分从底端（外侧）向上填充。
+        if (gaugeActive && gPlayer.feverDisplayEnabled) {
+            auto gaugeWidthAt = [&](float y) {
+                constexpr int kN =
+                    static_cast<int>(sizeof(CHANCE_GAUGE_WIDTH) / sizeof(CHANCE_GAUGE_WIDTH[0]));
+                if (y <= CHANCE_GAUGE_WIDTH[0][0]) return CHANCE_GAUGE_WIDTH[0][1];
+                if (y >= CHANCE_GAUGE_WIDTH[kN - 1][0]) return CHANCE_GAUGE_WIDTH[kN - 1][1];
+                for (int i = 1; i < kN; ++i) {
+                    if (y <= CHANCE_GAUGE_WIDTH[i][0]) {
+                        const float y0 = CHANCE_GAUGE_WIDTH[i - 1][0];
+                        const float y1 = CHANCE_GAUGE_WIDTH[i][0];
+                        const float k = (y - y0) / (y1 - y0);
+                        return CHANCE_GAUGE_WIDTH[i - 1][1] +
+                               (CHANCE_GAUGE_WIDTH[i][1] - CHANCE_GAUGE_WIDTH[i - 1][1]) * k;
+                    }
+                }
+                return CHANCE_GAUGE_WIDTH[kN - 1][1];
+            };
+            // 已充能到哪一行：从底端(y=1080)向上推进。
+            const float fillTopY = 1080.0f * (1.0f - clamp01(feverProgress));
+            constexpr int kGaugeSegments = 48;
+            beginAdditive(overlay);
+            for (int side = 0; side < 2; ++side) {
+                const float dir = (side == 0) ? -1.0f : 1.0f;
+                for (int i = 0; i < kGaugeSegments; ++i) {
+                    const float y0 = 1080.0f * static_cast<float>(i) / kGaugeSegments;
+                    const float y1 = 1080.0f * static_cast<float>(i + 1) / kGaugeSegments;
+                    const float c0 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y0);
+                    const float c1 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y1);
+                    const float w0 = gaugeWidthAt(y0) * 0.5f;
+                    const float w1 = gaugeWidthAt(y1) * 0.5f;
+                    // 该段是否落在已充能区间内（按段中点判定，避免段被切碎）。
+                    const bool filled = (y0 + y1) * 0.5f >= fillTopY;
+                    const float a = (filled ? CHANCE_GAUGE_FILL_ALPHA : CHANCE_GAUGE_TRACK_ALPHA) *
+                                    overlayAlpha;
+                    // 内侧偏青紫、外侧偏金黄（两色各自成顶点，中间自然插值）。
+                    const ImU32 inner = IM_COL32(
+                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[0] * 255.0f)),
+                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[1] * 255.0f)),
+                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[2] * 255.0f)),
+                        static_cast<int>(std::lround(clamp01(a) * 255.0f)));
+                    const ImU32 outer = IM_COL32(
+                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[0] * 255.0f)),
+                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[1] * 255.0f)),
+                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[2] * 255.0f)),
+                        static_cast<int>(std::lround(clamp01(a) * 255.0f)));
+                    // 内侧贴中心线、外侧远离中心线。
+                    addQuadGradient(
+                        overlay,
+                        ImVec2(px(c1 + dir * w1), py(y1)), ImVec2(px(c1), py(y1)),
+                        ImVec2(px(c0), py(y0)), ImVec2(px(c0 + dir * w0), py(y0)),
+                        outer, inner, inner, outer);
+                }
+            }
+            endAdditive(overlay);
         }
 
         if (feverActive) {
