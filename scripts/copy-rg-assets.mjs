@@ -42,6 +42,16 @@ const FONTS = [
   'FOT-RODINPRO-EB.otf',
 ];
 
+/** fx.json 的 `mats[]` 之外、仍须随预览分发的贴图（Fever 与 HUD 特效直接按文件名引用）。 */
+const FX_TEX_EXTRA = [
+  'fever_mask',
+  'sc2_NotesEffectCircle_007',
+  'sc2_feverLine01',
+  'APRate_OutlineEffect',
+  'Default-Particle',
+  'sc2_outgameLvUp_glitter_lyric_01',
+];
+
 const numbered = (prefix, from, to) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${prefix}${from + i}`);
 
@@ -126,6 +136,9 @@ async function fxSearchDirs(unityRoot) {
     join(art, 'RhythmFx'),
     join(art, 'GameUI'),
     join(runtime, 'FxTex'),
+    // AssetStudio 扁平导出目录（导出产物常见形态）。
+    join(unityRoot, 'Texture2D'),
+    join(unityRoot, 'Assets', 'Texture2D'),
   ];
   for (const root of [art, runtime, join(art, 'RhythmFx')]) {
     for (const child of await childDirs(root)) {
@@ -219,6 +232,11 @@ async function main() {
       if (!mat?.tex) continue;
       const name = texName(mat.tex);
       if (!name || seen.has(name)) continue;
+      seen.add(name);
+      textures.push(name);
+    }
+    for (const name of FX_TEX_EXTRA) {
+      if (seen.has(name)) continue;
       seen.add(name);
       textures.push(name);
     }

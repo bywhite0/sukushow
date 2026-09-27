@@ -10,6 +10,20 @@ import {
   apGageFlashScale,
   apGageFlashAlpha,
   AP_GAGE_FLASH_DURATION,
+  apRateBurstScale,
+  apRateBurstRootAlpha,
+  apRateBurstCoreAlpha,
+  apRateBurstParticleScale,
+  apRateBurstParticleAlpha,
+  apRateBurstTravel,
+  AP_RATE_BURST_DURATION,
+  AP_RATE_BURST_ACTIVATE_DELAY,
+  AP_RATE_BURST_ROOT,
+  AP_RATE_BURST_CORE,
+  AP_RATE_BURST_RING,
+  AP_RATE_BURST_RING_INNER,
+  AP_RATE_BURST_ROOT_GAIN,
+  AP_RATE_BURST_CORE_ALPHA_GAIN,
   scoreAddTweenX,
   scoreAddTweenAlpha,
   SCORE_ADD_LIFE,
@@ -298,6 +312,15 @@ export class LiveHud {
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
   private apRateBurstEl: HTMLElement | null = null;
+  /** APRateEffect 的贴图火花（贴图近似，非 GPU 粒子）。 */
+  private apRateBurstSparks: {
+    el: HTMLElement; ax: number; ay: number; vx: number; vy: number;
+    life: number; delay: number; spin: number;
+    /** 限速上限（px/s）与阻尼：原包 LimitVelocityOverLifetime 的 magnitude / dampen。 */
+    limit: number; dampen: number;
+  }[] = [];
+  /** 爆发是否已建好（区别于 `apRateFlashAt` 的动画时基）。 */
+  private apRateBurstLive = false;
   private addScoreEl: HTMLElement | null = null;
   private addScoreAt = -1;
 
@@ -398,6 +421,7 @@ export class LiveHud {
     this.paintComboBounce(time);
     this.paintComboFlash(time);
     this.paintApRateFlash(time);
+    this.paintApRateBurst(time);
     this.paintAddScore(time);
     this.paintApVoltage();
     this.paintApVoltageFx(time);
@@ -492,6 +516,7 @@ export class LiveHud {
       this.apRateUpperEl.style.opacity = '0';
       this.apRateUpperEl.style.transform = '';
     }
+    this.clearApRateBurst();
     this.paintCombo();
     this.paintApRate();
     this.paintScore();
@@ -582,6 +607,7 @@ export class LiveHud {
         this.spawnApRateBurst();
       } else {
         this.apRateFlashAt = -1;
+        this.clearApRateBurst();
         if (this.apRateUpperEl) {
           this.apRateUpperEl.classList.remove('is-on');
           this.apRateUpperEl.style.opacity = '0';
@@ -660,11 +686,15 @@ export class LiveHud {
     upper.style.transform = `scale(${s})`;
   }
 
-  /** PLAN §47 APRateEffect — textured approx; Local scaling (sibling of badge, not under Upper). */
+  /**
+   * PLAN §47 APRateEffect — level56 `ComboRoot/APRateUpper/APRateEffect` #227。
+   * 主体是粉色四角星粒子从徽章周围爆发，两层大面积贴图只是垫在后面的底光。
+   * 尺寸/速度/限速均取原包序列化值；1 世界单位 = 100 px（CanvasScaler
+   * `m_ReferencePixelsPerUnit=100` + 参考分辨率 1920×1080）。
+   */
   private spawnApRateBurst(): void {
     const host = this.apRateBurstEl;
     if (!host) return;
-    host.classList.remove('is-on');
     host.replaceChildren();
     const mk = (cls: string, src: string, w: number, h: number) => {
       const d = document.createElement('div');
@@ -678,22 +708,102 @@ export class LiveHud {
       d.append(img);
       return d;
     };
-    // Root #563 ~254×63 white flash; Bg_core #530 pink glow; Particle light02; Closs glitter.
-    const root = mk('burst-root', 'sc2_effect_combo_glow_002.png', 254, 63);
-    const core = mk('burst-core', 'sc2_effect_combo_glow_002.png', 400, 300);
-    const particles = mk('burst-particles', 'sc2_Particle_light02.png', 220, 220);
-    const glitter = mk('burst-glitter', 'sc2_result_effect_glitter_lyrics_01.png', 180, 180);
-    host.append(root, core, particles, glitter);
-    // clip: APRateEffect SetActive @ 1/60s
-    window.setTimeout(() => {
-      host.classList.add('is-on');
-    }, 17);
-    window.setTimeout(() => {
-      host.classList.remove('is-on');
-      host.replaceChildren();
-    }, 1000);
+    // 背景层：#563 Root（254×63 基准）/ #530 Bg_core（400×300 基准），sortingOrder +1。
+    const root = mk('burst-root', 'APRate_OutlineEffect.png',
+      AP_RATE_BURST_ROOT.w, AP_RATE_BURST_ROOT.h);
+    const core = mk('burst-core', 'Default-Particle.png',
+      AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
+    host.append(root, core);
+    // 主体层：#565 Particle（14 颗，慢）/ #564 Closs（15 颗，快）。
+    const sparks: {
+      el: HTMLElement; ax: number; ay: number; vx: number; vy: number;
+      life: number; delay: number; spin: number; star: boolean;
+      /** LimitVelocityOverLifetime 的 magnitude / dampen。 */
+      limit: number; dampen: number;
+    }[] = [];
+    const addSparks = (
+      cls: string, count: number, speedLo: number, speedHi: number,
+      star: boolean, limit: number, dampen: number,
+    ) => {
+      for (let i = 0; i < count; i++) {
+        const t = (i + Math.random()) / count * Math.PI * 2;
+        const r = AP_RATE_BURST_RING_INNER + Math.random() * (1 - AP_RATE_BURST_RING_INNER);
+        const ax = Math.cos(t) * AP_RATE_BURST_RING.rx * r;
+        const ay = Math.sin(t) * AP_RATE_BURST_RING.ry * r;
+        // 速度 6–7 / 1.0–1.6 世界单位/秒 ⇒ ×100 px/s。
+        const sp = (speedLo + Math.random() * (speedHi - speedLo)) * 100;
+        // startSize 0.3–0.6 世界单位 ⇒ 30–60 px。
+        const size = star ? 30 + Math.random() * 30 : 20 + Math.random() * 20;
+        const el = mk(cls, star ? 'sc2_outgameLvUp_glitter_lyric_01.png' : 'sc2_Particle_light02.png', size, size);
+        host.append(el);
+        sparks.push({
+          el, ax, ay,
+          vx: Math.cos(t) * sp, vy: Math.sin(t) * sp,
+          life: 0.4 + Math.random() * 0.3,
+          delay: Math.random() * 0.15,
+          spin: star ? 0 : (Math.random() * 2 - 1) * Math.PI * 0.5,
+          star, limit, dampen,
+        });
+      }
+    };
+    // #565 Particle：初速 100–160，magnitude TwoConstants 0.7–1.0 ⇒ 限速 70–100，dampen 0.2。
+    addSparks('burst-particles', 14, 1.0, 1.6, false, 70 + Math.random() * 30, 0.2);
+    // #564 Closs：初速 600–700，magnitude 常量 1.0 ⇒ 限速 100，dampen 0.3。
+    addSparks('burst-glitter', 15, 6.0, 7.0, true, 100, 0.3);
+    this.apRateBurstSparks = sparks;
+    this.apRateBurstLive = true;
   }
 
+  /** 清空 APRateEffect 的贴图节点（寿命结束、重播或换谱时调用）。 */
+  private clearApRateBurst(): void {
+    if (!this.apRateBurstLive && !this.apRateBurstSparks.length) return;
+    this.apRateBurstLive = false;
+    this.apRateBurstSparks = [];
+    this.apRateBurstEl?.replaceChildren();
+  }
+
+  /** 逐帧驱动 APRateEffect；clip #94 在 t=1/60s 才 SetActive(true)。 */
+  private paintApRateBurst(time: number): void {
+    const host = this.apRateBurstEl;
+    if (!host) return;
+    if (this.apRateFlashAt < 0) {
+      this.clearApRateBurst();
+      return;
+    }
+    const age = time - this.apRateFlashAt - AP_RATE_BURST_ACTIVATE_DELAY;
+    if (age < 0) return; // 延迟窗口内尚未激活
+    if (age >= AP_RATE_BURST_DURATION) {
+      this.clearApRateBurst();
+      return;
+    }
+    const root = host.querySelector<HTMLElement>('.burst-root');
+    const core = host.querySelector<HTMLElement>('.burst-core');
+    // Root / Bg_core 共用尺寸曲线，两层都从中心放大。
+    const s = apRateBurstScale(age);
+    if (root) {
+      root.style.opacity = String(apRateBurstRootAlpha(age) * AP_RATE_BURST_ROOT_GAIN);
+      root.style.transform = `translate(-50%,-50%) scale(${s})`;
+    }
+    if (core) {
+      // Bg_core 的基准不透明度是原包 startColor.a = 0.537。此处内联设置，
+      // 不能写在 CSS —— 内联样式会覆盖它。
+      core.style.opacity = String(apRateBurstCoreAlpha(age) * AP_RATE_BURST_CORE_ALPHA_GAIN);
+      core.style.transform = `translate(-50%,-50%) scale(${s})`;
+    }
+    for (const sp of this.apRateBurstSparks) {
+      const a = age - sp.delay;
+      if (a <= 0 || a >= sp.life) {
+        sp.el.style.opacity = '0';
+        continue;
+      }
+      const u = a / sp.life;
+      // LimitVelocityOverLifetime：位移是 v(t)=lim+(v0−lim)e^(−κt) 的积分。
+      const [x, y] = apRateBurstTravel(sp.vx, sp.vy, a, sp.limit, sp.dampen);
+      sp.el.style.opacity = String(apRateBurstParticleAlpha(u));
+      sp.el.style.transform = `translate(-50%,-50%) translate(${sp.ax + x}px,${-(sp.ay + y)}px) `
+        + `rotate(${sp.spin * a}rad) scale(${apRateBurstParticleScale(u)})`;
+    }
+  }
 
   private paintComboBounce(time: number): void {
     if (this.comboBounceAt < 0) {

@@ -131,11 +131,17 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 - **两个环**：AP/Voltage `hud-gage` 用 CSS `conic-gradient` mask 模拟 Unity Image Filled / Radial360 / fillOrigin Top / `fillClockwise=false`；`--fill` = `radialFillAmount(value)`（小数部分）。基地 138×138，环 90×90。AP 环由 ApResolver 累加驱动；Voltage 点仅技能产（预览恒 0）。
 - **Combo**：`paintComboBounce`（≥10，ComboRectTween）保留；跨 100/200/… 触发 `DoEffectCombo`（ComboAnimation #96，0.7833s）：scale 1→1.6@0.7→1.7；**color.a** 0→1@1/30 持平至 1/6 再多项式 (8.5286,−7.889,0,1)→0；上层数字行 + outline burst（AP-continue 时 burst 更强）。
-- **AP増加**：`apRate` 变化且 ≥1 时 `APIncreaseAnimation` 0.75s（scale smoothstep→1.5，alpha 1→0）；粉徽章 `(1,0.2275,0.6)`；UI 近似 burst（Root/Bg_core/particles/glitter）。`apRate<1` 只清文本、不重启动画。
+- **AP増加**：`apRate` 变化且 ≥1 时触发 `APIncreaseAnimation` 0.75s——底座徽章常显，`APRateUpper` 为独立闪光副本（scale smoothstep→1.5，alpha 1→0）；粉徽章 `(1,0.2275,0.6)`。`apRate<1` 只清文本、不重启动画。`APRateEffect` 贴图爆发见下条。
 - 纯函数：`src/hudFxMath.ts` + `tests/hudFxMath.test.ts`。Skill/粒子技能 FX 仍不在范围。
 
 - **AP/Voltage 环数值**：每帧 `paintApVoltage`；整数变化时底座使用 JudgementRectTween，上层使用独立数值闪光（详见下节），不是 ComboRectTween。Voltage 预览恒 0（未实现技能加点）。
-- **AP増加**：底座徽章常显；`APRateUpper` 独立闪光副本（0.75s scale→1.5 + α→0）；`APRateEffect` 贴图爆发（glow/light02/glitter，@1/60s，寿命 1s，Local 缩放）。
+- **APRateEffect 的主体是粉色四角星粒子，从徽章周围爆发**：`level56 ComboRoot/APRateUpper/APRateEffect`（#227）下四个子发射器 `Particle`(#565)/`ClossParticle`(#564)/`Bg_core`(#530)/Root(#563) 的 Transform 全为单位变换，都锚在 240×40 徽章**中心**。两层大面积贴图只是垫在后面的底光，不是主体；贴图名与 alpha 剖面只能推出尺寸/速度/时序，**形状须以实机录像为准**（曾据此误判为「空心描边框」「实心光斑」，均不成立）。
+- **四角星贴图是 `sc2_outgameLvUp_glitter_lyric_01`，贴图本身为纯白**：#564 `ClossParticle` 的贴图（`sharedassets56.assets:56`，256×256）形状为**中心亮核 + 上下左右四条尖臂**，正是四角星；但像素实测 RGB 均值 **254.9（纯白）**，粉色来自 `ColorModule` 的 TwoGradients `(0.996,0.224,0.600)`→`(1,0.807,0.901)` ⇒ **预览须用 mask 染色，直接贴白图会得到白星**。
+- **尺寸换算基准：1 世界单位 = 100 px**：由 CanvasScaler `m_ReferencePixelsPerUnit=100` + `m_ReferenceResolution (1920,1080)` 定（父链各级 `m_LocalScale` 全为单位）。据此：#565/#564 的 `startSize` TwoConstants 0.3–0.6 ⇒ **30–60 px**；`ShapeModule` 椭圆环 `radius 0.08 × scale(13.5,3)` ⇒ 半轴 **108×24 px**，`radiusThickness 0.3` ⇒ 出生半径落在 `[0.70, 1.0]`。
+- **两层的速度差就是「闪烁 vs 飞散」，但必须配 `LimitVelocityOverLifetime` 才是真实行程**：两层都开了限速模块。参数：`#564 Closs` 初速 6–7 世界单位/秒（600–700 px/s）、`magnitude` 常量 1.0 ⇒ **限速 100 px/s**、`dampen 0.3`；`#565 Particle` 初速 1.0–1.6（100–160 px/s）、`magnitude` TwoConstants 0.7–1.0 ⇒ 限速 70–100、`dampen 0.2`。速度按 `v(t)=lim+(v0−lim)·e^(−κt)`（`κ=−ln(1−dampen)×50`）衰减，位移是其积分 `s(t)=lim·t+(v0−lim)(1−e^(−κt))/κ`。**#564 整条寿命只走 ≈101 px，而非按初速直飞的 455 px（差 4.5 倍）**。寿命 0.4–0.7s、`startDelay` 0–0.15s ⇒ 14/15 颗错峰出现，观感即「随闪烁动画爆发」。两层 renderer `m_Enabled=True`、`sortingOrder=-1`（排在底光 +1 之前）。
+- **底光两层不能盖过主体，且 `Bg_core` 需要染色**：#563 Root（`APRate_OutlineEffect`，基准 254×63，贴图白、`startColor` 白）与 #530 Bg_core（`Default-Particle`，基准 400×300）`sortingOrder=+1`，尺寸虽大但须压低不透明度，否则会冲淡星形主体。**`Bg_core` 的贴图 `Default-Particle` 是灰色（不透明区 RGB 均值 110.8），粉紫色来自它的 `startColor (1, 0.141, 0.549, α0.537)`** ⇒ 须染色，直接贴灰图会得到灰底光。
+- 逐帧曲线（Root/Bg_core 共用）：尺寸 `[(0,0,out 7.9385),(0.2609,0.9385)] × 1.35`；Root alpha `1@0.0088→0@0.4298`；Bg_core alpha `1@0.0088→0@1.0`；粒子尺寸 `[(0,0,2),(1,1,0)]`；`1/60s` 的 SetActive 延迟。**逐帧驱动，不用 CSS keyframes。**
+- 这三张贴图不在 `fx.json` 的 `mats[]` 里（HUD 特效直接按文件名引用），已登记进 `scripts/copy-rg-assets.mjs` 的 `FX_TEX_EXTRA`，并把 AssetStudio 扁平导出目录 `Texture2D/` 加入贴图搜索路径，避免刷新资源时丢失。
 
 ## AddScore 加分飘字
 
