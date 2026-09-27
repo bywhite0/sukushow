@@ -117,9 +117,8 @@ export class StartAnimation {
   private readonly resize: ResizeObserver | null;
   private color: readonly [number, number, number] = DIFFICULTY_COLORS.MASTER!;
   private hasJacket = false;
-  private raf = 0;
-  private finish: ((done: boolean) => void) | null = null;
-  private idle = false;
+  /** 当前显示：null = 隐藏，'idle' = 起点待机静止帧，数字 = clip 时刻（秒）。 */
+  private shown: number | 'idle' | null = null;
 
   constructor(private readonly stage: HTMLElement) {
     this.root = div('start-anim');
@@ -163,10 +162,6 @@ export class StartAnimation {
     this.setInfo({ title: '', difficulty: null, jacketUrl: null });
   }
 
-  get active(): boolean {
-    return this.finish !== null;
-  }
-
   setInfo(info: StartAnimationInfo): void {
     const key = (info.difficulty ?? 'MASTER').toUpperCase();
     this.color = DIFFICULTY_COLORS[key] ?? DIFFICULTY_COLORS.MASTER!;
@@ -176,23 +171,37 @@ export class StartAnimation {
     if (info.jacketUrl) this.jacket.src = info.jacketUrl;
     else this.jacket.removeAttribute('src');
     this.jacket.hidden = !this.hasJacket;
-    if (this.idle) this.renderAt(START_IDLE_TIME);
+    if (this.shown !== null) this.renderAt(this.shown === 'idle' ? START_IDLE_TIME : this.shown);
   }
 
   get idling(): boolean {
-    return this.idle;
+    return this.shown === 'idle';
   }
 
-  /** 0 秒待机：显示过场静止帧盖住 HUD；播放中调用无效。 */
-  setIdle(on: boolean): void {
-    if (this.active || on === this.idle) return;
-    this.idle = on;
-    this.root.hidden = !on;
-    if (on) {
-      this.root.dataset.state = 'idle';
+  get visible(): boolean {
+    return this.shown !== null;
+  }
+
+  /**
+   * 由走带时间驱动（过场计入进度条 [−START_CLIP_DURATION, 0)）：
+   * 'idle' = 停在起点未播放时的待机静止帧；数字 = clip 时刻；null 或 ≥ 时长 = 隐藏。
+   */
+  show(frame: number | 'idle' | null): void {
+    if (typeof frame === 'number' && !(frame >= 0 && frame < START_CLIP_DURATION)) frame = null;
+    if (frame === this.shown) return;
+    if (frame === null) {
+      this.shown = null;
+      this.root.hidden = true;
+      delete this.root.dataset.state;
+      return;
+    }
+    if (this.shown === null) {
+      this.root.hidden = false;
       this.layout();
-      this.renderAt(START_IDLE_TIME);
-    } else delete this.root.dataset.state;
+    }
+    this.shown = frame;
+    this.root.dataset.state = frame === 'idle' ? 'idle' : 'playing';
+    this.renderAt(frame === 'idle' ? START_IDLE_TIME : frame);
   }
 
   private layout(): void {
@@ -219,51 +228,7 @@ export class StartAnimation {
     this.title.style.color = rgba([255, 255, 255], f.scoreLabel_a);
   }
 
-  /**
-   * 播放整段过场（真实时间，animator.speed = 1，不随播放倍率）。
-   * 播完返回 true；被 cancel() 打断返回 false。
-   */
-  play(now: () => number = () => performance.now() / 1000): Promise<boolean> {
-    this.cancel();
-    const t0 = now();
-    this.idle = false;
-    this.root.dataset.state = 'playing';
-    this.root.hidden = false;
-    this.layout();
-    this.renderAt(0);
-    return new Promise<boolean>((resolve) => {
-      this.finish = (done) => {
-        cancelAnimationFrame(this.raf);
-        this.finish = null;
-        this.root.hidden = true;
-        delete this.root.dataset.state;
-        resolve(done);
-      };
-      const step = () => {
-        const t = now() - t0;
-        if (t >= START_CLIP_DURATION) {
-          this.renderAt(START_CLIP_DURATION);
-          this.finish?.(true);
-          return;
-        }
-        this.renderAt(t);
-        this.raf = requestAnimationFrame(step);
-      };
-      this.raf = requestAnimationFrame(step);
-    });
-  }
-
-  cancel(): void {
-    this.finish?.(false);
-  }
-
-  /** 跳过过场：立即结束并按「播完」返回 true，调用方随即开播。 */
-  skip(): void {
-    this.finish?.(true);
-  }
-
   dispose(): void {
-    this.cancel();
     this.resize?.disconnect();
     this.root.remove();
   }

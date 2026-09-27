@@ -694,10 +694,16 @@ export class HitFx {
     this.sparks = 0;
     this.feverOn = false;
   }
-  sync(chart: Chart, time: number, mirror: boolean) {
+  /** playing=false 时时间变化一律按跳转处理（暂停中拖动不推进、不生成粒子）。 */
+  sync(chart: Chart, time: number, mirror: boolean, playing = true) {
     if (!Number.isFinite(this.last)) { this.last = time; return; }
     const dt = time - this.last;
-    if (dt < -1e-4 || dt > SEEK) { this.clear(); this.last = time; return; }
+    if (dt < -1e-4 || dt > SEEK || (!playing && dt !== 0)) {
+      this.clear();
+      this.last = time;
+      this.respawnHoldLoops(chart, time, mirror);
+      return;
+    }
     if (this.mode === 'off' && !this.feverOn) {
       if (this.live.length) this.clear();
       this.last = time;
@@ -725,6 +731,18 @@ export class HitFx {
       }
     }
     this.last = time;
+  }
+  /** 跳转落在 hold 期间：补上该 hold 的循环特效（从头开始），恢复播放后与连续播放一致地持续到尾端。 */
+  private respawnHoldLoops(chart: Chart, time: number, mirror: boolean) {
+    if (this.mode === 'off') return;
+    for (const root of chart.roots) {
+      if (root.type !== 1 || root.time > time) continue;
+      let tail = root;
+      while (tail.next) tail = tail.next;
+      if (time >= tail.end) continue;
+      const [l, r] = edges(root, 0, mirror);
+      this.spawn('holdLoop', worldX((l + r) / 2), r - l + 1, true, root.uid);
+    }
   }
   private step(dt: number) {
     this.sparks = 0;

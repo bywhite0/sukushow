@@ -89,6 +89,8 @@ const DESIGN_H = 1080;
 // gap are not awarded. Continuous playback (including 2×) stays under it.
 // Only a small delta that actually crosses a note increments combo.
 const SEEK_GAP = 0.5;
+/** 跳转重建时，距目标时刻这么多秒内的判定按完整路径重放（覆盖判定字 / 闪光 / 爆发等特效寿命）。 */
+const REBUILD_FX_WINDOW = 3;
 
 // ScoreResolver.Add / Process: judgementHideTime = t + 0.7 (f32 @0x1AA10B8). Hard cut, no fade.
 const JUDGE_LIFE = 0.7;
@@ -208,8 +210,33 @@ function setSprite(host: HTMLElement, name: string, fallback: string): void {
     text.textContent = fallback;
     text.hidden = fallback.length === 0;
   };
+  // 同步解码：换图的那一帧就画新数字。async 时浏览器会先保留旧帧，跳转时多位同时换图会看到慢一拍。
+  img.decoding = 'sync';
   img.src = url;
   if (img.complete && img.naturalWidth > 0) onLoad();
+}
+
+/**
+ * 实时数字贴图常驻：预取并解码后保留引用，跳转时换图不必再下载 / 解码。
+ * 含 combo / 分数数字精灵，以及 AP 継続 描边与底光用作 CSS 蒙版 / 背景的贴图。
+ */
+const warmSpriteRefs: HTMLImageElement[] = [];
+function warmImages(urls: string[]): void {
+  for (const url of urls) {
+    const img = new Image();
+    img.src = url;
+    void img.decode().catch(() => {});
+    warmSpriteRefs.push(img);
+  }
+}
+
+/** 所有 AutoPlay 判定时刻 ≤ time（升序），与 countHeads 同口径。 */
+function judgementTimesUpTo(chart: Chart, time: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < chart.notes.length; i++) {
+    for (const t of noteJudgementTimes(chart.notes[i], chart.bpms)) if (t <= time) out.push(t);
+  }
+  return out.sort((x, y) => x - y);
 }
 
 function countHeads(chart: Chart, previousTime: number, time: number): number {
@@ -270,6 +297,13 @@ function mountOutlinedText(host: HTMLElement, text: string, asHtml = false): voi
 
 /** 数字 1 的描边蒙版（着色器窄字形采样，见 comboEffectOutlineBox）；其余数字用 CSS 里的整张图。 */
 const COMBO_EFFECT_DIGIT1_MASK = 'url(/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png)';
+/** AP 継続 四层用到的全部贴图（与 style.css 中 .hud-combo-fx-* 一致），用于预解码。 */
+const COMBO_FX_TEXTURES = [
+  '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect.png',
+  '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png',
+  '/rg/fx/tex/sc2_effect_combo_glow_002.png',
+  '/rg/fx/tex/sc2_effect_combo_glow_002_alpha_lower.png',
+];
 
 /** AP 継続特效的四层（见 LiveHud.comboFx）。 */
 type ComboFxLayerKey = 'lowerOutline' | 'upperOutline' | 'lowerGlow' | 'upperGlow';
@@ -396,6 +430,14 @@ export class LiveHud {
     this.buildScore(safe);
     this.judge = this.buildJudge(safe);
     const combo = this.buildCombo(safe);
+    warmImages([
+      ...[
+        ...Array.from({ length: 10 }, (_, d) => `ui_sc2_ingame_num_combo_${d}`),
+        ...Array.from({ length: 10 }, (_, d) => `ui_sc2_ingame_num_score_${d}`),
+        SCORE_DIM_ZERO, SCORE_DIM_COMMA, SCORE_COMMA,
+      ].map(spriteUrl),
+      ...COMBO_FX_TEXTURES,
+    ]);
     this.comboRow = combo.row;
     this.comboLabel = combo.label;
     this.apRateBadge = combo.apRate;
@@ -416,61 +458,37 @@ export class LiveHud {
     this.se = se;
   }
 
-  sync(chart: Chart, time: number): void {
+  /**
+   * playing=false（暂停）时任何时间变化都按跳转处理：不派发 SE、不触发新判定，
+   * 直接按目标时刻重建 HUD 状态。播放中小步前进（< SEEK_GAP）才逐帧累计判定。
+   */
+  sync(chart: Chart, time: number, playing = true): void {
     if (!Number.isFinite(time)) return;
     if (chart !== this.chart) {
       this.chart = chart;
       this.seHashes = buildLineHashTables(chart);
       this.se?.clear();
-      this.resetLive(time);
-      this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
-      return;
-    }
-    const previousTime = this.previousTime;
-    this.previousTime = time;
-    this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
-    if (time < previousTime) {
-      this.resetLive(time);
-      this.se?.clear();
-      return;
-    }
-    if (time - previousTime < SEEK_GAP) {
-      this.se?.process();
-      const hits = countHeads(chart, previousTime, time);
-      const jType = autoPlayJudgementType(this.enablePerfectPlus);
-      if (hits > 0) {
-        const prevCombo = this.combo;
-        // AP 継続：`isApContinue &= (type & 0xFE) == 4`（ScoreResolver.Add @0x49A1460）。
-        this.isApContinue = apContinueAfterHit(this.isApContinue, jType);
-        this.scoreEngine.addMany(jType, hits);
-        this.combo = this.scoreEngine.combo;
-        this.apRate = this.scoreEngine.apRate;
-        this.paintCombo();
-        this.paintApRate();
-        this.paintScore();
-        if (this.scoreEngine.lastAdd > 0) this.triggerAddScore(this.scoreEngine.lastAdd, time);
-        this.paintApVoltage();
-        this.paintGauge();
-        this.paintTechnicalFromEngine();
-        if (!this.rankManual) {
-          this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+      this.rebuildTo(chart, time);
+    } else {
+      const previousTime = this.previousTime;
+      const continuous = playing && time >= previousTime && time - previousTime < SEEK_GAP;
+      if (!continuous) {
+        if (time !== previousTime) {
+          this.se?.clear();
+          this.rebuildTo(chart, time);
         }
-        if (shouldShowJudgement(jType, this.judgementOutput)) {
-          this.applyJudgeSprite(jType);
-          this.judgeAt = time;
+      } else if (time > previousTime) {
+        this.previousTime = time;
+        this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
+        this.se?.process();
+        const hits = countHeads(chart, previousTime, time);
+        const jType = autoPlayJudgementType(this.enablePerfectPlus);
+        if (hits > 0) this.applyHits(hits, time, jType);
+        if (this.se) {
+          const seHits = collectAutoPlaySeHits(chart, previousTime, time, this.seHashes);
+          dispatchAutoPlaySe(this.se, seHits, jType, countActiveHolds(chart, time));
+          this.se.applyHold();
         }
-        // ToCondition(diff==0) ⇒ Slow; Score.Add zeros condition when FastSlow gate fails.
-        if (shouldShowFastSlow(jType, this.fastSlowThreshold)) {
-          this.applyConditionSprite(autoPlayConditionType());
-          this.conditionAt = time;
-        }
-        if (this.combo >= 10) this.comboBounceAt = time;
-        this.onComboAdvanced(prevCombo, time);
-      }
-      if (this.se) {
-        const seHits = collectAutoPlaySeHits(chart, previousTime, time, this.seHashes);
-        dispatchAutoPlaySe(this.se, seHits, jType, countActiveHolds(chart, time));
-        this.se.applyHold();
       }
     }
     this.paintJudge(time);
@@ -503,7 +521,11 @@ export class LiveHud {
   /** TotalAppeal / mastery / rank thresholds for halfwayScore + GetScoreRank. */
   setScoreConfig(partial: Partial<ScoreEngineConfig>): void {
     this.scoreEngine.configure(partial);
-    if (this.chart) this.scoreEngine.reset(this.chart);
+    if (this.chart) {
+      // 配置变更后按当前时刻重算，不清零。
+      this.rebuildTo(this.chart, this.previousTime);
+      return;
+    }
     this.combo = this.scoreEngine.combo;
     this.apRate = this.scoreEngine.apRate;
     this.paintScore();
@@ -527,6 +549,86 @@ export class LiveHud {
     const value = this.techRoot.querySelector('.hud-tech-value');
     if (!value) return;
     value.innerHTML = `<span class="is-big">${whole}</span><span class="is-small">${frac}</span>`;
+  }
+
+  /** 一批同刻判定（AutoPlay 恒为同一判定类型）：计分 + 触发判定字 / 闪光等特效。 */
+  private applyHits(hits: number, time: number, jType: NoteJudgementType): void {
+    const prevCombo = this.combo;
+    // AP 継続：`isApContinue &= (type & 0xFE) == 4`（ScoreResolver.Add @0x49A1460）。
+    this.isApContinue = apContinueAfterHit(this.isApContinue, jType);
+    this.scoreEngine.addMany(jType, hits);
+    this.combo = this.scoreEngine.combo;
+    this.apRate = this.scoreEngine.apRate;
+    this.paintCombo();
+    this.paintApRate();
+    this.paintScore();
+    if (this.scoreEngine.lastAdd > 0) this.triggerAddScore(this.scoreEngine.lastAdd, time);
+    this.paintApVoltage();
+    this.paintGauge();
+    this.paintTechnicalFromEngine();
+    if (!this.rankManual) {
+      this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+    }
+    if (shouldShowJudgement(jType, this.judgementOutput)) {
+      this.applyJudgeSprite(jType);
+      this.judgeAt = time;
+    }
+    // ToCondition(diff==0) ⇒ Slow; Score.Add zeros condition when FastSlow gate fails.
+    if (shouldShowFastSlow(jType, this.fastSlowThreshold)) {
+      this.applyConditionSprite(autoPlayConditionType());
+      this.conditionAt = time;
+    }
+    if (this.combo >= 10) this.comboBounceAt = time;
+    this.onComboAdvanced(prevCombo, time);
+  }
+
+  /**
+   * 跳转：从开局按时间顺序重放 AutoPlay 判定到 time（含 time），得到与连续播放一致的
+   * 分数 / combo / AP / 等级 / AP 継続。每个判定刻按当刻 Fever 计分。
+   * 距 time 不足 REBUILD_FX_WINDOW 的判定走完整路径，让判定字、跨百闪光、AP増加 等
+   * 按各自触发时刻显示到正确进度；更早的只累计数值。
+   */
+  private rebuildTo(chart: Chart, time: number): void {
+    this.resetLive(time);
+    this.comboFxLowerAt = Math.min(time, 0);
+    const jType = autoPlayJudgementType(this.enablePerfectPlus);
+    const times = judgementTimesUpTo(chart, time);
+    const fxFrom = time - REBUILD_FX_WINDOW;
+    let full = false;
+    for (let i = 0; i < times.length; ) {
+      const t = times[i]!;
+      let n = 0;
+      while (i < times.length && times[i] === t) { n++; i++; }
+      this.scoreEngine.setFever(isFeverAt(t, this.feverWindow));
+      this.previousTime = t;
+      if (!full && t >= fxFrom) {
+        full = true;
+        this.paintApVoltage(); // 数值弹跳的基线
+      }
+      if (full) {
+        this.applyHits(n, t, jType);
+        continue;
+      }
+      const prevCombo = this.combo;
+      this.isApContinue = apContinueAfterHit(this.isApContinue, jType);
+      this.scoreEngine.addMany(jType, n);
+      this.combo = this.scoreEngine.combo;
+      this.apRate = this.scoreEngine.apRate;
+      if (comboEffectRefreshLoop(prevCombo, this.combo)) this.comboFxLowerAt = t;
+      this.prevComboForFlash = this.combo;
+      this.lastPaintedApRate = this.apRate;
+    }
+    this.previousTime = time;
+    this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
+    if (!full && times.length) {
+      this.paintCombo();
+      this.paintApRate();
+      this.paintScore();
+      this.paintGauge();
+      this.paintApVoltage();
+      this.paintTechnicalFromEngine();
+      if (!this.rankManual) this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+    }
   }
 
   private resetLive(time: number): void {

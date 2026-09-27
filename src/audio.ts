@@ -26,7 +26,7 @@ export class AudioPlayer {
   setRate(rate:number){this.transport.setRate(rate);this.sync();}
   setOffset(seconds:number){if(!Number.isFinite(seconds))throw new Error('偏移必须是有限数');this.offset=seconds;this.sync();}
   setVolume(volume:number){this.gain.gain.value=Math.max(0,Math.min(1,volume));}
-  reset(){this.pause();this.transport.seek(0);}
+  reset(){this.pause();this.transport.seek(this.transport.start);}
   clear(){this.generation++;this.buffer=null;this.reset();}
   private sync(){
     this.stopSource();if(!this.buffer||!this.transport.playing)return;
