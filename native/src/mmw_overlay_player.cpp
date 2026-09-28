@@ -3783,8 +3783,9 @@ void main() {
         const std::array<Vec2, 4> maskUv{
             Vec2{1.0f - kGaugeMaskInset, 0.0f}, Vec2{kGaugeMaskInset, 0.0f},
             Vec2{kGaugeMaskInset, 1.0f}, Vec2{1.0f - kGaugeMaskInset, 1.0f}};
-        // 项3：SuperFever 时 color 贴图沿长度(V)滚动（MaterialST offset；速度占位可调，需 color 纹理 WRAP_T=REPEAT）。
-        constexpr float kFlowSpeed = 0.35f;
+        // 项3：SuperFever 时 color 贴图沿长度(V)滚动（MaterialST offset，需 color 纹理 WRAP_T=REPEAT）。
+        // 速率=原包实证：clip_FeverGauge_SuperFever 的 offset 在 1.5s(loop) 内线性滚 1.0(-0.14→-1.14)=0.667/s。
+        constexpr float kFlowSpeed = 1.0f / 1.5f;
         const float colorVoff = gPlayer.superFeverEnabled ? std::fmod(chartTimeSec * kFlowSpeed, 1.0f) : 0.0f;
         auto quad = [&](GLuint tex, float u0, float u1, float vtop, float voff, const Color& col, BlendMode bl, GLuint maskId) {
             for (int s = 0; s < 2; ++s) {
