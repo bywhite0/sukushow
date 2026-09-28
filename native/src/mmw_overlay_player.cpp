@@ -1708,6 +1708,92 @@ namespace
             buildStaticVertices();
         }
 
+        // 「欠幕层」：需沉到音符之下的世界层特效（如 fever 计量条）。调用方以屏幕像素
+        // （与 drawFeverOverlay 的 px()/py() 同一空间）推入四边形，这里转 clip
+        // （reciprocalW=1，屏幕对齐无透视，像素位置与 ImGui overlay 完全一致），
+        // 在 drawRuntime(音符) 之前绘制，从而让音符盖在其上。每帧用完即清。
+        struct UnderlayBatch
+        {
+            GLuint textureId = 0;
+            BlendMode blend = BlendMode::Normal;
+            std::vector<float> vertices;
+        };
+        std::vector<UnderlayBatch> mUnderlayBatches;
+
+        void clearUnderlay() { mUnderlayBatches.clear(); }
+
+        void pushUnderlayQuad(
+            GLuint texId,
+            const std::array<Vec2, 4>& screenPts,
+            const std::array<Vec2, 4>& uvs,
+            const Color& color,
+            BlendMode blend)
+        {
+            if (texId == 0) {
+                return;
+            }
+            const float w = static_cast<float>(std::max(1, mPixelWidth));
+            const float h = static_cast<float>(std::max(1, mPixelHeight));
+            auto toClip = [&](const Vec2& p) { return Vec2{p.x / w * 2.0f - 1.0f, 1.0f - p.y / h * 2.0f}; };
+            if (mUnderlayBatches.empty() ||
+                mUnderlayBatches.back().textureId != texId ||
+                mUnderlayBatches.back().blend != blend) {
+                mUnderlayBatches.push_back(UnderlayBatch{texId, blend, {}});
+            }
+            std::vector<float>& out = mUnderlayBatches.back().vertices;
+            const std::array<Vec2, 4> c{
+                toClip(screenPts[0]), toClip(screenPts[1]), toClip(screenPts[2]), toClip(screenPts[3])};
+            pushVertex(out, c[0], uvs[0], color, 1.0f);
+            pushVertex(out, c[1], uvs[1], color, 1.0f);
+            pushVertex(out, c[2], uvs[2], color, 1.0f);
+            pushVertex(out, c[0], uvs[0], color, 1.0f);
+            pushVertex(out, c[2], uvs[2], color, 1.0f);
+            pushVertex(out, c[3], uvs[3], color, 1.0f);
+        }
+
+        // 纯色顶点渐变四边形（无贴图）推入欠幕层：用 1x1 白纹理，颜色取自各顶点，
+        // 供 fever 计量条闪光等程序化辉光使用（等价 ImGui 的 addQuadGradient）。
+        void pushUnderlaySolidQuad(
+            const std::array<Vec2, 4>& screenPts,
+            const std::array<Color, 4>& cols,
+            BlendMode blend)
+        {
+            if (mWhiteTex == 0) {
+                return;
+            }
+            const float w = static_cast<float>(std::max(1, mPixelWidth));
+            const float h = static_cast<float>(std::max(1, mPixelHeight));
+            auto toClip = [&](const Vec2& p) { return Vec2{p.x / w * 2.0f - 1.0f, 1.0f - p.y / h * 2.0f}; };
+            if (mUnderlayBatches.empty() ||
+                mUnderlayBatches.back().textureId != mWhiteTex ||
+                mUnderlayBatches.back().blend != blend) {
+                mUnderlayBatches.push_back(UnderlayBatch{mWhiteTex, blend, {}});
+            }
+            std::vector<float>& out = mUnderlayBatches.back().vertices;
+            const std::array<Vec2, 4> c{
+                toClip(screenPts[0]), toClip(screenPts[1]), toClip(screenPts[2]), toClip(screenPts[3])};
+            const Vec2 uv{0.0f, 0.0f};
+            pushVertex(out, c[0], uv, cols[0], 1.0f);
+            pushVertex(out, c[1], uv, cols[1], 1.0f);
+            pushVertex(out, c[2], uv, cols[2], 1.0f);
+            pushVertex(out, c[0], uv, cols[0], 1.0f);
+            pushVertex(out, c[2], uv, cols[2], 1.0f);
+            pushVertex(out, c[3], uv, cols[3], 1.0f);
+        }
+
+        void drawUnderlay()
+        {
+            for (UnderlayBatch& batch : mUnderlayBatches) {
+                if (batch.vertices.empty()) {
+                    continue;
+                }
+                Texture tex;
+                tex.id = batch.textureId;
+                drawVertices(tex, batch.vertices, false, batch.blend);
+            }
+            mUnderlayBatches.clear();
+        }
+
         void renderFrame(const float* packedQuads, int quadCount, bool drawStaticScene, float playfieldVisibility = 1.0f)
         {
             const auto viewport = previewViewportRect();
@@ -1738,6 +1824,7 @@ namespace
 
             mRuntimeVisibility = visibility;
             applyRuntimeStageCoverScissor(viewport);
+            drawUnderlay();
             drawRuntime(packedQuads, quadCount);
             clearRuntimeStageCoverScissor();
             mRuntimeVisibility = 1.0f;
@@ -1783,6 +1870,7 @@ namespace
         GLuint mEffectProgram = 0;
         GLuint mVao = 0;
         GLuint mVbo = 0;
+        GLuint mWhiteTex = 0;
 
         Texture mBackground;
         Texture mStage;
@@ -1912,6 +2000,19 @@ void main() {
 
             glEnable(GL_BLEND);
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+            // 1x1 白纹理：欠幕层里画纯色顶点渐变（如 fever 计量条闪光）用，
+            // 等价 ImGui 的 TexUvWhitePixel（shader 是 texture*color，白纹理→纯顶点色）。
+            const unsigned char whitePixel[4] = {255, 255, 255, 255};
+            glGenTextures(1, &mWhiteTex);
+            glBindTexture(GL_TEXTURE_2D, mWhiteTex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
 
         void buildStaticVertices()
@@ -3405,6 +3506,210 @@ void main() {
         }
     }
 
+    inline Color imu32ToColor(ImU32 c)
+    {
+        return Color{
+            static_cast<float>((c >> IM_COL32_R_SHIFT) & 0xFFu) / 255.0f,
+            static_cast<float>((c >> IM_COL32_G_SHIFT) & 0xFFu) / 255.0f,
+            static_cast<float>((c >> IM_COL32_B_SHIFT) & 0xFFu) / 255.0f,
+            static_cast<float>((c >> IM_COL32_A_SHIFT) & 0xFFu) / 255.0f,
+        };
+    }
+
+    // drawBeamGlow 的 GL 欠幕层版：几何/环带/颜色算法与 drawBeamGlow 逐字一致，只把
+    // addQuadGradient 换成 renderer.pushUnderlaySolidQuad(加色)。供 fever 计量条闪光沉到音符之下。
+    template <typename WidthFn, typename ColorFn>
+    void beamGlowToUnderlay(
+        GlRenderer& renderer,
+        const std::function<float(float)>& px,
+        const std::function<float(float)>& py,
+        float screenCenterX,
+        float apexHalf,
+        float slope,
+        float peakAlpha,
+        int segments,
+        WidthFn widthAt,
+        ColorFn colorAt)
+    {
+        constexpr int kBandCount = static_cast<int>(sizeof(BEAM_GLOW_BANDS) / sizeof(BEAM_GLOW_BANDS[0]));
+        auto halfAt = [&](float y) { return widthAt(y) * 0.5f; };
+        for (int side = 0; side < 2; ++side) {
+            const float dir = (side == 0) ? -1.0f : 1.0f;
+            for (int i = 0; i < segments; ++i) {
+                const float y0 = 1080.0f * static_cast<float>(i) / static_cast<float>(segments);
+                const float y1 = 1080.0f * static_cast<float>(i + 1) / static_cast<float>(segments);
+                const float c0 = screenCenterX + dir * (apexHalf + slope * y0);
+                const float c1 = screenCenterX + dir * (apexHalf + slope * y1);
+                const float h0 = halfAt(y0);
+                const float h1 = halfAt(y1);
+                for (int bs = 0; bs < 2; ++bs) {
+                    const float bd = (bs == 0) ? -1.0f : 1.0f;
+                    for (int b = 0; b < kBandCount; ++b) {
+                        const float s0 = BEAM_GLOW_BANDS[b].s0;
+                        const float s1 = BEAM_GLOW_BANDS[b].s1;
+                        const float bandAlpha = BEAM_GLOW_BANDS[b].alpha;
+                        const Color c0b = imu32ToColor(colorAt(y0, peakAlpha * bandAlpha));
+                        const Color c1b = imu32ToColor(colorAt(y1, peakAlpha * bandAlpha));
+                        renderer.pushUnderlaySolidQuad(
+                            {Vec2{px(c1 + bd * s1 * h1), py(y1)}, Vec2{px(c1 + bd * s0 * h1), py(y1)},
+                             Vec2{px(c0 + bd * s0 * h0), py(y0)}, Vec2{px(c0 + bd * s1 * h0), py(y0)}},
+                            {c1b, c1b, c0b, c0b},
+                            BlendMode::Additive);
+                    }
+                }
+            }
+        }
+    }
+
+    // 计量条闪光(fx_fever_gauge_flash_v2)= SuperFever 充能指示：一发白色加色辉光上扫，
+    // 迁到 GL 欠幕层（原在 drawFeverOverlay 里走 drawBeamGlow），envelope/几何逐字照搬。
+    void feverFlashToUnderlay(
+        GlRenderer& renderer,
+        const std::function<float(float)>& px,
+        const std::function<float(float)>& py,
+        float chanceLocalSec,
+        float overlayAlpha)
+    {
+        const float ft = chanceLocalSec;
+        const float flashEnv = ft < FEVER_GAUGE_FLASH_DELAY_SEC
+            ? 0.0f
+            : (ft < FEVER_GAUGE_FLASH_PEAK_SEC
+                   ? (ft - FEVER_GAUGE_FLASH_DELAY_SEC) /
+                         (FEVER_GAUGE_FLASH_PEAK_SEC - FEVER_GAUGE_FLASH_DELAY_SEC)
+                   : clamp01(1.0f - (ft - FEVER_GAUGE_FLASH_PEAK_SEC) /
+                                        (FEVER_GAUGE_FLASH_DURATION_SEC - FEVER_GAUGE_FLASH_PEAK_SEC)));
+        if (ft >= FEVER_GAUGE_FLASH_DURATION_SEC || flashEnv <= 0.001f) {
+            return;
+        }
+        auto flashWidthAt = [&](float y) {
+            constexpr int kN = static_cast<int>(sizeof(FEVER_GAUGE_FLASH_WIDTH) / sizeof(FEVER_GAUGE_FLASH_WIDTH[0]));
+            if (y <= FEVER_GAUGE_FLASH_WIDTH[0][0]) return FEVER_GAUGE_FLASH_WIDTH[0][1];
+            if (y >= FEVER_GAUGE_FLASH_WIDTH[kN - 1][0]) return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
+            for (int i = 1; i < kN; ++i) {
+                if (y <= FEVER_GAUGE_FLASH_WIDTH[i][0]) {
+                    const float y0 = FEVER_GAUGE_FLASH_WIDTH[i - 1][0];
+                    const float y1 = FEVER_GAUGE_FLASH_WIDTH[i][0];
+                    const float k = (y - y0) / (y1 - y0);
+                    return FEVER_GAUGE_FLASH_WIDTH[i - 1][1] +
+                           (FEVER_GAUGE_FLASH_WIDTH[i][1] - FEVER_GAUGE_FLASH_WIDTH[i - 1][1]) * k;
+                }
+            }
+            return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
+        };
+        auto flashColorAt = [&](float, float a) {
+            return IM_COL32(
+                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[0] * 255.0f)),
+                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[1] * 255.0f)),
+                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[2] * 255.0f)),
+                static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
+        };
+        beamGlowToUnderlay(renderer, px, py, 960.5f,
+            CHANCE_GAUGE_APEX_HALF_SEP, CHANCE_GAUGE_SLOPE,
+            flashEnv, CHANCE_BEAM_SEGMENTS, flashWidthAt, flashColorAt);
+    }
+
+    // 计量条（fever_gauge_color/outline/light）沉到音符之下：在 GL renderFrame 的
+    // drawRuntime 之前推入「欠幕层」。几何/UV/alpha 与 drawFeverOverlay 内旧实现逐字一致
+    // （屏幕像素坐标不变，仅渲染层从 ImGui 顶层改为 GL 音符层），位置零漂移，只改层级。
+    // ⚠ 下面的 timing 段与 drawFeverOverlay 开头必须保持同步。
+    void feverGaugeToUnderlay(
+        GlRenderer& renderer,
+        const std::unordered_map<std::string, Texture>& hudTextures,
+        float chartTimeSec,
+        float hudAlpha)
+    {
+        if (gPlayer.feverStartSec < 0.0 || gPlayer.feverEndSec <= gPlayer.feverStartSec) {
+            return;
+        }
+        if (!gPlayer.feverDisplayEnabled) {
+            return;
+        }
+        const float overlayAlpha = clamp01(hudAlpha);
+        if (overlayAlpha <= 0.001f) {
+            return;
+        }
+        const float feverLocalSec = chartTimeSec - static_cast<float>(gPlayer.feverStartSec);
+        const float feverProgress = gPlayer.totalFeverCount > 0.0
+            ? static_cast<float>(gPlayer.feverCount / gPlayer.totalFeverCount)
+            : 0.0f;
+        const bool charging = feverProgress >= CHANCE_PROGRESS_THRESHOLD;
+        if (charging && gPlayer.feverChanceAnimStartSec < 0.0) {
+            gPlayer.feverChanceAnimStartSec = chartTimeSec;
+        }
+        if (!charging) {
+            gPlayer.feverChanceAnimStartSec = -1.0;
+        }
+        const bool chanceActive = charging && feverLocalSec < 0.0f;
+        if (!chanceActive) {
+            return;
+        }
+
+        const auto previewRectWindow = renderer.previewRectWindow();
+        const UiTransform tx = buildUiTransform(previewRectWindow[2], previewRectWindow[3]);
+        auto px = [&](float x) { return static_cast<float>(previewRectWindow[0]) + tx.offsetX + x * tx.scale; };
+        auto py = [&](float y) { return static_cast<float>(previewRectWindow[1]) + tx.offsetY + y * tx.scale; };
+        const float chanceSpanProgress = clamp01(
+            (feverProgress - CHANCE_PROGRESS_THRESHOLD) /
+            std::max(1.0f - CHANCE_PROGRESS_THRESHOLD, 0.0001f));
+        const float tTop = clamp01(1.0f - chanceSpanProgress);
+        auto lerpf = [](float lo, float hi, float t) { return lo + (hi - lo) * t; };
+        const float yTop = lerpf(GAUGE_MESH_TOP_Y, GAUGE_MESH_BOT_Y, tTop) + FEVER_GAUGE_Y_OFFSET;
+        const float yBot = GAUGE_MESH_BOT_Y + FEVER_GAUGE_Y_OFFSET;
+
+        // 计量条闪光先于本体推入欠幕层（在其下层），与旧 ImGui 顺序一致；
+        // 此处已确认 chanceActive + feverDisplayEnabled。
+        const float chanceLocalSec = gPlayer.feverChanceAnimStartSec >= 0.0
+            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
+            : 0.0f;
+        if (gPlayer.superFeverEnabled) {
+            feverFlashToUnderlay(renderer, px, py, chanceLocalSec, overlayAlpha);
+        }
+
+        const Texture* gaugeColorTex = findTexture(hudTextures, "fever_gauge_color");
+        if (gaugeColorTex == nullptr || gaugeColorTex->id == 0) {
+            return;
+        }
+        const bool feverLineReached = yTop <= FEVER_POINTER_CENTER_Y;
+        const float gU0 = feverLineReached ? 0.5f : 0.0f;
+        const float gU1 = feverLineReached ? 1.0f : 0.5f;
+        const float vFull = 1.0f - tTop;
+        const float vColor = vFull * 0.94f;
+        const float innerTopOff = lerpf(GAUGE_MESH_INNER_TOP, GAUGE_MESH_INNER_BOT, tTop);
+        const float outerTopOff = lerpf(GAUGE_MESH_OUTER_TOP, GAUGE_MESH_OUTER_BOT, tTop);
+        float itx[2], otx[2], ibx[2], obx[2];
+        for (int s = 0; s < 2; ++s) {
+            const float dir = (s == 0) ? -1.0f : 1.0f;
+            itx[s] = GAUGE_MESH_CENTER_X + dir * innerTopOff;
+            otx[s] = GAUGE_MESH_CENTER_X + dir * outerTopOff;
+            ibx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_BOT;
+            obx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_BOT;
+        }
+        auto quad = [&](GLuint tex, float u0, float u1, float vtop, const Color& col, BlendMode bl, int s) {
+            renderer.pushUnderlayQuad(tex,
+                {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
+                 Vec2{px(itx[s]), py(yTop)}, Vec2{px(otx[s]), py(yTop)}},
+                {Vec2{u1, 0.0f}, Vec2{u0, 0.0f}, Vec2{u0, vtop}, Vec2{u1, vtop}}, col, bl);
+        };
+        const Color colorTint{1.0f, 1.0f, 1.0f, clamp01(CHANCE_GAUGE_FILL_ALPHA * overlayAlpha)};
+        const Texture* outlineTex = findTexture(hudTextures, "fever_gauge_outline");
+        const Color outlineTint{1.0f, 1.0f, 1.0f, clamp01(FEVER_GAUGE_OUTLINE_ALPHA * overlayAlpha)};
+        for (int s = 0; s < 2; ++s) {
+            quad(gaugeColorTex->id, gU0, gU1, vColor, colorTint, BlendMode::Normal, s);
+            if (outlineTex && outlineTex->id) {
+                quad(outlineTex->id, 0.0f, 1.0f, vFull, outlineTint, BlendMode::Normal, s);
+            }
+        }
+        const Texture* lightTex = findTexture(hudTextures, "fever_gauge_light");
+        if (lightTex != nullptr && lightTex->id != 0) {
+            const float pulse = 1.0f + FEVER_GAUGE_LIGHT_PULSE *
+                std::sin(chartTimeSec * FEVER_GAUGE_LIGHT_PULSE_HZ * 6.2831853f);
+            const Color lightTint{1.0f, 1.0f, 1.0f, clamp01(FEVER_GAUGE_LIGHT_ALPHA * pulse * overlayAlpha)};
+            for (int s = 0; s < 2; ++s) {
+                quad(lightTex->id, 0.0f, 1.0f, vFull, lightTint, BlendMode::Additive, s);
+            }
+        }
+    }
+
     void drawFeverOverlay(
         GlRenderer& renderer,
         const std::unordered_map<std::string, Texture>& hudTextures,
@@ -3543,114 +3848,13 @@ void main() {
             }
         }
 
-        // 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示：进 super 区间时放一发
-        // 从两底角向顶点上扫的白色辉光（一发 0.8s 起→峰→尽，非持续辉光）。反汇编实证 super
-        // 专属且只 SetActive 一次（见常量处注释）；本项目 superFeverEnabled 且充能起点即
-        // super 入口，故自 chanceLocalSec=0 起放该包络。
-        if (chanceActive && gPlayer.superFeverEnabled && gPlayer.feverDisplayEnabled) {
-            const float ft = chanceLocalSec;
-            const float flashEnv = ft < FEVER_GAUGE_FLASH_DELAY_SEC
-                ? 0.0f
-                : (ft < FEVER_GAUGE_FLASH_PEAK_SEC
-                       ? (ft - FEVER_GAUGE_FLASH_DELAY_SEC) /
-                             (FEVER_GAUGE_FLASH_PEAK_SEC - FEVER_GAUGE_FLASH_DELAY_SEC)
-                       : clamp01(1.0f - (ft - FEVER_GAUGE_FLASH_PEAK_SEC) /
-                                            (FEVER_GAUGE_FLASH_DURATION_SEC - FEVER_GAUGE_FLASH_PEAK_SEC)));
-            if (ft < FEVER_GAUGE_FLASH_DURATION_SEC && flashEnv > 0.001f) {
-                auto flashWidthAt = [&](float y) {
-                    constexpr int kN = static_cast<int>(sizeof(FEVER_GAUGE_FLASH_WIDTH) / sizeof(FEVER_GAUGE_FLASH_WIDTH[0]));
-                    if (y <= FEVER_GAUGE_FLASH_WIDTH[0][0]) return FEVER_GAUGE_FLASH_WIDTH[0][1];
-                    if (y >= FEVER_GAUGE_FLASH_WIDTH[kN - 1][0]) return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
-                    for (int i = 1; i < kN; ++i) {
-                        if (y <= FEVER_GAUGE_FLASH_WIDTH[i][0]) {
-                            const float y0 = FEVER_GAUGE_FLASH_WIDTH[i - 1][0];
-                            const float y1 = FEVER_GAUGE_FLASH_WIDTH[i][0];
-                            const float k = (y - y0) / (y1 - y0);
-                            return FEVER_GAUGE_FLASH_WIDTH[i - 1][1] +
-                                   (FEVER_GAUGE_FLASH_WIDTH[i][1] - FEVER_GAUGE_FLASH_WIDTH[i - 1][1]) * k;
-                        }
-                    }
-                    return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
-                };
-                auto flashColorAt = [&](float, float a) {
-                    return IM_COL32(
-                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[0] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[1] * 255.0f)),
-                        static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[2] * 255.0f)),
-                        static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
-                };
-                beginAdditive(overlay);
-                drawBeamGlow(overlay, px, py, 960.5f,
-                             CHANCE_GAUGE_APEX_HALF_SEP, CHANCE_GAUGE_SLOPE,
-                             flashEnv,
-                             CHANCE_BEAM_SEGMENTS,
-                             flashWidthAt,
-                             flashColorAt);
-                endAdditive(overlay);
-            }
-        }
+        // 计量条闪光（fx_fever_gauge_flash_v2）已迁到 GL 欠幕层：见 feverFlashToUnderlay()，
+        // 由 feverGaugeToUnderlay() 在 renderFrame 的 drawRuntime 之前推入，使其沉到音符之下。
 
-        // ---- 充能计量条 ----
-        // 只在 FeverChance 态可见（原包在 StartProgress 里才 SetActive(true)，
-        // 且 UpdateFeverGauge 仅在 feverState ∈ {1,2} 时更新）。
-        // 已充能部分从底端（外侧）向上填充。
-        if (chanceActive && gPlayer.feverDisplayEnabled) {
-            // 直接按 fever_lane_mesh 画两臂(镜像),再叠 描边 + 加色辉光(均为素材真值)。
-            const float chanceSpanProgress = clamp01(
-                (feverProgress - CHANCE_PROGRESS_THRESHOLD) /
-                std::max(1.0f - CHANCE_PROGRESS_THRESHOLD, 0.0001f));
-            const float tTop = clamp01(1.0f - chanceSpanProgress);  // 从底(宽)向上填到 tTop
-            auto lerpf = [](float lo, float hi, float t) { return lo + (hi - lo) * t; };
-            const float yTop = lerpf(GAUGE_MESH_TOP_Y, GAUGE_MESH_BOT_Y, tTop) + FEVER_GAUGE_Y_OFFSET;
-            const float yBot = GAUGE_MESH_BOT_Y + FEVER_GAUGE_Y_OFFSET;
-            const Texture* gaugeColorTex = findTexture(hudTextures, "fever_gauge_color");
-            if (gaugeColorTex != nullptr && gaugeColorTex->id != 0) {
-                const bool feverLineReached = yTop <= FEVER_POINTER_CENTER_Y;
-                const float gU0 = feverLineReached ? 0.5f : 0.0f;  // 内缘(mesh U=0)
-                const float gU1 = feverLineReached ? 1.0f : 0.5f;  // 外缘(mesh U=1)
-                const float vFull = 1.0f - tTop;                   // mesh V:顶=1、底=0(light/outline 满幅)
-                const float vColor = vFull * 0.94f;                // color 材质 _MainTex scale.y=0.94(UnityPy 实测)
-                const float innerTopOff = lerpf(GAUGE_MESH_INNER_TOP, GAUGE_MESH_INNER_BOT, tTop);
-                const float outerTopOff = lerpf(GAUGE_MESH_OUTER_TOP, GAUGE_MESH_OUTER_BOT, tTop);
-                float itx[2], otx[2], ibx[2], obx[2];  // 每臂四角 X(color/outline/light 共用)
-                for (int s = 0; s < 2; ++s) {
-                    const float dir = (s == 0) ? -1.0f : 1.0f;
-                    itx[s] = GAUGE_MESH_CENTER_X + dir * innerTopOff;
-                    otx[s] = GAUGE_MESH_CENTER_X + dir * outerTopOff;
-                    ibx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_BOT;
-                    obx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_BOT;
-                }
-                auto quad = [&](ImTextureID tex, float u0, float u1, float vtop, ImU32 col, int s) {
-                    // 顶点:外底 → 内底 → 内顶 → 外顶
-                    overlay->AddImageQuad(tex,
-                        ImVec2(px(obx[s]), py(yBot)), ImVec2(px(ibx[s]), py(yBot)),
-                        ImVec2(px(itx[s]), py(yTop)), ImVec2(px(otx[s]), py(yTop)),
-                        ImVec2(u1, 0.0f), ImVec2(u0, 0.0f), ImVec2(u0, vtop), ImVec2(u1, vtop), col);
-                };
-                // 1) 颜色层 + 2) 描边层(都走 alpha,描边用全幅 UV)
-                const ImU32 colorTint = IM_COL32(255, 255, 255,
-                    static_cast<int>(std::lround(clamp01(CHANCE_GAUGE_FILL_ALPHA * overlayAlpha) * 255.0f)));
-                const Texture* outlineTex = findTexture(hudTextures, "fever_gauge_outline");
-                const ImU32 outlineTint = IM_COL32(255, 255, 255,
-                    static_cast<int>(std::lround(clamp01(FEVER_GAUGE_OUTLINE_ALPHA * overlayAlpha) * 255.0f)));
-                for (int s = 0; s < 2; ++s) {
-                    quad(textureId(*gaugeColorTex), gU0, gU1, vColor, colorTint, s);
-                    if (outlineTex && outlineTex->id) quad(textureId(*outlineTex), 0.0f, 1.0f, vFull, outlineTint, s);
-                }
-                // 3) 辉光层(加色 + 呼吸)。clip_fevergauge_* 曲线未导出,呼吸为占位可调。
-                const Texture* lightTex = findTexture(hudTextures, "fever_gauge_light");
-                if (lightTex != nullptr && lightTex->id != 0) {
-                    const float pulse = 1.0f + FEVER_GAUGE_LIGHT_PULSE *
-                        std::sin(chartTimeSec * FEVER_GAUGE_LIGHT_PULSE_HZ * 6.2831853f);
-                    const ImU32 lightTint = IM_COL32(255, 255, 255, static_cast<int>(
-                        std::lround(clamp01(FEVER_GAUGE_LIGHT_ALPHA * pulse * overlayAlpha) * 255.0f)));
-                    const ImTextureID lightId = textureId(*lightTex);
-                    beginAdditive(overlay);
-                    for (int s = 0; s < 2; ++s) quad(lightId, 0.0f, 1.0f, vFull, lightTint, s);
-                    endAdditive(overlay);
-                }
-            }
-        }
+        // ---- 充能计量条（已迁到 GL 欠幕层）----
+        // 计量条本体(color/outline/light)改由 feverGaugeToUnderlay() 在 renderFrame 的
+        // drawRuntime 之前用 GL 绘制，使音符盖在其上（见该函数）。几何/UV/alpha 与旧实现
+        // 逐字一致，位置不变，仅渲染层级下沉。此处不再画计量条本体。
 
         // ---- 计量条上的 Fever / SuperFever 指针 ----
         // 原包口径：两个指针文字由 `FadeInFeverLineText` 在 `FadeInFeverChance`
@@ -4947,6 +5151,11 @@ void main() {
         render(chartTimeSec);
         const float* packed = gameplaySuppressed ? nullptr : getQuadBufferPointer();
         const int quadCount = gameplaySuppressed ? 0 : getQuadCount();
+        // fever 计量条本体：在 GL 音符之前推入欠幕层，使音符盖住它（层级重构，见 feverGaugeToUnderlay）。
+        // hudAlpha 传 playfieldVisibility，与 drawFeverOverlay 保持一致。
+        if (!gameplaySuppressed) {
+            feverGaugeToUnderlay(*gPlayer.renderer, gPlayer.hudTextures, chartTimeSec, playfieldVisibility);
+        }
         gPlayer.renderer->renderFrame(packed, quadCount, true, playfieldVisibility);
 
         ImGuiIO& io = ImGui::GetIO();
