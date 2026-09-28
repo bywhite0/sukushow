@@ -74,6 +74,7 @@ extern "C"
 namespace
 {
     constexpr int FLOATS_PER_VERTEX = 9;
+    constexpr int UNDERLAY_FLOATS_PER_VERTEX = 10;  // 欠幕层: pos2 + uv2 + maskUv2 + color4（屏幕对齐，无 reciprocalW）
     constexpr double NOTE_AUDIO_DELAY_SEC = 0.05;
     constexpr int FLOATS_PER_QUAD = 25;
 
@@ -1715,6 +1716,7 @@ namespace
         struct UnderlayBatch
         {
             GLuint textureId = 0;
+            GLuint maskTextureId = 0;
             BlendMode blend = BlendMode::Normal;
             std::vector<float> vertices;
         };
@@ -1722,75 +1724,113 @@ namespace
 
         void clearUnderlay() { mUnderlayBatches.clear(); }
 
+        // 欠幕层顶点：pos(clip) + uv(内容) + maskUv(遮罩) + rgba，共 UNDERLAY_FLOATS_PER_VERTEX。
+        static void pushUnderlayVertex(
+            std::vector<float>& out, const Vec2& pos, const Vec2& uv, const Vec2& maskUv, const Color& color)
+        {
+            out.push_back(pos.x); out.push_back(pos.y);
+            out.push_back(uv.x); out.push_back(uv.y);
+            out.push_back(maskUv.x); out.push_back(maskUv.y);
+            out.push_back(color.r); out.push_back(color.g); out.push_back(color.b); out.push_back(color.a);
+        }
+
+        // 取批次：内容/遮罩纹理与混合都一致才合并，否则新建（保持提交顺序）。
+        std::vector<float>& underlayBatch(GLuint texId, GLuint maskId, BlendMode blend)
+        {
+            if (mUnderlayBatches.empty() ||
+                mUnderlayBatches.back().textureId != texId ||
+                mUnderlayBatches.back().maskTextureId != maskId ||
+                mUnderlayBatches.back().blend != blend) {
+                mUnderlayBatches.push_back(UnderlayBatch{texId, maskId, blend, {}});
+            }
+            return mUnderlayBatches.back().vertices;
+        }
+
         void pushUnderlayQuad(
             GLuint texId,
             const std::array<Vec2, 4>& screenPts,
             const std::array<Vec2, 4>& uvs,
             const Color& color,
-            BlendMode blend)
+            BlendMode blend,
+            GLuint maskTexId = 0,
+            const std::array<Vec2, 4>* maskUvs = nullptr)
         {
             if (texId == 0) {
                 return;
             }
+            const GLuint maskId = maskTexId != 0 ? maskTexId : mWhiteTex;
             const float w = static_cast<float>(std::max(1, mPixelWidth));
             const float h = static_cast<float>(std::max(1, mPixelHeight));
             auto toClip = [&](const Vec2& p) { return Vec2{p.x / w * 2.0f - 1.0f, 1.0f - p.y / h * 2.0f}; };
-            if (mUnderlayBatches.empty() ||
-                mUnderlayBatches.back().textureId != texId ||
-                mUnderlayBatches.back().blend != blend) {
-                mUnderlayBatches.push_back(UnderlayBatch{texId, blend, {}});
-            }
-            std::vector<float>& out = mUnderlayBatches.back().vertices;
+            std::vector<float>& out = underlayBatch(texId, maskId, blend);
             const std::array<Vec2, 4> c{
                 toClip(screenPts[0]), toClip(screenPts[1]), toClip(screenPts[2]), toClip(screenPts[3])};
-            pushVertex(out, c[0], uvs[0], color, 1.0f);
-            pushVertex(out, c[1], uvs[1], color, 1.0f);
-            pushVertex(out, c[2], uvs[2], color, 1.0f);
-            pushVertex(out, c[0], uvs[0], color, 1.0f);
-            pushVertex(out, c[2], uvs[2], color, 1.0f);
-            pushVertex(out, c[3], uvs[3], color, 1.0f);
+            const std::array<Vec2, 4> m = maskUvs ? *maskUvs : uvs;
+            pushUnderlayVertex(out, c[0], uvs[0], m[0], color);
+            pushUnderlayVertex(out, c[1], uvs[1], m[1], color);
+            pushUnderlayVertex(out, c[2], uvs[2], m[2], color);
+            pushUnderlayVertex(out, c[0], uvs[0], m[0], color);
+            pushUnderlayVertex(out, c[2], uvs[2], m[2], color);
+            pushUnderlayVertex(out, c[3], uvs[3], m[3], color);
         }
 
-        // 纯色顶点渐变四边形（无贴图）推入欠幕层：用 1x1 白纹理，颜色取自各顶点，
-        // 供 fever 计量条闪光等程序化辉光使用（等价 ImGui 的 addQuadGradient）。
+        // 纯色顶点渐变四边形（内容用 1x1 白纹理，颜色取自各顶点）推入欠幕层，
+        // 供 fever 计量条闪光等程序化辉光使用（等价 ImGui 的 addQuadGradient）。可选软边遮罩。
         void pushUnderlaySolidQuad(
             const std::array<Vec2, 4>& screenPts,
             const std::array<Color, 4>& cols,
-            BlendMode blend)
+            BlendMode blend,
+            GLuint maskTexId = 0,
+            const std::array<Vec2, 4>* maskUvs = nullptr)
         {
             if (mWhiteTex == 0) {
                 return;
             }
+            const GLuint maskId = maskTexId != 0 ? maskTexId : mWhiteTex;
             const float w = static_cast<float>(std::max(1, mPixelWidth));
             const float h = static_cast<float>(std::max(1, mPixelHeight));
             auto toClip = [&](const Vec2& p) { return Vec2{p.x / w * 2.0f - 1.0f, 1.0f - p.y / h * 2.0f}; };
-            if (mUnderlayBatches.empty() ||
-                mUnderlayBatches.back().textureId != mWhiteTex ||
-                mUnderlayBatches.back().blend != blend) {
-                mUnderlayBatches.push_back(UnderlayBatch{mWhiteTex, blend, {}});
-            }
-            std::vector<float>& out = mUnderlayBatches.back().vertices;
+            std::vector<float>& out = underlayBatch(mWhiteTex, maskId, blend);
             const std::array<Vec2, 4> c{
                 toClip(screenPts[0]), toClip(screenPts[1]), toClip(screenPts[2]), toClip(screenPts[3])};
-            const Vec2 uv{0.0f, 0.0f};
-            pushVertex(out, c[0], uv, cols[0], 1.0f);
-            pushVertex(out, c[1], uv, cols[1], 1.0f);
-            pushVertex(out, c[2], uv, cols[2], 1.0f);
-            pushVertex(out, c[0], uv, cols[0], 1.0f);
-            pushVertex(out, c[2], uv, cols[2], 1.0f);
-            pushVertex(out, c[3], uv, cols[3], 1.0f);
+            const Vec2 z{0.0f, 0.0f};
+            const std::array<Vec2, 4> m = maskUvs ? *maskUvs : std::array<Vec2, 4>{z, z, z, z};
+            pushUnderlayVertex(out, c[0], z, m[0], cols[0]);
+            pushUnderlayVertex(out, c[1], z, m[1], cols[1]);
+            pushUnderlayVertex(out, c[2], z, m[2], cols[2]);
+            pushUnderlayVertex(out, c[0], z, m[0], cols[0]);
+            pushUnderlayVertex(out, c[2], z, m[2], cols[2]);
+            pushUnderlayVertex(out, c[3], z, m[3], cols[3]);
         }
 
         void drawUnderlay()
         {
+            if (mUnderlayBatches.empty()) {
+                return;
+            }
+            glUseProgram(mUnderlayProgram);
+            glBindVertexArray(mUnderlayVao);
+            glBindBuffer(GL_ARRAY_BUFFER, mUnderlayVbo);
             for (UnderlayBatch& batch : mUnderlayBatches) {
                 if (batch.vertices.empty()) {
                     continue;
                 }
-                Texture tex;
-                tex.id = batch.textureId;
-                drawVertices(tex, batch.vertices, false, batch.blend);
+                if (batch.blend == BlendMode::Additive) {
+                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
+                } else {
+                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                }
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(batch.vertices.size() * sizeof(float)), batch.vertices.data(), GL_DYNAMIC_DRAW);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, batch.maskTextureId);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, batch.textureId);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size() / UNDERLAY_FLOATS_PER_VERTEX));
             }
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindVertexArray(0);
             mUnderlayBatches.clear();
         }
 
@@ -1871,6 +1911,9 @@ namespace
         GLuint mVao = 0;
         GLuint mVbo = 0;
         GLuint mWhiteTex = 0;
+        GLuint mUnderlayProgram = 0;  // 欠幕层双纹理程序：内容 × 顶点色 × mask.a
+        GLuint mUnderlayVao = 0;
+        GLuint mUnderlayVbo = 0;
 
         Texture mBackground;
         Texture mStage;
@@ -2013,6 +2056,57 @@ void main() {
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
             glBindTexture(GL_TEXTURE_2D, 0);
+
+            // 欠幕层双纹理程序：outColor = 内容 × 顶点色 × mask.a（软边遮罩），屏幕对齐无透视。
+            static constexpr const char* kUnderlayVertexShader = R"GLSL(#version 300 es
+precision mediump float;
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec2 aUv;
+layout (location = 2) in vec2 aMaskUv;
+layout (location = 3) in vec4 aColor;
+out vec2 vUv;
+out vec2 vMaskUv;
+out vec4 vColor;
+void main() {
+    vUv = aUv;
+    vMaskUv = aMaskUv;
+    vColor = aColor;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+)GLSL";
+            static constexpr const char* kUnderlayFragmentShader = R"GLSL(#version 300 es
+precision mediump float;
+in vec2 vUv;
+in vec2 vMaskUv;
+in vec4 vColor;
+uniform sampler2D uTexture;
+uniform sampler2D uMask;
+out vec4 outColor;
+void main() {
+    outColor = texture(uTexture, vUv) * vColor * texture(uMask, vMaskUv).a;
+}
+)GLSL";
+            mUnderlayProgram = createProgram(kUnderlayVertexShader, kUnderlayFragmentShader);
+            glUseProgram(mUnderlayProgram);
+            glUniform1i(glGetUniformLocation(mUnderlayProgram, "uTexture"), 0);
+            glUniform1i(glGetUniformLocation(mUnderlayProgram, "uMask"), 1);
+            glGenVertexArrays(1, &mUnderlayVao);
+            glGenBuffers(1, &mUnderlayVbo);
+            glBindVertexArray(mUnderlayVao);
+            glBindBuffer(GL_ARRAY_BUFFER, mUnderlayVbo);
+            glBufferData(GL_ARRAY_BUFFER, 1024, nullptr, GL_DYNAMIC_DRAW);
+            {
+                const GLsizei ustride = UNDERLAY_FLOATS_PER_VERTEX * static_cast<GLsizei>(sizeof(float));
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, ustride, reinterpret_cast<void*>(0));
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, ustride, reinterpret_cast<void*>(2 * sizeof(float)));
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, ustride, reinterpret_cast<void*>(4 * sizeof(float)));
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, ustride, reinterpret_cast<void*>(6 * sizeof(float)));
+            }
+            glBindVertexArray(0);
         }
 
         void buildStaticVertices()
@@ -3684,29 +3778,55 @@ void main() {
             ibx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_BOT;
             obx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_BOT;
         }
-        auto quad = [&](GLuint tex, float u0, float u1, float vtop, const Color& col, BlendMode bl, int s) {
-            renderer.pushUnderlayQuad(tex,
-                {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
-                 Vec2{px(itx[s]), py(yTop)}, Vec2{px(otx[s]), py(yTop)}},
-                {Vec2{u1, 0.0f}, Vec2{u0, 0.0f}, Vec2{u0, vtop}, Vec2{u1, vtop}}, col, bl);
+        // 横截面软边遮罩 UV：只取 outline 中段 [inset, 1-inset]，避开最虚的两端 → 收窄软边（不然两侧糊）。
+        constexpr float kGaugeMaskInset = 0.30f;
+        const std::array<Vec2, 4> maskUv{
+            Vec2{1.0f - kGaugeMaskInset, 0.0f}, Vec2{kGaugeMaskInset, 0.0f},
+            Vec2{kGaugeMaskInset, 1.0f}, Vec2{1.0f - kGaugeMaskInset, 1.0f}};
+        // 项3：SuperFever 时 color 贴图沿长度(V)滚动（MaterialST offset；速度占位可调，需 color 纹理 WRAP_T=REPEAT）。
+        constexpr float kFlowSpeed = 0.35f;
+        const float colorVoff = gPlayer.superFeverEnabled ? std::fmod(chartTimeSec * kFlowSpeed, 1.0f) : 0.0f;
+        auto quad = [&](GLuint tex, float u0, float u1, float vtop, float voff, const Color& col, BlendMode bl, GLuint maskId) {
+            for (int s = 0; s < 2; ++s) {
+                renderer.pushUnderlayQuad(tex,
+                    {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
+                     Vec2{px(itx[s]), py(yTop)}, Vec2{px(otx[s]), py(yTop)}},
+                    {Vec2{u1, voff}, Vec2{u0, voff}, Vec2{u0, vtop + voff}, Vec2{u1, vtop + voff}}, col, bl,
+                    maskId, maskId ? &maskUv : nullptr);
+            }
         };
-        const Color colorTint{1.0f, 1.0f, 1.0f, clamp01(CHANCE_GAUGE_FILL_ALPHA * overlayAlpha)};
+        // 项2：color 层用 tex_fevergauge_outline 作横截面软边遮罩（中间实两边虚），
+        // 替代原「独立平铺一层 outline」——color × mask.a 才是原包那种软边计量条。
         const Texture* outlineTex = findTexture(hudTextures, "fever_gauge_outline");
-        const Color outlineTint{1.0f, 1.0f, 1.0f, clamp01(FEVER_GAUGE_OUTLINE_ALPHA * overlayAlpha)};
-        for (int s = 0; s < 2; ++s) {
-            quad(gaugeColorTex->id, gU0, gU1, vColor, colorTint, BlendMode::Normal, s);
-            if (outlineTex && outlineTex->id) {
-                quad(outlineTex->id, 0.0f, 1.0f, vFull, outlineTint, BlendMode::Normal, s);
+        const GLuint maskId = (outlineTex && outlineTex->id != 0) ? outlineTex->id : 0;
+        const Color colorTint{1.0f, 1.0f, 1.0f, clamp01(CHANCE_GAUGE_FILL_ALPHA * overlayAlpha)};
+        // 半透明轨道底：整条 fever_lane_mesh 全长(TOP_Y→BOT_Y)垫底、色同轨道底、半透明，
+        // 已充能段在其上填充。原包计量条整条一直半透明显示，不是「未充能段不画」。
+        // ⚠ 底色 kBaseRgb 为占位(深轨道底调)，透明度 kBaseAlpha 待目视调。
+        constexpr float kBaseRgb[3] = {0.10f, 0.11f, 0.14f};
+        constexpr float kBaseAlpha = 0.30f;
+        {
+            const Color baseCol{kBaseRgb[0], kBaseRgb[1], kBaseRgb[2], clamp01(kBaseAlpha * overlayAlpha)};
+            const float yFull = GAUGE_MESH_TOP_Y + FEVER_GAUGE_Y_OFFSET;
+            for (int s = 0; s < 2; ++s) {
+                const float dir = (s == 0) ? -1.0f : 1.0f;
+                const float itxF = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_TOP;
+                const float otxF = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_TOP;
+                renderer.pushUnderlaySolidQuad(
+                    {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
+                     Vec2{px(itxF), py(yFull)}, Vec2{px(otxF), py(yFull)}},
+                    {baseCol, baseCol, baseCol, baseCol}, BlendMode::Normal, maskId, maskId ? &maskUv : nullptr);
             }
         }
+        quad(gaugeColorTex->id, gU0, gU1, vColor, colorVoff, colorTint, BlendMode::Normal, maskId);
+        // 加色辉光：tex_fevergauge_light 横截面「两边亮中间空」本身即 lane 边缘软辉光
+        // （等价原包 SpriteMask 里 lane_light 的边缘光），不再叠横截面 mask、不滚动。
         const Texture* lightTex = findTexture(hudTextures, "fever_gauge_light");
         if (lightTex != nullptr && lightTex->id != 0) {
             const float pulse = 1.0f + FEVER_GAUGE_LIGHT_PULSE *
                 std::sin(chartTimeSec * FEVER_GAUGE_LIGHT_PULSE_HZ * 6.2831853f);
             const Color lightTint{1.0f, 1.0f, 1.0f, clamp01(FEVER_GAUGE_LIGHT_ALPHA * pulse * overlayAlpha)};
-            for (int s = 0; s < 2; ++s) {
-                quad(lightTex->id, 0.0f, 1.0f, vFull, lightTint, BlendMode::Additive, s);
-            }
+            quad(lightTex->id, 0.0f, 1.0f, vFull, 0.0f, lightTint, BlendMode::Additive, 0);
         }
     }
 
@@ -4615,6 +4735,12 @@ void main() {
         addHudTexture("fever_gauge_color", "overlay/fever-native/fever-gauge-color.png");
         addHudTexture("fever_gauge_light", "overlay/fever-native/fever-gauge-light.png");
         addHudTexture("fever_gauge_outline", "overlay/fever-native/fever-gauge-outline.png");
+        // 计量条 color 贴图沿长度(V)滚动（SuperFever MaterialST offset）需 WRAP_T=REPEAT；256×256 是 POT，WebGL2 下 NPOT/REPEAT 也可。
+        if (auto it = hudTextures.find("fever_gauge_color"); it != hudTextures.end() && it->second.id != 0) {
+            glBindTexture(GL_TEXTURE_2D, it->second.id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
         addHudTexture("ap_text", "overlay/ap-native/all-perfect.png");
         addHudTexture("ap_text_line", "overlay/ap-native/all-perfect-line.png");
         addHudTexture("ap_flare", "overlay/ap-native/flare.png");
