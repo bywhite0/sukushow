@@ -2454,14 +2454,14 @@ void main() {
         {720.0f, 63.0f}, {960.0f, 81.0f}, {1080.0f, 90.0f},
     };
     // ---- 计量条上的 Fever / SuperFever 指针 ----
-    // 取自原包场景：feverIconRoot localPosition (3.432, 2.965)、
-    // superFeverIconRoot (2.462, 4.105)，SpriteRenderer.m_Size 分别 1.7407×0.5370 /
-    // 3.0648×0.5370（世界单位，1 单位 = 100px，原点 = 画面中心）。
-    // 像素坐标 = (960 + 100·x, 540 − 100·y)。
+    // 取自原包 UI（对象 icon_fever / icon_superFever，pivot 居中 0.5,0.5）：
+    //   icon_fever      localPosition (3.247, 2.965)、m_Size 1.7407×0.5370
+    //   icon_superFever localPosition (2.462, 4.105)、m_Size 3.0648×0.5370
+    // 世界单位 1 单位 = 100px、原点 = 画面中心 ⇒ 像素 = (960 + 100·x, 540 − 100·y)。
     // 淡入时长取自原包 `FadeInFeverLineText` 的 duration 参数
     // （FadeInFeverChance 的延续 lambda 传 0.2f）。
     constexpr float FEVER_POINTER_FADE_SEC = 0.20f;
-    constexpr float FEVER_POINTER_CENTER_X = 1303.2f;
+    constexpr float FEVER_POINTER_CENTER_X = 1284.7f;
     constexpr float FEVER_POINTER_CENTER_Y = 243.5f;
     constexpr float FEVER_POINTER_WIDTH = 174.0f;
     constexpr float FEVER_POINTER_HEIGHT = 54.0f;
@@ -2469,12 +2469,9 @@ void main() {
     constexpr float SUPER_POINTER_CENTER_Y = 129.5f;
     constexpr float SUPER_POINTER_WIDTH = 306.0f;
     constexpr float SUPER_POINTER_HEIGHT = 54.0f;
-    // 轨道底色偏暗、已充能部分亮；横截面内侧偏青紫、外侧偏金黄（取自素材）。
-    // 轨道透明度：原素材是霓虹感轨道，取 0.45 才在光束上看得清（判断值，可调）。
-    constexpr float CHANCE_GAUGE_TRACK_ALPHA = 0.45f;
+    // 填充色由原包贴图 tex_fevergauge_color_03 逐像素给出（见绘制处），此处只留透明度。
+    // 只画已充能段、随进度从底端生长；alpha 为判断值，可调。
     constexpr float CHANCE_GAUGE_FILL_ALPHA = 0.95f;
-    constexpr float CHANCE_GAUGE_INNER_RGB[3] = {60.0f / 255.0f, 120.0f / 255.0f, 115.0f / 255.0f};
-    constexpr float CHANCE_GAUGE_OUTER_RGB[3] = {122.0f / 255.0f, 127.0f / 255.0f, 80.0f / 255.0f};
 
     // 环带 alpha 取自素材横截面的归一化均值，与实现同一测量口径，可逐点对账：
     //   s:  0.0    0.4    0.8    1.2    1.6    2.0    2.4    2.8    3.2    3.6    4.0
@@ -2519,18 +2516,21 @@ void main() {
         {945.0f, 71.0f / 255.0f, 246.0f / 255.0f, 220.0f / 255.0f},
         {1080.0f, 66.0f / 255.0f, 255.0f / 255.0f, 218.0f / 255.0f},
     };
-    // 颜色剖面（y → RGB）：中段最亮的暖金，两端转暗橙。
+    // 颜色取自原包 tex_fevergauge_color_03 的左半暖金区（右半彩虹供计量条、左半金供
+    // FeverChance 光带；素材里唯一的金色来源）。左半沿长度恒定为 (255,235,139) 暖金、
+    // 横截面 pale→gold→pale。此处保留中段偏亮的发光包络（软辉光形状），色相按左半金校正
+    // （R:G:B ≈ 1:0.922:0.545）。实机口径：FeverChance 金色，达 fever 线转 eff_fever_grd 彩虹。
     constexpr float CHANCE_BEAM_COLOR[][4] = {
-        {0.0f, 78.0f / 255.0f, 68.0f / 255.0f, 39.0f / 255.0f},
-        {120.0f, 102.0f / 255.0f, 87.0f / 255.0f, 45.0f / 255.0f},
-        {240.0f, 156.0f / 255.0f, 119.0f / 255.0f, 71.0f / 255.0f},
-        {360.0f, 247.0f / 255.0f, 190.0f / 255.0f, 86.0f / 255.0f},
-        {480.0f, 252.0f / 255.0f, 243.0f / 255.0f, 81.0f / 255.0f},
-        {600.0f, 253.0f / 255.0f, 241.0f / 255.0f, 83.0f / 255.0f},
-        {720.0f, 182.0f / 255.0f, 152.0f / 255.0f, 79.0f / 255.0f},
-        {840.0f, 122.0f / 255.0f, 103.0f / 255.0f, 55.0f / 255.0f},
-        {960.0f, 88.0f / 255.0f, 76.0f / 255.0f, 41.0f / 255.0f},
-        {1080.0f, 70.0f / 255.0f, 60.0f / 255.0f, 34.0f / 255.0f},
+        {0.0f, 78.0f / 255.0f, 72.0f / 255.0f, 43.0f / 255.0f},
+        {120.0f, 102.0f / 255.0f, 94.0f / 255.0f, 56.0f / 255.0f},
+        {240.0f, 156.0f / 255.0f, 144.0f / 255.0f, 85.0f / 255.0f},
+        {360.0f, 247.0f / 255.0f, 228.0f / 255.0f, 135.0f / 255.0f},
+        {480.0f, 252.0f / 255.0f, 232.0f / 255.0f, 137.0f / 255.0f},
+        {600.0f, 253.0f / 255.0f, 233.0f / 255.0f, 138.0f / 255.0f},
+        {720.0f, 182.0f / 255.0f, 168.0f / 255.0f, 99.0f / 255.0f},
+        {840.0f, 122.0f / 255.0f, 112.0f / 255.0f, 67.0f / 255.0f},
+        {960.0f, 88.0f / 255.0f, 81.0f / 255.0f, 48.0f / 255.0f},
+        {1080.0f, 70.0f / 255.0f, 65.0f / 255.0f, 38.0f / 255.0f},
     };
 
     // ---- 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示 ----
@@ -3592,40 +3592,49 @@ void main() {
             // 已充能到哪一行：从底端(y=1080)向上推进。
             const float fillTopY = 1080.0f * (1.0f - chanceSpanProgress);
             constexpr int kGaugeSegments = 48;
-            beginAdditive(overlay);
-            for (int side = 0; side < 2; ++side) {
-                const float dir = (side == 0) ? -1.0f : 1.0f;
-                for (int i = 0; i < kGaugeSegments; ++i) {
-                    const float y0 = 1080.0f * static_cast<float>(i) / kGaugeSegments;
-                    const float y1 = 1080.0f * static_cast<float>(i + 1) / kGaugeSegments;
-                    const float c0 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y0);
-                    const float c1 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y1);
-                    const float w0 = gaugeWidthAt(y0) * 0.5f;
-                    const float w1 = gaugeWidthAt(y1) * 0.5f;
-                    // 该段是否落在已充能区间内（按段中点判定，避免段被切碎）。
-                    const bool filled = (y0 + y1) * 0.5f >= fillTopY;
-                    const float a = (filled ? CHANCE_GAUGE_FILL_ALPHA : CHANCE_GAUGE_TRACK_ALPHA) *
-                                    overlayAlpha;
-                    // 内侧偏青紫、外侧偏金黄（两色各自成顶点，中间自然插值）。
-                    const ImU32 inner = IM_COL32(
-                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[0] * 255.0f)),
-                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[1] * 255.0f)),
-                        static_cast<int>(std::lround(CHANCE_GAUGE_INNER_RGB[2] * 255.0f)),
-                        static_cast<int>(std::lround(clamp01(a) * 255.0f)));
-                    const ImU32 outer = IM_COL32(
-                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[0] * 255.0f)),
-                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[1] * 255.0f)),
-                        static_cast<int>(std::lround(CHANCE_GAUGE_OUTER_RGB[2] * 255.0f)),
-                        static_cast<int>(std::lround(clamp01(a) * 255.0f)));
-                    // 内侧贴中心线、外侧远离中心线。
-                    addQuadGradient(
-                        overlay,
-                        ImVec2(px(c1 + dir * w1), py(y1)), ImVec2(px(c1), py(y1)),
-                        ImVec2(px(c0), py(y0)), ImVec2(px(c0 + dir * w0), py(y0)),
-                        outer, inner, inner, outer);
+            // 填充色取自原包 tex_fevergauge_color_03（左半暖金、右半彩虹）。实机口径：充能顶端
+            // 一旦过「fever 线」，**整段已充能部分**由金翻成彩虹（整体翻色，不是分层）；与
+            // SuperFever 开关无关。fever 线取 FEVER 指针高度。只画已充能段（从底端生长）。
+            // 横截面(内→外)走 U、沿长度走 V；alpha 混合（非加色）保留贴图色相。
+            const Texture* gaugeColorTex = findTexture(hudTextures, "fever_gauge_color");
+            if (gaugeColorTex != nullptr && gaugeColorTex->id != 0) {
+                constexpr float kGaugeVSpan = 0.94f;
+                constexpr float kGaugeFeverLineY = FEVER_POINTER_CENTER_Y;  // 243.5：fever 线高度
+                const ImTextureID gaugeTexId = textureId(*gaugeColorTex);
+                // 充能顶端过 fever 线（y 更小）后，整段取右半彩虹，否则整段取左半金。
+                const bool feverLineReached = fillTopY <= kGaugeFeverLineY;
+                const float gU0 = feverLineReached ? 0.5f : 0.0f;   // 内侧（贴中心线）
+                const float gU1 = feverLineReached ? 1.0f : 0.5f;   // 外侧（远离中心线）
+                for (int side = 0; side < 2; ++side) {
+                    const float dir = (side == 0) ? -1.0f : 1.0f;
+                    for (int i = 0; i < kGaugeSegments; ++i) {
+                        const float y0 = 1080.0f * static_cast<float>(i) / kGaugeSegments;
+                        const float y1 = 1080.0f * static_cast<float>(i + 1) / kGaugeSegments;
+                        const float yc = (y0 + y1) * 0.5f;
+                        // 只画已充能段。
+                        if (yc < fillTopY) {
+                            continue;
+                        }
+                        const float c0 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y0);
+                        const float c1 = 960.5f + dir * (CHANCE_BEAM_APEX_HALF_SEP + CHANCE_BEAM_SLOPE * y1);
+                        const float w0 = gaugeWidthAt(y0) * 0.5f;
+                        const float w1 = gaugeWidthAt(y1) * 0.5f;
+                        const float a = CHANCE_GAUGE_FILL_ALPHA * overlayAlpha;
+                        const float v0 = kGaugeVSpan * (y0 / 1080.0f);
+                        const float v1 = kGaugeVSpan * (y1 / 1080.0f);
+                        const ImU32 tint =
+                            IM_COL32(255, 255, 255, static_cast<int>(std::lround(clamp01(a) * 255.0f)));
+                        // 顶点顺序：外侧(U1) → 内侧(沿中心线) → 内侧(U0) → 外侧(U1)。
+                        overlay->AddImageQuad(
+                            gaugeTexId,
+                            ImVec2(px(c1 + dir * w1), py(y1)), ImVec2(px(c1), py(y1)),
+                            ImVec2(px(c0), py(y0)), ImVec2(px(c0 + dir * w0), py(y0)),
+                            ImVec2(gU1, v1), ImVec2(gU0, v1),
+                            ImVec2(gU0, v0), ImVec2(gU1, v0),
+                            tint);
+                    }
                 }
             }
-            endAdditive(overlay);
         }
 
         // ---- 计量条上的 Fever / SuperFever 指针 ----
@@ -3800,7 +3809,8 @@ void main() {
                 ? clamp01(progress / std::max(peak, 0.0001f))
                 : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
             // 位置与字号按素材稳定段 bbox：中心 (957,533)、高 81px。
-            const char* text = "FEVER!";
+            // SuperFever 态换成「SUPER FEVER!」横幅（否则整场都显示 FEVER! 是错的）。
+            const char* text = gPlayer.superFeverEnabled ? "SUPER FEVER!" : "FEVER!";
             const float fontSize = FEVER_TEXT_HEIGHT * 1.15f;
             const ImVec2 textSize = fonts.title->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
             const float textX = FEVER_TEXT_CENTER_X - textSize.x * 0.5f;
@@ -4383,6 +4393,7 @@ void main() {
         addHudTexture("custom_score_icon", "overlay/custom-score/icon.png");
         addHudTexture("fever_pointer", "overlay/fever-native/fever-pointer.png");
         addHudTexture("super_fever_pointer", "overlay/fever-native/super-fever-pointer.png");
+        addHudTexture("fever_gauge_color", "overlay/fever-native/fever-gauge-color.png");
         addHudTexture("ap_text", "overlay/ap-native/all-perfect.png");
         addHudTexture("ap_text_line", "overlay/ap-native/all-perfect-line.png");
         addHudTexture("ap_flare", "overlay/ap-native/flare.png");
