@@ -10,10 +10,12 @@
     "build": "npm run build:wasm && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:export": "node ./scripts/export-smoke.mjs"
   },
   "dependencies": {
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "mediabunny": "^1.61.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

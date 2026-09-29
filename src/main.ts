@@ -25,6 +25,7 @@ import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, credit
 import { createSongPicker } from './ui/songPicker'
 import { feverForSong } from './llll/fever'
 import { setupPwaUpdatePrompt } from './lib/pwa'
+import { installExportDialog, probeAllConfigs } from './ui/exportDialog'
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) {
@@ -38,7 +39,7 @@ app.innerHTML = `
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
  <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas></div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">正在初始化渲染器…</div>
- <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button></div></div>
+ <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button><button id="export-video" class="quiet" type="button">导出视频</button></div></div>
 </section>
 <aside aria-label="预览设置">
  <div class="inspector-heading"><h2>预览设置</h2><span>自动保存</span></div>
@@ -444,8 +445,10 @@ function demoChart(): Chart {
   return parseChart({ Notes: notes, Bpms: [{ Time: 0, Bpm: 120 }] })
 }
 
+let liveRenderingSuspended = false
+
 function renderLoop() {
-  if (!runtimeReady) return
+  if (!runtimeReady || liveRenderingSuspended) return
   player.renderFrame()
   const snapshot = player.getStateSnapshot()
   if (currentChart) {
@@ -699,11 +702,36 @@ document.addEventListener('keydown', (event) => {
   }
 })
 
-window.addEventListener('resize', () => {
+function resizeCanvasToStage() {
   const canvas = el<HTMLCanvasElement>('chart-canvas')
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const rect = canvas.parentElement!.getBoundingClientRect()
   player.resize(Math.max(1, Math.round(rect.width)), Math.max(1, Math.round(rect.height)), dpr)
+}
+
+window.addEventListener('resize', () => {
+  // 导出期间画布固定为预设尺寸，结束后会按舞台尺寸恢复。
+  if (liveRenderingSuspended) return
+  resizeCanvasToStage()
+})
+
+const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), {
+  player,
+  canvas: el<HTMLCanvasElement>('chart-canvas'),
+  suspendLiveRendering: () => {
+    liveRenderingSuspended = true
+    cancelAnimationFrame(rafHandle)
+  },
+  resumeLiveRendering: () => {
+    liveRenderingSuspended = false
+    cancelAnimationFrame(rafHandle)
+    renderLoop()
+  },
+  restoreCanvasSize: resizeCanvasToStage,
+  restorePlaybackRate: () => player.setPlaybackRate(Number(select('rate').value)),
+  lockTargets: () => [document.querySelector('aside')!, document.querySelector<HTMLElement>('.transport')!, document.querySelector<HTMLElement>('.workspace-header')!],
+  title: () => el('chart-name').textContent ?? 'pjsk-preview',
+  message,
 })
 
 window.addEventListener('pagehide', () => {
@@ -720,6 +748,9 @@ declare global {
       renderLoop: () => void
       /** 当前谱面（自动化验证用：充能分母需要按谱面算）。 */
       getChart: () => Chart | null
+      /** 视频导出（自动化验证用）。 */
+      exportDialog: typeof exportDialog
+      probeExportConfigs: typeof probeAllConfigs
     }
   }
 }
@@ -729,6 +760,8 @@ window.__LLL_PJSK__ = {
   demoChart,
   renderLoop,
   getChart: () => currentChart,
+  exportDialog,
+  probeExportConfigs: probeAllConfigs,
 }
 installLaneProbe()
 setupPwaUpdatePrompt()

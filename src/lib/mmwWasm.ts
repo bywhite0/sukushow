@@ -1,4 +1,5 @@
 import { mmwWasmFilename } from '../generated/mmwWasmAsset'
+import type { CapturedSoundEvent } from '../export/audioMix'
 import type { PreviewRuntimeConfig, ScoreTextFormat, SessionMetadata, TransportState, WasmPlayerSnapshot } from './types'
 
 type CcallOptions = {
@@ -16,6 +17,18 @@ type EmscriptenModule = {
   ) => unknown
   _malloc: (size: number) => number
   _free: (ptr: number) => void
+  /** wasm 侧的 JS 音频引擎（mmw_overlay_player.cpp 的 jsAudioEnsureEngine）。 */
+  __mmwAudio?: MmwAudioEngine
+}
+
+/** 导出需要读取的音频引擎字段（只读用途）。 */
+export type MmwAudioEngine = {
+  audioBuffer: AudioBuffer | null
+  soundBuffers: Map<string, AudioBuffer>
+  audioStartOffsetSec: number
+  bgmVolume: number
+  soundVolume: number
+  capture: { events: CapturedSoundEvent[] } | null
 }
 
 type EmscriptenModuleFactoryOptions = {
@@ -321,12 +334,55 @@ export class MmwWasmPlayer {
   renderFrame() {
     if (this.feverChargeTimes.length) {
       const snapshot = this.getStateSnapshot()
-      const chartTime = snapshot.currentTimeSec - snapshot.effectiveLeadInSec
-      let n = 0
-      while (n < this.feverChargeTimes.length && this.feverChargeTimes[n] <= chartTime) n += 1
-      this.setFeverCharge(n, this.feverChargeTimes.length)
+      this.updateFeverCharge(snapshot.currentTimeSec - snapshot.effectiveLeadInSec)
     }
     this.assertReady().ccall('renderPlayerFrame', null, [], [])
+  }
+
+  private updateFeverCharge(chartTime: number) {
+    if (!this.feverChargeTimes.length) return
+    let n = 0
+    while (n < this.feverChargeTimes.length && this.feverChargeTimes[n] <= chartTime) n += 1
+    this.setFeverCharge(n, this.feverChargeTimes.length)
+  }
+
+  /**
+   * 视频导出模式：开启后实时音频停止，时钟改由 `renderFrameAt` 注入，
+   * 命中音 / AP 音记成事件（见 `getCapturedSoundEvents`）。关闭后需自行 seek 回原位置。
+   */
+  setExportMode(enabled: boolean) {
+    this.assertReady().ccall('setPlayerExportMode', null, ['number'], [enabled ? 1 : 0])
+  }
+
+  /**
+   * 以注入时刻（输出时间轴秒数）渲染一帧。`playing` 为真时命中 / 特效 / 音效事件
+   * 按正在播放推进，须从起点按时间顺序逐帧调用。
+   */
+  renderFrameAt(outputTimeSec: number, playing = true) {
+    const module = this.assertReady()
+    if (this.feverChargeTimes.length) {
+      const leadIn = Number(module.ccall('getPlayerEffectiveLeadInSec', 'number', [], []))
+      this.updateFeverCharge(outputTimeSec - leadIn)
+    }
+    module.ccall('renderPlayerFrameAt', null, ['number', 'number'], [outputTimeSec, playing ? 1 : 0])
+  }
+
+  /** 导出模式下收集到的音效事件（拷贝）。 */
+  getCapturedSoundEvents(): CapturedSoundEvent[] {
+    const capture = this.assertReady().__mmwAudio?.capture
+    return capture ? capture.events.map((event) => ({ ...event })) : []
+  }
+
+  /** 混音素材：BGM、音效缓冲、BGM 起点（已含音频偏移）与音量。 */
+  getAudioSources() {
+    const audio = this.assertReady().__mmwAudio
+    return {
+      bgm: audio?.audioBuffer ?? null,
+      bgmStartSec: Number(audio?.audioStartOffsetSec ?? 0),
+      bgmVolume: Number(audio?.bgmVolume ?? 1),
+      soundVolume: Number(audio?.soundVolume ?? 1),
+      soundBuffers: new Map(audio?.soundBuffers ?? []) as ReadonlyMap<string, AudioBuffer>,
+    }
   }
 
   getStateSnapshot(): WasmPlayerSnapshot {
