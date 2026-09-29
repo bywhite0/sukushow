@@ -131,7 +131,11 @@ export function parseChart(input:unknown):Chart {
   for(const n of notes) {
     if(n.type!==1)continue;
     const end=Math.fround(n.end);
-    const next=starts.get(`${n.l2}/${n.r2}`)?.find(x=>x.uid>n.uid&&Math.abs(Math.fround(x.time)-end)<HOLD_LINK_EPSILON);
+    // Prepare @0x48694A4：按数组顺序对每个 unit 取 FirstOrDefault(units, IsCombine(prev, x))，命中即
+    // prev.Next = x; x.Prev = prev（后写覆盖，允许汇合）。IsCombine @0x485CFFC：两者 Type==Hold、
+    // x.Uid > prev.Uid、prev.L2==x.L1、prev.R2==x.R1、LooseEquals(prev.Holds[^1], x.Just)（fabd 单精度差）。
+    // 只按 uid 次序 + lane + 时刻，不看段长：零长段（holds[^1]==Just，链中的瞬移点）同样照此串接。
+    const next=starts.get(`${n.l2}/${n.r2}`)?.find(x=>x.uid>n.uid&&Math.fround(Math.abs(Math.fround(x.time)-end))<HOLD_LINK_EPSILON);
     // 原始谱面允许汇合，Prev 仅作为非根标记，不拒绝共享后继。
     if(next){n.next=next;next.prev=n;}
   }
