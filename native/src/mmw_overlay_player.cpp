@@ -254,6 +254,11 @@ namespace
         // （PJSK 靠多人局人数），故做成配置项、由用户指定，不伪装成原版口径。
         bool superFeverEnabled = false;
         bool feverDisplayEnabled = true;
+        // 视频导出：时钟由调用方注入（renderPlayerFrameAt），不读 AudioContext；
+        // 命中音 / AP 音不实时播放，而是记成带时间戳的事件，交给 JS 侧离线混音。
+        bool exportClock = false;
+        double exportTimeSec = 0.0;
+        bool exportPlaying = true;
     };
 
     PlayerRuntimeState gPlayer;
@@ -755,6 +760,48 @@ namespace
     EM_JS(void, jsAudioClearOneShots, (), {
         jsAudioEnsureEngine();
         Module.__mmwAudio.clearOneShots();
+    });
+
+    // ---- 导出模式：音效事件收集（替代实时播放） ----
+    // capture = { events: [{ type, key, gain, startSec, endSec, offsetSec }], loops: Map<key, event> }
+    // 时间一律是输出时间轴（含 lead-in）的秒数；gain 不含音效音量（混音时再乘）。
+    EM_JS(void, jsAudioSetCapture, (int enabled), {
+        jsAudioEnsureEngine();
+        const audio = Module.__mmwAudio;
+        if (enabled) {
+            audio.pause();
+            audio.clearOneShots();
+            audio.capture = { events: [], loops: new Map() };
+        } else {
+            audio.capture = null;
+        }
+    });
+
+    EM_JS(void, jsAudioCaptureOneShot, (const char* keyPtr, double gain, double startSec, double offsetSec), {
+        const capture = Module.__mmwAudio && Module.__mmwAudio.capture;
+        if (!capture) {
+            return;
+        }
+        capture.events.push({ type: 'oneShot', key: UTF8ToString(keyPtr), gain, startSec, endSec: -1, offsetSec: Math.max(0, offsetSec) });
+    });
+
+    // 与实时 triggerExtendable 同口径：同名循环在上一段结束前再次触发只延长终点，不叠一条新的。
+    EM_JS(void, jsAudioCaptureLoop, (const char* keyPtr, double gain, double startSec, double endSec), {
+        const capture = Module.__mmwAudio && Module.__mmwAudio.capture;
+        if (!capture || endSec - startSec <= 0.0001) {
+            return;
+        }
+        const key = UTF8ToString(keyPtr);
+        const last = capture.loops.get(key);
+        if (last && startSec <= last.endSec + 0.0001) {
+            if (endSec > last.endSec) {
+                last.endSec = endSec;
+            }
+            return;
+        }
+        const event = { type: 'loop', key, gain, startSec, endSec, offsetSec: 0 };
+        capture.events.push(event);
+        capture.loops.set(key, event);
     });
 
     EM_JS(const char*, jsAudioGetLastError, (), {
@@ -5166,12 +5213,17 @@ void main() {
                 const bool critical = (static_cast<int>(std::lround(packed[offset + 4])) & 1) != 0;
                 const char* key = resolveKeySoundKey(5, critical);
                 const double gain = keySoundGain(key) * std::max(0.0f, packed[offset + 6]);
-                jsAudioTriggerExtendable(
-                    key,
-                    gain,
-                    gPlayer.effectiveLeadInSec + chartTimeSec,
-                    gPlayer.effectiveLeadInSec + endTimeSec,
-                    NOTE_AUDIO_DELAY_SEC);
+                if (gPlayer.exportClock) {
+                    // 已在进行中的长按循环：从当前时刻接上。
+                    jsAudioCaptureLoop(key, gain, gPlayer.effectiveLeadInSec + chartTimeSec, gPlayer.effectiveLeadInSec + endTimeSec);
+                } else {
+                    jsAudioTriggerExtendable(
+                        key,
+                        gain,
+                        gPlayer.effectiveLeadInSec + chartTimeSec,
+                        gPlayer.effectiveLeadInSec + endTimeSec,
+                        NOTE_AUDIO_DELAY_SEC);
+                }
             }
         }
     }
@@ -5208,7 +5260,18 @@ void main() {
                 const bool critical = (static_cast<int>(std::lround(packed[offset + 4])) & 1) != 0;
                 const char* key = resolveKeySoundKey(kindValue, critical);
                 const double gain = keySoundGain(key) * std::max(0.0f, packed[offset + 6]);
-                if (kindValue == 5) {
+                if (gPlayer.exportClock) {
+                    // 导出：实时路径是「提前 look-ahead 触发 + 延迟 NOTE_AUDIO_DELAY 播放」，
+                    // 可闻时刻 = 事件时刻 + (NOTE_AUDIO_DELAY − look-ahead)。这里直接记这个精确时刻，
+                    // 不受帧步长量化。
+                    const double audibleSec = gPlayer.effectiveLeadInSec + eventTimeSec
+                        + NOTE_AUDIO_DELAY_SEC - static_cast<double>(AUDIO_LOOK_AHEAD_SEC);
+                    if (kindValue == 5) {
+                        jsAudioCaptureLoop(key, gain, audibleSec, gPlayer.effectiveLeadInSec + packed[offset + 5]);
+                    } else {
+                        jsAudioCaptureOneShot(key, gain, audibleSec, 0.0);
+                    }
+                } else if (kindValue == 5) {
                     jsAudioTriggerExtendable(
                         key,
                         gain,
@@ -5226,15 +5289,17 @@ void main() {
     PlayerSnapshot buildSnapshot()
     {
         PlayerSnapshot snapshot;
-        snapshot.currentTimeSec = jsAudioGetCurrentTime();
+        snapshot.currentTimeSec = gPlayer.exportClock ? gPlayer.exportTimeSec : jsAudioGetCurrentTime();
         snapshot.durationSec = std::max(gPlayer.durationSec, static_cast<double>(jsAudioHasAudio() ? jsAudioGetCurrentTime() : 0.0));
         snapshot.chartEndSec = gPlayer.chartEndSec;
         snapshot.sourceOffsetSec = gPlayer.sourceOffsetSec;
         snapshot.effectiveLeadInSec = gPlayer.effectiveLeadInSec;
         snapshot.audioStartDelaySec = gPlayer.audioStartDelaySec;
         snapshot.apStartSec = gPlayer.apStartSec;
-        snapshot.transportState = transportStateFromCode(jsAudioGetStateCode());
-        snapshot.requiresGesture = jsAudioRequiresGesture() != 0;
+        snapshot.transportState = gPlayer.exportClock
+            ? (gPlayer.exportPlaying ? TransportStateNative::Playing : TransportStateNative::Paused)
+            : transportStateFromCode(jsAudioGetStateCode());
+        snapshot.requiresGesture = !gPlayer.exportClock && jsAudioRequiresGesture() != 0;
         snapshot.hasAudio = jsAudioHasAudio() != 0;
         return snapshot;
     }
@@ -5268,7 +5333,12 @@ void main() {
         const bool apSoundInRange = apSoundOffsetSec >= 0.0f && apSoundOffsetSec < AP_AUDIO_DURATION_SEC;
         if (snapshot.transportState == TransportStateNative::Playing && apSoundInRange) {
             if (!gPlayer.apSoundActive) {
-                jsAudioTriggerOneShotAtOffset("allPerfect", 1.0, apSoundOffsetSec);
+                if (gPlayer.exportClock) {
+                    // 记在 AP 起点；导出区间起点晚于它时由混音侧按区间起点截取。
+                    jsAudioCaptureOneShot("allPerfect", 1.0, outputTimeSec - apSoundOffsetSec, 0.0);
+                } else {
+                    jsAudioTriggerOneShotAtOffset("allPerfect", 1.0, apSoundOffsetSec);
+                }
                 gPlayer.apSoundActive = true;
             }
         } else {
@@ -5608,6 +5678,40 @@ extern "C"
     EMSCRIPTEN_KEEPALIVE void renderPlayerFrame()
     {
         renderPlayerFrameInternal();
+    }
+
+    /**
+     * 视频导出模式开关。
+     *
+     * 开启：停掉实时音频，改用注入时钟（renderPlayerFrameAt），命中音 / AP 音记成事件
+     * （Module.__mmwAudio.capture.events）。命中游标置为「刚开始播放」，
+     * 于是第一帧会按 resetHitCursor(…, resumeHoldLoops) 接上进行中的长按与 look-ahead 窗口。
+     * 关闭：恢复实时时钟（调用方随后 seek 回原位置）。
+     */
+    EMSCRIPTEN_KEEPALIVE void setPlayerExportMode(int enabled)
+    {
+        jsAudioPause();
+        jsAudioClearOneShots();
+        gPlayer.exportClock = enabled != 0;
+        gPlayer.exportPlaying = true;
+        jsAudioSetCapture(enabled);
+        gPlayer.previousChartTimeSec = -1000.0f;
+        gPlayer.apSoundActive = false;
+    }
+
+    /**
+     * 以注入时刻渲染一帧（输出时间轴秒数，含 lead-in）。playing=1 时命中、特效、音效事件
+     * 按「正在播放」推进；须从起点按时间顺序逐帧调用（命中游标与特效都是增量状态）。
+     * 未开导出模式时只临时覆盖本帧时钟，且不产生任何声音。
+     */
+    EMSCRIPTEN_KEEPALIVE void renderPlayerFrameAt(double outputTimeSec, int playing)
+    {
+        const bool wasExport = gPlayer.exportClock;
+        gPlayer.exportClock = true;
+        gPlayer.exportTimeSec = outputTimeSec;
+        gPlayer.exportPlaying = playing != 0;
+        renderPlayerFrameInternal();
+        gPlayer.exportClock = wasExport;
     }
 
     EMSCRIPTEN_KEEPALIVE double getPlayerCurrentTimeSec()
