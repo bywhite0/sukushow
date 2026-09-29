@@ -445,3 +445,30 @@
 
 /* 过场逐帧改 transform/颜色：独立合成层，避免缩放后按像素对齐产生抖动 */
 .start-anim .sa-logic { will-change: transform; backface-visibility: hidden; }
+
+/* 预览比例按钮组（顶栏，排在曲目选择器之后）：规格照难度徽章，文字宽度自适应。 */
+.aspect-mount{flex:0 0 auto}
+.aspect-group{display:flex;align-items:center;gap:4px}
+.aspect-chip{
+  --chip:var(--shell-accent);
+  display:flex;align-items:center;justify-content:center;
+  min-width:40px;height:40px;padding:0 10px;
+  border:1px solid color-mix(in srgb,var(--chip) 35%,var(--shell-line));border-radius:8px;
+  background:var(--shell-raised);color:var(--shell-muted);
+  font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;white-space:nowrap;
+}
+.aspect-chip:hover{border-color:var(--chip);color:var(--shell-text);background:color-mix(in srgb,var(--chip) 16%,var(--shell-raised))}
+.aspect-chip.is-active{background:var(--chip);border-color:var(--chip);color:var(--shell-ink)}
+/* 锁定比例时舞台四周露出的空白用外壳底色，与「自由」时的边距一致。 */
+.stage[data-aspect]{max-width:100%;max-height:100%}
+@media(max-width:1000px){
+  .aspect-mount{order:4}
+}
+@media(max-width:900px){
+  .aspect-chip{min-width:34px;height:34px;padding:0 8px;font-size:11px}
+}
+@media(max-width:560px){
+  .aspect-mount{width:100%;overflow-x:auto}
+  .aspect-chip{flex:1 1 0;padding:0 4px}
+  .aspect-group{width:100%}
+}

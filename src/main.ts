@@ -13,6 +13,7 @@ import { StartAnimation, START_CLIP_DURATION } from './startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from './comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
 import { createSongPicker } from './songPicker';
+import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './aspectRatio';
 import {
   loadPreviewSettings,
   savePreviewSettings,
@@ -20,7 +21,7 @@ import {
 } from './settingsPersist';
 const app=document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML=`
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
+<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div id="aspect-mount" class="aspect-mount"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -110,6 +111,7 @@ for(const [index,tab] of settingTabs.entries()){
 }
 
 
+let aspectId:AspectId=DEFAULT_ASPECT;
 function readSettings():PreviewSettings{
  return{
   speed:Number(input('speed').value),
@@ -144,6 +146,7 @@ function readSettings():PreviewSettings{
   techScore:(()=>{const v=Number(el<HTMLSelectElement>('tech-score').value);return (v===1||v===2?v:0) as 0|1|2;})(),
   rate:Number(el<HTMLSelectElement>('rate').value),
   hitEffect:(()=>{const v=el<HTMLSelectElement>('opt-hit-effect').value;return v==='off'||v==='limited'||v==='full'?v:'current';})(),
+  aspectRatio:aspectId,
  };
 }
 function persistSettings(){savePreviewSettings(readSettings());}
@@ -179,8 +182,14 @@ function applySettingsToForm(s:PreviewSettings){
  el<HTMLSelectElement>('tech-score').value=String(s.techScore);
  el<HTMLSelectElement>('rate').value=String(s.rate);
  el<HTMLSelectElement>('opt-hit-effect').value=s.hitEffect;
+ aspectId=s.aspectRatio;
 }
 applySettingsToForm(loadPreviewSettings());
+// 预览窗口固定比例：顶栏按钮组 + 舞台按比例居中。
+const applyAspect=bindStageAspect(document.querySelector<HTMLElement>('.stage-shell')!,el('stage'));
+const aspectPicker=createAspectPicker({value:aspectId,onChange:(id)=>{aspectId=id;applyAspect(id);persistSettings();}});
+el('aspect-mount').replaceChildren(aspectPicker.root);
+applyAspect(aspectId);
 
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;

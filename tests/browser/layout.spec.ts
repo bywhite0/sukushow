@@ -57,3 +57,36 @@ test('顶部文件名随成功导入更新，坏文件保留原名，演示可�
   await page.getByRole('button', { name: '重新打开演示谱', exact: true }).click();
   await expect(page.locator('#chart-name')).toHaveText('演示谱面');
 });
+
+test('顶栏比例按钮锁定舞台宽高比，刷新后保留', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await expect(page.locator('#message')).toContainText('就绪');
+  const group = page.getByRole('radiogroup', { name: '预览比例' });
+  await expect(group).toBeVisible();
+  await expect(group.locator('[data-aspect="free"]')).toHaveAttribute('aria-checked', 'true');
+  const ratio = async () => {
+    const b = (await page.locator('#stage').boundingBox())!;
+    return b.width / b.height;
+  };
+  for (const [id, r] of [['4:3', 4 / 3], ['16:9', 16 / 9], ['19.5:9', 19.5 / 9], ['20:9', 20 / 9], ['16:10', 1.6]] as const) {
+    await group.locator(`[data-aspect="${id}"]`).click();
+    await expect(group.locator(`[data-aspect="${id}"]`)).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(ratio).toBeGreaterThan(r * 0.99);
+    expect(await ratio()).toBeLessThan(r * 1.01);
+    // 画布（渲染器）跟着舞台走。
+    await expect.poll(async () => {
+      const c = (await page.locator('#chart-canvas').boundingBox())!;
+      return c.width / c.height;
+    }).toBeGreaterThan(r * 0.99);
+  }
+  await group.locator('[data-aspect="4:3"]').click();
+  await page.reload();
+  await expect(page.locator('#message')).toContainText('就绪');
+  await expect(group.locator('[data-aspect="4:3"]')).toHaveAttribute('aria-checked', 'true');
+  expect(Math.abs(await ratio() - 4 / 3)).toBeLessThan(0.02);
+  // 回到自由：清掉内联尺寸，舞台重新撑满预览区。
+  await group.locator('[data-aspect="free"]').click();
+  await expect(page.locator('#stage')).not.toHaveAttribute('data-aspect', /.+/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
