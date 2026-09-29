@@ -45,25 +45,23 @@ export function comboFlashAlpha(age: number, duration = 0.7833333611488342): num
   return evalStreamedPoly(age - CLIP96_T_ALPHA, 8.528615951538086, -7.888969421386719, 0, 1);
 }
 
-function smoothstep(x: number): number {
-  const t = Math.min(1, Math.max(0, x));
-  return t * t * (3 - 2 * t);
-}
-
-/** APIncreaseAnimation 0.75s — scale 1→1.5 via smoothstep(t/(7/12)). */
-export function apRateFlashScale(age: number, duration = 0.75): number {
+/**
+ * APIncreaseAnimation（clip #94，0.75s，宿主 GO 51 `APRateUpper`）。StreamedClip 系数取 float32 原值，
+ * 其余项（c）为 0：`v = ((a·u + b)·u + c)·u + d`。
+ */
+const CLIP94_SCALE_END = 0.5833333134651184;
+/** `<self>` scale.xyz：[0, 0.5833] 段 (−5.0379, 4.4082, 0, 1) ⇒ 1 → 1.5，之后键 1.5 保持到剪辑结束。 */
+export function apRateFlashScale(age: number): number {
   if (age <= 0) return 1;
-  const peakAt = (7 / 12) * duration; // 7/12 of full timeline in RE uses t/(7/12) with t in seconds of anim
-  // RE: scale = lerp(1, 1.5, smoothstep(t / (7/12))) with t in [0, duration], clamped.
-  const u = smoothstep(age / (7 / 12));
-  return 1 + 0.5 * Math.min(1, u);
+  if (age >= CLIP94_SCALE_END) return 1.5;
+  return evalStreamedPoly(age, -5.037900924682617, 4.408163070678711, 0, 1);
 }
 
-/** APIncreaseAnimation alpha 1→0 via 1−smoothstep(t/0.75). */
+/** `<self>` color.a 与 `APRateValue` fontColor.a：[0, 0.75] 段 (4.7407, −5.3333, 0, 1) ⇒ 1 → 0。 */
 export function apRateFlashAlpha(age: number, duration = 0.75): number {
   if (age <= 0) return 1;
   if (age >= duration) return 0;
-  return 1 - smoothstep(age / duration);
+  return Math.max(0, evalStreamedPoly(age, 4.74074125289917, -5.333333969116211, 0, 1));
 }
 
 export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
@@ -351,8 +349,6 @@ export const SCORE_ADD_LIFE = 0.7;
 /** Prefab rest anchored X (level56); tween end is 304. */
 export const SCORE_ADD_REST_X = 305.8;
 export const SCORE_ADD_REST_Y = -52;
-/** Preview: shift whole float a bit left of binary X. */
-export const SCORE_ADD_X_NUDGE = -40;
 
 /** Anchored X: -48*u*(u-2)+256 (u in [0,1]). */
 export function scoreAddTweenX(age: number): number {
@@ -368,12 +364,12 @@ export function scoreAddTweenAlpha(age: number): number {
 
 /* ---------------------------------------------------------------------------
  * APRateEffect（level56 `ComboRoot/APRateUpper/APRateEffect` #227）。
- * 四个子发射器的 Transform 全为单位变换，因此都锚在 240×40 徽章的中心。
- * 主体是粉色四角星粒子（#564/#565）从徽章周围爆发；#563 Root / #530 Bg_core
- * 只是垫在后面的底光。
+ * 四个发射器（#227 自身即 Root，子 #229 Particle / #228 ClossParticle / #41 Bg_core）
+ * Transform 全为单位变换，都锚在 240×40 徽章中心；均为非循环、仅 t=0 一次 burst、
+ * `scalingMode` Local、模拟空间 Local。参数全部取自原包序列化值。
  * ------------------------------------------------------------------------- */
 
-/** 三层贴图爆发的寿命（#563/#530 startLifetime 常量 1.0）。 */
+/** Root / Bg_core 的寿命（`startLifetime` 常量 1.0）；Particle / Closs 最迟 0.15 + 0.7 = 0.85s 结束。 */
 export const AP_RATE_BURST_DURATION = 1;
 /** clip #94 在 t=1/60s 才把 APRateEffect SetActive(true)，爆发整体延后一帧。 */
 export const AP_RATE_BURST_ACTIVATE_DELAY = 1 / 60;
@@ -381,18 +377,62 @@ export const AP_RATE_BURST_ACTIVATE_DELAY = 1 / 60;
 export const AP_RATE_BURST_ROOT = { w: 254, h: 63 } as const;
 /** #530 Bg_core 基准 4×3。 */
 export const AP_RATE_BURST_CORE = { w: 400, h: 300 } as const;
-/** #565/#564 发射环：ShapeModule.radius 0.08 × ShapeModule.scale (13.5, 3)。 */
-export const AP_RATE_BURST_RING = { rx: 108, ry: 24 } as const;
-/** radiusThickness 0.3 ⇒ 出生半径落在 [0.7, 1] 的环带上。 */
-export const AP_RATE_BURST_RING_INNER = 0.7;
+/** #530 Bg_core `startColor`（常量）。 */
+export const AP_RATE_BURST_CORE_START = { r: 1, g: 0.14117646217346191, b: 0.5493686199188232, a: 0.5372549295425415 } as const;
+
+/** #565 Particle / #564 ClossParticle 的序列化参数（世界单位；×100 ⇒ px）。 */
+export interface ApRateEmitterSpec {
+  /** 爆发颗数（Emission burst @0，count 常量）。 */
+  count: number;
+  /** 主模块 `startDelay` TwoConstants：整个系统一次取值，不是逐粒子。 */
+  delay: [number, number];
+  life: [number, number];
+  speed: [number, number];
+  size: [number, number];
+  /** RotationModule 角速度（rad/s）TwoConstants；null = 模块关闭。 */
+  spin: [number, number] | null;
+  /** ClampVelocityModule `magnitude`（逐粒子 TwoConstants 或常量）与 `dampen`。 */
+  limit: [number, number];
+  dampen: number;
+  tex: string;
+}
+export const AP_RATE_PARTICLE: ApRateEmitterSpec = {
+  count: 14, delay: [0, 0.15000000596046448], life: [0.4000000059604645, 0.699999988079071],
+  speed: [1, 1.600000023841858], size: [0.30000001192092896, 0.6000000238418579], spin: null,
+  limit: [0.699999988079071, 1], dampen: 0.20000000298023224, tex: 'sc2_Particle_light02.png',
+};
+export const AP_RATE_CLOSS: ApRateEmitterSpec = {
+  count: 15, delay: [0, 0.15000000596046448], life: [0.4000000059604645, 0.699999988079071],
+  speed: [6, 7], size: [0.30000001192092896, 0.6000000238418579],
+  spin: [-1.570796251296997, 1.570796251296997],
+  limit: [1, 1], dampen: 0.30000001192092896, tex: 'sc2_outgameLvUp_glitter_lyric_01.png',
+};
+/** 两者共用 ShapeModule：Circle，radius 0.08，radiusThickness 0.3，arc 359.94°，scale (13.5, 3, 1)。 */
+export const AP_RATE_SHAPE = {
+  radius: 0.07999999821186066, thickness: 0.30000001192092896,
+  arc: 359.94000244140625 * Math.PI / 180, sx: 13.5, sy: 3,
+} as const;
+
+/** TwoConstants 取值：`lo + (hi − lo)·r`。 */
+export function lerpRange([lo, hi]: [number, number], r: number): number {
+  return lo + (hi - lo) * r;
+}
+
 /**
- * 底光两层的亮度增益。
- * 原包是 Additive 粒子，预览用 `mix-blend-mode:screen` 近似时会偏亮，
- * 故按与实机录像的实测比值（0.80）压一档。
+ * Circle 形状的出生点与方向（世界单位，y 向上）。
+ * - 角度在 arc 内均匀；半径按面积均匀落在 `[1 − thickness, 1]·radius` 的环带（**推断**：Unity 未公开采样式）。
+ * - 方向为圆心指向出生点的径向，经形状缩放 (13.5, 3) 后归一化（**推断**：按 ShapeModule 矩阵变换方向向量）。
  */
-export const AP_RATE_BURST_ROOT_GAIN = 0.8;
-/** `Bg_core` 的基准不透明度 = 原包 `startColor.a`（0.5372549）× 底光增益。 */
-export const AP_RATE_BURST_CORE_ALPHA_GAIN = 0.5372549295425415 * 0.8;
+export function apRateBurstSpawn(rAngle: number, rRadius: number): { x: number; y: number; dx: number; dy: number } {
+  const S = AP_RATE_SHAPE;
+  const th = rAngle * S.arc;
+  const inner = 1 - S.thickness;
+  const k = Math.sqrt(inner * inner + (1 - inner * inner) * rRadius);
+  const c = Math.cos(th), s = Math.sin(th);
+  const x = c * S.radius * k * S.sx, y = s * S.radius * k * S.sy;
+  const len = Math.hypot(c * S.sx, s * S.sy) || 1;
+  return { x, y, dx: (c * S.sx) / len, dy: (s * S.sy) / len };
+}
 
 interface CurveKey { t: number; v: number; i: number; o: number }
 
@@ -440,21 +480,66 @@ const BURST_ROOT_ALPHA: { t: number; v: number }[] = [
   { t: 0.008773937590600443, v: 1 },
   { t: 0.42983138780804153, v: 0 },
 ];
-/** #530 Bg_core ColorModule 的 alpha 键。 */
-const BURST_CORE_ALPHA: { t: number; v: number }[] = [
-  { t: 0.008773937590600443, v: 1 },
-  { t: 1, v: 0 },
-];
 /** #565/#564 SizeModule.curve：[(0,0,out 2),(1,1,in 0)]，curveMultiplier 1.0。 */
 const BURST_PARTICLE_SIZE_KEYS: CurveKey[] = [
   { t: 0, v: 0, i: 2, o: 2 },
   { t: 1, v: 1, i: 0, o: 0 },
 ];
-/** #565/#564 colorOverLifetime 的 maxGradient alpha 键。 */
-const BURST_PARTICLE_ALPHA: { t: number; v: number }[] = [
-  { t: 0.008773937590600443, v: 1 },
-  { t: 1, v: 0 },
-];
+type Rgb = [number, number, number];
+interface Grad { c: { t: number; v: Rgb }[]; a: { t: number; v: number }[] }
+/** #565/#564 ColorModule TwoGradients 的 minGradient。 */
+const BURST_PARTICLE_GRAD_MIN: Grad = {
+  c: [{ t: 0, v: [1, 0.07075470685958862, 0.33916571736335754] }, { t: 1, v: [1, 0.6650943756103516, 0.8282971978187561] }],
+  a: [{ t: 0, v: 0 }, { t: 0.20759899290455483, v: 1 }, { t: 0.748531319142443, v: 1 }, { t: 1, v: 0 }],
+};
+/** #565/#564 ColorModule TwoGradients 的 maxGradient。 */
+const BURST_PARTICLE_GRAD_MAX: Grad = {
+  c: [{ t: 0, v: [0.9960784912109375, 0.22352942824363708, 0.6000000238418579] }, { t: 1, v: [1, 0.8066037893295288, 0.9008476734161377] }],
+  a: [{ t: 0.008773937590600443, v: 1 }, { t: 1, v: 0 }],
+};
+/** #530 Bg_core ColorModule（单渐变）。 */
+const BURST_CORE_GRAD: Grad = {
+  c: [{ t: 0, v: [0.9339622855186462, 0.3744660019874573, 0.8733367323875427] }, { t: 1, v: [1, 0.8066037893295288, 0.9008476734161377] }],
+  a: [{ t: 0.008773937590600443, v: 1 }, { t: 1, v: 0 }],
+};
+
+function gradColor(g: Grad, u: number): Rgb {
+  const k = g.c;
+  if (u <= k[0].t) return k[0].v;
+  for (let i = 1; i < k.length; i++) {
+    if (u > k[i].t) continue;
+    const span = k[i].t - k[i - 1].t;
+    const f = span > 0 ? (u - k[i - 1].t) / span : 0;
+    const a = k[i - 1].v, b = k[i].v;
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+  return k[k.length - 1].v;
+}
+
+export interface Rgba { r: number; g: number; b: number; a: number }
+
+/**
+ * #565/#564 的顶点色：TwoGradients ⇒ `lerp(min(u), max(u), r)`，r 为该粒子出生时取定的随机数；
+ * `startColor` 白，故即为最终顶点色。
+ */
+export function apRateBurstParticleColor(u: number, r: number): Rgba {
+  const cMin = gradColor(BURST_PARTICLE_GRAD_MIN, u), cMax = gradColor(BURST_PARTICLE_GRAD_MAX, u);
+  const aMin = linearKeys(BURST_PARTICLE_GRAD_MIN.a, u), aMax = linearKeys(BURST_PARTICLE_GRAD_MAX.a, u);
+  return {
+    r: cMin[0] + (cMax[0] - cMin[0]) * r,
+    g: cMin[1] + (cMax[1] - cMin[1]) * r,
+    b: cMin[2] + (cMax[2] - cMin[2]) * r,
+    a: aMin + (aMax - aMin) * r,
+  };
+}
+
+/** #530 Bg_core 的顶点色 = `startColor × ColorModule(u)`。 */
+export function apRateBurstCoreColor(age: number, life = AP_RATE_BURST_DURATION): Rgba {
+  const u = Math.min(Math.max(age / life, 0), 1);
+  const c = gradColor(BURST_CORE_GRAD, u);
+  const S = AP_RATE_BURST_CORE_START;
+  return { r: S.r * c[0], g: S.g * c[1], b: S.b * c[2], a: S.a * linearKeys(BURST_CORE_GRAD.a, u) };
+}
 
 /**
  * Root / Bg_core 的尺寸倍率：0 → 0.9385×1.35 @0.2609，之后保持。
@@ -472,12 +557,6 @@ export function apRateBurstRootAlpha(age: number, life = AP_RATE_BURST_DURATION)
   return linearKeys(BURST_ROOT_ALPHA, age / life);
 }
 
-/** #530 Bg_core 的 alpha：1 @0.0088 → 0 @1.0（整寿命线性淡出）。 */
-export function apRateBurstCoreAlpha(age: number, life = AP_RATE_BURST_DURATION): number {
-  if (age <= 0) return BURST_CORE_ALPHA[0].v;
-  return linearKeys(BURST_CORE_ALPHA, age / life);
-}
-
 /** #565/#564 的尺寸倍率，入参为该粒子自身寿命的归一化年龄。 */
 export function apRateBurstParticleScale(u: number): number {
   if (u <= 0) return 0;
@@ -485,13 +564,9 @@ export function apRateBurstParticleScale(u: number): number {
   return hermite(BURST_PARTICLE_SIZE_KEYS, u);
 }
 
-/** #565/#564 的 alpha，入参为该粒子自身寿命的归一化年龄。 */
-export function apRateBurstParticleAlpha(u: number): number {
-  return linearKeys(BURST_PARTICLE_ALPHA, u);
-}
-
 /**
  * LimitVelocityOverLifetime 的位移积分（#565/#564 均 `enabled=True`）。
+ * 仅当 `v0 > limit` 时衰减；否则匀速。
  *
  * Unity 语义：`v(t) = lim + (v0 − lim)·e^(−κt)`，其中 `κ = −ln(1 − dampen) × 50`
  * （同 `fx.ts` 的 HitFx 限速）。
@@ -514,7 +589,8 @@ export function apRateBurstTravel(
   const kappa = dampen > 0 ? -Math.log(1 - Math.min(dampen, 0.999999)) * 50 : 0;
   // 沿初速方向的标量位移。
   let dist: number;
-  if (kappa <= 1e-9) {
+  // 只衰减超出上限的部分：初速不超过上限时不受影响。
+  if (kappa <= 1e-9 || v0 <= limit) {
     dist = v0 * t;
   } else {
     const decay = 1 - Math.exp(-kappa * t);
