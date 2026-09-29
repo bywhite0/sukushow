@@ -2,7 +2,7 @@
 
 import { type Chart, decodeChart } from './chart';
 import { FlatRenderer, loadSprites, noteLabel } from './renderer';
-import { type Layout, defaultLayout } from './view';
+import { type Layout, defaultLayout, scrollToBottom, yTime } from './view';
 
 const el = <T extends HTMLElement>(id: string) => {
   const node = document.getElementById(id);
@@ -41,6 +41,8 @@ function draw() {
   canvas.dataset.duration = chart.duration.toFixed(4);
   canvas.dataset.roots = String(chart.roots.length);
   canvas.dataset.lines = String(chart.lines.length);
+  // 当前布局快照，便于探针与自动化核对坐标。
+  canvas.dataset.layout = JSON.stringify(layout);
 }
 
 function setStatus(text: string, error = false) {
@@ -67,6 +69,8 @@ async function load(bytes: Uint8Array, name: string) {
   try {
     const c = await decodeChart(bytes);
     chart = c;
+    // 时间轴向上：0 秒在内容底部，故初始把视口贴到内容底端。
+    layout = { ...layout, duration: c.duration, scrollPx: Math.max(0, c.duration * layout.pxPerSec - stage.clientHeight + layout.padY) };
     empty.classList.add('hidden');
     describe(c);
     setStatus(`已载入 ${name}：${c.notes.length} 个音符`);
@@ -99,7 +103,24 @@ stage.addEventListener('drop', async event => {
 });
 
 const zoom = el<HTMLInputElement>('zoom'), lane = el<HTMLInputElement>('lane'), thick = el<HTMLInputElement>('thick');
-zoom.oninput = () => { layout = { ...layout, pxPerSec: Number(zoom.value) }; el<HTMLOutputElement>('zoom-out').textContent = `${zoom.value} px/s`; draw(); };
+
+/** 纵向可滚动上限：内容高 − 视口高。 */
+function maxScroll(): number {
+  if (!chart) return 0;
+  return Math.max(0, (layout.duration - 0) * layout.pxPerSec + layout.padY * 2 - stage.clientHeight);
+}
+
+/** 改纵向缩放时保持视口底边的时间不变，避免跳位。 */
+function setZoom(px: number) {
+  const bottomTime = yTime(stage.clientHeight, layout);
+  layout = { ...layout, pxPerSec: px };
+  layout = { ...layout, scrollPx: Math.min(maxScroll(), Math.max(0, scrollToBottom(bottomTime, layout, stage.clientHeight))) };
+  zoom.value = String(px);
+  el<HTMLOutputElement>('zoom-out').textContent = `${px} px/s`;
+  draw();
+}
+
+zoom.oninput = () => setZoom(Number(zoom.value));
 lane.oninput = () => { layout = { ...layout, lanePx: Number(lane.value) }; el<HTMLOutputElement>('lane-out').textContent = `${lane.value} px`; draw(); };
 thick.oninput = () => { instantPx = Number(thick.value); el<HTMLOutputElement>('thick-out').textContent = `${thick.value} px`; draw(); };
 el<HTMLInputElement>('grid').onchange = e => { showGrid = (e.target as HTMLInputElement).checked; draw(); };
@@ -107,11 +128,11 @@ el<HTMLInputElement>('measure').onchange = e => { showMeasures = (e.target as HT
 el<HTMLInputElement>('simul').onchange = e => { showSimultaneous = (e.target as HTMLInputElement).checked; draw(); };
 el<HTMLInputElement>('mirror').onchange = e => { layout = { ...layout, mirror: (e.target as HTMLInputElement).checked }; draw(); };
 
-/** 把指定时刻滚到视口顶部。 */
+/** 把指定时刻滚到视口底边——即视口显示 [time, time + 视口高/pxPerSec] 这一段。 */
 const goto = el<HTMLInputElement>('goto');
 function jumpTo(time: number) {
   if (!Number.isFinite(time)) return;
-  layout = { ...layout, scrollPx: Math.max(0, time * layout.pxPerSec) };
+  layout = { ...layout, scrollPx: Math.max(0, scrollToBottom(time, layout, stage.clientHeight)) };
   draw();
 }
 goto.oninput = () => jumpTo(Number(goto.value));
@@ -123,17 +144,14 @@ stage.addEventListener('wheel', event => {
   event.preventDefault();
   const step = event.deltaY > 0 ? -5 : 5;
   if (event.shiftKey) {
-    const px = Math.max(20, Math.min(600, layout.pxPerSec + step * 5));
-    layout = { ...layout, pxPerSec: px };
-    zoom.value = String(px);
-    el<HTMLOutputElement>('zoom-out').textContent = `${px} px/s`;
+    setZoom(Math.max(20, Math.min(600, layout.pxPerSec + step * 5)));
   } else {
     const px = Math.max(4, Math.min(40, layout.lanePx + (event.deltaY > 0 ? -1 : 1)));
     layout = { ...layout, lanePx: px };
     lane.value = String(px);
     el<HTMLOutputElement>('lane-out').textContent = `${px} px`;
+    draw();
   }
-  draw();
 }, { passive: false });
 
 let dragging = false, lastX = 0, lastY = 0;
@@ -142,7 +160,8 @@ canvas.addEventListener('pointerup', event => { dragging = false; canvas.release
 canvas.addEventListener('pointermove', event => {
   if (!chart) return;
   if (dragging) {
-    layout = { ...layout, padX: layout.padX + (event.clientX - lastX), scrollPx: layout.scrollPx - (event.clientY - lastY) };
+    const scroll = Math.min(maxScroll(), Math.max(0, layout.scrollPx - (event.clientY - lastY)));
+    layout = { ...layout, padX: layout.padX + (event.clientX - lastX), scrollPx: scroll };
     lastX = event.clientX; lastY = event.clientY;
     draw();
     return;

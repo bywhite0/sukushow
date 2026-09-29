@@ -1,7 +1,7 @@
-/** 平面布局：轨道 = 横轴（60 格），时间 = 纵轴（向下递增）。
+/** 平面布局：轨道 = 横轴（60 格），时间 = 纵轴（**向上递增**）。
  *
- * 取这个朝向是因为谱面作者用 Hold 画出的图形（同 tick 折返的航点）是按
- * 「横轴 = 轨道、纵轴 = 时间」画的，保持该朝向图形才不变形。
+ * 游戏是下落式的——未来的音符从上方落下。平面视图沿用同一朝向，
+ * 0 秒在内容底部、总时长在顶部，读谱方向和游戏里一致。
  */
 
 import type { Chart, Note } from './chart';
@@ -21,10 +21,12 @@ export interface Layout {
   scrollPx: number;
   /** 左右镜像。 */
   mirror: boolean;
+  /** 谱面总时长（秒）。时间轴向上，靠它把 0 秒锚在内容底部。 */
+  duration: number;
 }
 
 export const defaultLayout = (): Layout => ({
-  lanePx: 14, pxPerSec: 90, padX: 16, padY: 16, scrollPx: 0, mirror: false,
+  lanePx: 14, pxPerSec: 90, padX: 16, padY: 16, scrollPx: 0, mirror: false, duration: 0,
 });
 
 /** 格线 x 坐标：edge ∈ 0…60，为 lane−1 与 lane 的分界。 */
@@ -32,14 +34,22 @@ export function edgeX(edge: number, lay: Layout): number {
   return lay.padX + (lay.mirror ? LANES - edge : edge) * lay.lanePx;
 }
 
-/** 时间 → 画布 y。 */
+/** 时间 → 画布 y。时间向上：0 秒在内容底部，`duration` 在顶部。 */
 export function timeY(time: number, lay: Layout): number {
-  return lay.padY + time * lay.pxPerSec - lay.scrollPx;
+  return lay.padY + (lay.duration - time) * lay.pxPerSec - lay.scrollPx;
 }
 
 /** 画布 y → 时间。 */
 export function yTime(y: number, lay: Layout): number {
-  return (y - lay.padY + lay.scrollPx) / lay.pxPerSec;
+  return lay.duration - (y - lay.padY + lay.scrollPx) / lay.pxPerSec;
+}
+
+/**
+ * 让某时刻落在视口底边——即视口显示 `[time, time + 视口高/pxPerSec]` 这一段，
+ * 时间是这段里最早的时刻。截图与「定位到」都用它。
+ */
+export function scrollToBottom(time: number, lay: Layout, viewportH: number): number {
+  return lay.padY + (lay.duration - time) * lay.pxPerSec - viewportH;
 }
 
 /** 轨道栏总宽（像素）。 */
@@ -70,7 +80,12 @@ export function instantRect(note: Note, lay: Layout, minPx: number): Rect {
 
 export interface Quad { p: [number, number][] }
 
-/** Hold 单个节点的四边形：头 [l,r] → 尾 [l2,r2]，中间线性。 */
+/**
+ * Hold 单个节点的四边形：头 [l,r] → 尾 [l2,r2]，中间线性。
+ *
+ * 时间向上，故头的 y 大于尾的 y。四角顺序统一为
+ * 「头排左 → 头排右 → 尾排右 → 尾排左」，与 `slice.bandHalves` 一致。
+ */
 export function holdQuad(note: Note, lay: Layout): Quad {
   const [hl, hr] = noteSpan(note, lay, false);
   const [tl, tr] = noteSpan(note, lay, true);

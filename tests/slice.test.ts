@@ -14,7 +14,7 @@ const flags = (type: number, l: number, r: number, l2 = l, r2 = r) =>
 const chart = (notes: Record<string, unknown>[]) =>
   parseChart({ Notes: notes, Bpms: [{ Time: '0.0', Bpm: '120.0' }], Beats: [] });
 
-const lay = (over = {}) => ({ ...defaultLayout(), ...over });
+const lay = (over = {}) => ({ ...defaultLayout(), duration: 10, ...over });
 
 describe('原版尺寸换算', () => {
   it('一格轨宽 = 0.15 世界单位', () => {
@@ -149,8 +149,9 @@ describe('Hold 宽带三列', () => {
     const l = lay({ lanePx: 10, pxPerSec: 100 });
     const h = bandHalves(c.roots[0], l)[0];
     expect(h.corners[0][1]).toBeCloseTo(h.corners[1][1], 9);
-    expect(h.corners[0][1]).toBeCloseTo(l.padY + 1.0 * 100, 9);
-    expect(h.corners[2][1]).toBeCloseTo(l.padY + 2.0 * 100, 9);
+    // 时间向上：头（1.0 s）在尾（2.0 s）下方。
+    expect(h.corners[0][1]).toBeCloseTo(l.padY + (l.duration - 1.0) * 100, 9);
+    expect(h.corners[2][1]).toBeCloseTo(l.padY + (l.duration - 2.0) * 100, 9);
   });
 
   it('镜像时左右翻转', () => {
@@ -208,8 +209,8 @@ describe('Hold 宽带三列', () => {
     // 第一节点尾排右列 = 轨道 20；第二节点（同轨）头排左列 = 轨道 11。
     expect(h[1].corners[2][0]).toBeCloseTo(laneX(20, l), 9);
     expect(h[2].corners[0][0]).toBeCloseTo(laneX(11, l), 9);
-    // 第二节点尾排落在 2.0 s。
-    expect(h[3].corners[2][1]).toBeCloseTo(l.padY + 2.0 * l.pxPerSec, 9);
+    // 第二节点尾排落在 2.0 s（时间向上，故用 duration − t）。
+    expect(h[3].corners[2][1]).toBeCloseTo(l.padY + (l.duration - 2.0) * l.pxPerSec, 9);
   });
 
   it('零时长节点不产出', () => {

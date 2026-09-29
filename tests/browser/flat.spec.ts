@@ -90,8 +90,9 @@ test('悬停探针读出音符信息', async ({ page }) => {
   await importChart(page, SAMPLE);
   const box = await page.locator('#canvas').boundingBox();
   if (!box) throw new Error('画布没有边界');
-  const pos = await layoutOf(page);
-  await page.mouse.move(box.x + pos.padX + 11 * pos.lanePx, box.y + pos.padY + 1.0 * pos.pxPerSec);
+  const lay = await layoutOf(page);
+  // 时间向上：1.0 s 的 y 由 duration 与 scrollPx 决定，用页面里的真实布局。
+  await page.mouse.move(box.x + lay.padX + 11 * lay.lanePx, box.y + yOf(1.0, lay));
   await expect(page.locator('#probe')).toContainText('Single');
   await expect(page.locator('#probe')).toContainText('轨道 10–12');
 });
@@ -125,11 +126,12 @@ test('音符端头是圆角，中段不拉伸端头', async ({ page }) => {
   await importChart(page, SAMPLE);
   // 1.0 s 处的 Single（轨道 10–12，3 格宽）。端头贴图单侧就宽于该音符，
   // 因此整条由两个端头拼成，剖面应呈「亮边—平台—平台—亮边」。
-  const prof = await page.locator('#canvas').evaluate(el => {
+  const lay = await layoutOf(page);
+  const prof = await page.locator('#canvas').evaluate((el, { y0 }) => {
     const c = el as HTMLCanvasElement;
     const ctx = c.getContext('2d')!;
     const dpr = c.width / c.clientWidth;
-    const y = Math.round((16 + 1.0 * 90) * dpr);
+    const y = Math.round(y0 * dpr);
     const { data, width } = ctx.getImageData(0, y, c.width, 1);
     // 背景 #0f1622 = (15,22,34)：明显偏离即内容（音符是品红系，不能用青色滤镜）。
     // 轨道边框也是内容，故按连通段取最长的那一段 = 音符本体。
@@ -146,7 +148,7 @@ test('音符端头是圆角，中段不拉伸端头', async ({ page }) => {
     }
     if (cur.length) groups.push(cur);
     return groups.sort((a, b) => b.length - a.length)[0] ?? [];
-  });
+  }, { y0: yOf(1.0, lay) });
   expect(prof.length).toBeGreaterThan(20);
   const peak = Math.max(...prof);
   // 圆角端头贴图在两端是渐入的（实测剖面 46 74 122 148 204 235 … 243 平台），
@@ -165,13 +167,13 @@ test('斜置 Hold 沿带长不漂色', async ({ page }) => {
     Notes: [{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: FLAGS(1, 10, 20, 40, 50) }],
   };
   await importChart(page, SLANT);
-  const profs = await page.locator('#canvas').evaluate(el => {
+  const lay = await layoutOf(page);
+  const profs = await page.locator('#canvas').evaluate((el, { lay }) => {
     const c = el as HTMLCanvasElement;
     const ctx = c.getContext('2d')!;
     const dpr = c.width / c.clientWidth;
-    const padY = 16, pxPerSec = 90;
     const sample = (t: number) => {
-      const y = Math.round((padY + t * pxPerSec) * dpr);
+      const y = Math.round((lay.padY + (lay.duration - t) * lay.pxPerSec - lay.scrollPx) * dpr);
       const { data, width } = ctx.getImageData(0, y, c.width, 1);
       const g: number[] = [];
       for (let x = 0; x < width; x++) {
@@ -183,7 +185,7 @@ test('斜置 Hold 沿带长不漂色', async ({ page }) => {
       return Array.from({ length: 9 }, (_, i) => g[Math.round((g.length - 1) * i / 8)]);
     };
     return [1.2, 1.4, 1.6, 1.8].map(sample);
-  });
+  }, { lay });
   const rows = profs.filter(Boolean) as number[][];
   expect(rows.length).toBe(4);
   // 中列应显著暗于两侧，且各行的中列值一致（不漂色）。
@@ -198,12 +200,12 @@ test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
   await importChart(page, SAMPLE);
   // 在 2.5 s 处整行扫描，先定位宽带实际跨度（节点斜置时跨度随时间平移），
   // 再比较左右边缘与中列的绿通道。两侧列 alpha 0.6 > 中列 0.2。
-  const prof = await page.locator('#canvas').evaluate(el => {
+  const lay = await layoutOf(page);
+  const prof = await page.locator('#canvas').evaluate((el, { y0 }) => {
     const c = el as HTMLCanvasElement;
     const ctx = c.getContext('2d')!;
     const dpr = c.width / c.clientWidth;
-    const padY = 16, pxPerSec = 90;
-    const y = Math.round((padY + 2.5 * pxPerSec) * dpr);
+    const y = Math.round(y0 * dpr);
     const row = ctx.getImageData(0, y, c.width, 1).data;
     const cyan: number[] = [];
     for (let x = 0; x < c.width; x++) {
@@ -216,7 +218,7 @@ test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
       return row[x * 4 + 1];
     };
     return { width: cyan.length, left: at(0.02), mid: at(0.5), right: at(0.98) };
-  });
+  }, { y0: yOf(2.5, lay) });
   expect(prof.width).toBeGreaterThan(50);
   expect(prof.left).toBeGreaterThan(prof.mid + 40);
   expect(prof.right).toBeGreaterThan(prof.mid + 40);
@@ -234,10 +236,16 @@ async function importChart(page: import('@playwright/test').Page, data: unknown)
 }
 
 async function layoutOf(page: import('@playwright/test').Page) {
-  return page.locator('#canvas').evaluate(el => ({
-    lanePx: 14, padX: 16, padY: 16, pxPerSec: 90, scrollPx: 0,
-    dpr: (el as HTMLCanvasElement).width / (el as HTMLCanvasElement).clientWidth,
-  }));
+  return page.locator('#canvas').evaluate(el => {
+    const c = el as HTMLCanvasElement;
+    const lay = JSON.parse(c.dataset.layout ?? '{}');
+    return { ...lay, dpr: c.width / c.clientWidth, clientH: c.clientHeight };
+  });
+}
+
+/** 时间 → 画布 y（CSS 像素）。时间向上：0 秒在内容底端。 */
+function yOf(time: number, lay: { padY: number; pxPerSec: number; scrollPx: number; duration: number }) {
+  return lay.padY + (lay.duration - time) * lay.pxPerSec - lay.scrollPx;
 }
 
 /** 读画布上某个（轨道、时刻）处的像素。 */
@@ -246,7 +254,7 @@ async function pixelAt(page: import('@playwright/test').Page, lane: number, time
   return page.locator('#canvas').evaluate((el, { lay, lane, time }) => {
     const c = el as HTMLCanvasElement;
     const x = Math.round((lay.padX + (lane + 0.5) * lay.lanePx) * lay.dpr);
-    const y = Math.round((lay.padY + time * lay.pxPerSec - lay.scrollPx) * lay.dpr);
+    const y = Math.round((lay.padY + (lay.duration - time) * lay.pxPerSec - lay.scrollPx) * lay.dpr);
     const d = c.getContext('2d')!.getImageData(x, y, 1, 1).data;
     return [d[0], d[1], d[2], d[3]].join(',');
   }, { lay, lane, time });

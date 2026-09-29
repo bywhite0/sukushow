@@ -7,7 +7,7 @@
 
 import type { Chart, Note } from './chart';
 import {
-  type Layout, chainEnd, contentHeight, edgeX, noteSpan, measures, timeY, trackWidth,
+  type Layout, chainEnd, contentHeight, edgeX, noteSpan, measures, timeY, trackWidth, yTime,
 } from './view';
 import {
   type BandHalf, type SpriteMeta, NOTE_SPRITE, SPRITE_SCALE_X, chainBandHalves, cssRgba,
@@ -177,8 +177,9 @@ export class FlatRenderer {
 
   private paintNotes(chart: Chart, lay: Layout, instantPx: number, h: number) {
     const ctx = this.ctx;
-    const topTime = (0 - lay.padY + lay.scrollPx) / lay.pxPerSec;
-    const bottomTime = (h - lay.padY + lay.scrollPx) / lay.pxPerSec;
+    // 时间向上：画布顶边对应更晚的时刻，故这里取 min/max 而非上下。
+    const tA = yTime(0, lay), tB = yTime(h, lay);
+    const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
     let drawn = 0, instants = 0, holds = 0;
 
     // 瞬时音符：同类型合批，减少状态切换。
@@ -189,7 +190,7 @@ export class FlatRenderer {
       if (!img || !meta) ctx.fillStyle = FALLBACK[type];
       for (const n of chart.notes) {
         if (n.type !== type || n.prev) continue;
-        if (n.time < topTime - 1 || n.time > bottomTime + 1) continue;
+        if (n.time < tMin - 1 || n.time > tMax + 1) continue;
         const [x0, x1] = noteSpan(n, lay, false);
         const y = timeY(n.time, lay);
         if (img && meta) {
@@ -206,7 +207,7 @@ export class FlatRenderer {
     for (const root of chart.roots) {
       if (root.type !== 1) continue;
       const end = chainEnd(root);
-      if (end < topTime - 1 || root.time > bottomTime + 1) continue;
+      if (end < tMin - 1 || root.time > tMax + 1) continue;
       for (const half of chainBandHalves(root, lay)) {
         const ys = half.corners.map(c => c[1]);
         if (Math.min(...ys) > h + 4 || Math.max(...ys) < -4) continue;
@@ -215,15 +216,15 @@ export class FlatRenderer {
       }
       // 头尾端头贴图（原版 Silhouette / Silhouette-End）。
       let tail = root; while (tail.next) tail = tail.next;
-      this.paintCap(root, root.time, root.l, root.r, lay, topTime, bottomTime);
-      this.paintCap(tail, tail.end, tail.l2, tail.r2, lay, topTime, bottomTime);
+      this.paintCap(root, root.time, root.l, root.r, lay, tMin, tMax);
+      this.paintCap(tail, tail.end, tail.l2, tail.r2, lay, tMin, tMax);
     }
     return { drawn, instants, holds };
   }
 
   /** Hold 头 / 尾的端头贴图，与瞬时音符同款九宫格。 */
-  private paintCap(n: Note, time: number, l: number, r: number, lay: Layout, topTime: number, bottomTime: number) {
-    if (time < topTime - 1 || time > bottomTime + 1) return;
+  private paintCap(n: Note, time: number, l: number, r: number, lay: Layout, tMin: number, tMax: number) {
+    if (time < tMin - 1 || time > tMax + 1) return;
     const img = this.lib.images[1];
     const meta = this.lib.meta[1];
     if (!img || !meta) return;
@@ -279,7 +280,7 @@ export class FlatRenderer {
 
   /** 命中测试：返回鼠标位置下的音符（先 Hold 后瞬时，取纵向最近者）。 */
   hitTest(chart: Chart, lay: Layout, x: number, y: number, instantPx: number, radius = 6): Note | null {
-    const t = (y - lay.padY + lay.scrollPx) / lay.pxPerSec;
+    const t = yTime(y, lay);
     let best: Note | null = null, bestDist = Infinity;
     for (const root of chart.roots) {
       if (root.type === 1) {

@@ -30,7 +30,7 @@ interface Totals {
 }
 
 function inspect(c: Chart, t: Totals, name: string, problems: string[]) {
-  const lay = defaultLayout();
+  const lay = { ...defaultLayout(), duration: c.duration };
   t.notes += c.notes.length;
   t.roots += c.roots.length;
   t.lines += c.lines.length;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseChart } from '../src/chart';
 import {
   LANES, chainEnd, chainQuads, defaultLayout, edgeX, holdQuad, instantRect,
-  measures, noteSpan, timeY, trackWidth, yTime,
+  measures, noteSpan, scrollToBottom, timeY, trackWidth, yTime,
 } from '../src/view';
 
 /** l/r 为头端点轨道，l2/r2 为尾端点轨道。 */
@@ -44,24 +44,45 @@ describe('坐标系', () => {
 });
 
 describe('时间轴', () => {
-  it('0 秒落在顶部留白处', () => {
-    const l = lay();
-    expect(timeY(0, l)).toBe(l.padY);
+  it('0 秒落在内容底端', () => {
+    const l = { ...lay(), duration: 10 };
+    // 内容底端 = padY + duration*pxPerSec（未滚动）
+    expect(timeY(0, l)).toBe(l.padY + 10 * l.pxPerSec);
   });
 
-  it('时间向下递增', () => {
-    const l = lay();
-    expect(timeY(2, l)).toBeGreaterThan(timeY(1, l));
+  it('时间向上递增（越晚越靠上）', () => {
+    const l = { ...lay(), duration: 10 };
+    expect(timeY(2, l)).toBeLessThan(timeY(1, l));
+  });
+
+  it('总时长落在顶部留白处', () => {
+    const l = { ...lay(), duration: 10 };
+    expect(timeY(10, l)).toBe(l.padY);
   });
 
   it('yTime 与 timeY 互逆', () => {
-    const l = { ...lay(), scrollPx: 320 };
+    const l = { ...lay(), duration: 200, scrollPx: 320 };
     for (const t of [0, 1.5, 12.25, 200]) expect(yTime(timeY(t, l), l)).toBeCloseTo(t);
   });
 
   it('滚动偏移把内容上移', () => {
-    const l = lay();
+    const l = { ...lay(), duration: 10 };
     expect(timeY(5, { ...l, scrollPx: 100 })).toBe(timeY(5, l) - 100);
+  });
+
+  it('scrollToBottom 让该时刻贴住视口底边', () => {
+    const l = { ...lay(), duration: 60 };
+    const s = scrollToBottom(30, l, 500);
+    expect(timeY(30, { ...l, scrollPx: s })).toBeCloseTo(500);
+  });
+
+  it('视口显示的是 [t, t + 视口高/pxPerSec] 这一段', () => {
+    const l = { ...lay(), duration: 60 };
+    const s = scrollToBottom(30, l, 500);
+    const view = { ...l, scrollPx: s };
+    // 底边 = t，顶边 = t + 500/pxPerSec
+    expect(yTime(500, view)).toBeCloseTo(30);
+    expect(yTime(0, view)).toBeCloseTo(30 + 500 / l.pxPerSec);
   });
 });
 
@@ -121,11 +142,12 @@ describe('瞬时音符矩形', () => {
 });
 
 describe('Hold 四边形', () => {
-  it('四点顺序为左上→右上→右下→左下', () => {
+  it('四点顺序为头排左→头排右→尾排右→尾排左', () => {
     const c = parseChart({ Notes: [{ Uid: 1, just: '1', holds: ['2'], Flags: flags(1, 6, 20) }], Bpms: [] });
     const q = holdQuad(c.notes[0], lay());
     expect(q.p).toHaveLength(4);
-    expect(q.p[0][1]).toBeLessThan(q.p[2][1]);
+    // 时间向上：头（较早）在下方，故头的 y 更大。
+    expect(q.p[0][1]).toBeGreaterThan(q.p[2][1]);
     expect(q.p[0][0]).toBeLessThan(q.p[1][0]);
     expect(q.p[3][0]).toBeLessThan(q.p[2][0]);
   });
@@ -140,7 +162,7 @@ describe('Hold 四边形', () => {
     const c = parseChart({ Notes: [{ Uid: 1, just: '1', holds: ['3.5'], Flags: flags(1, 6, 20) }], Bpms: [] });
     const l = lay();
     const q = holdQuad(c.notes[0], l);
-    expect(q.p[2][1] - q.p[0][1]).toBeCloseTo(2.5 * l.pxPerSec);
+    expect(q.p[0][1] - q.p[2][1]).toBeCloseTo(2.5 * l.pxPerSec);
   });
 });
 
@@ -154,7 +176,7 @@ describe('Hold 链', () => {
     });
     const quads = chainQuads(c.roots[0], lay());
     expect(quads).toHaveLength(2);
-    // 第二个节点的头边左端接上第一个节点的尾边左端（p3 为左下角）
+    // 第二个节点的头边左端接上第一个节点的尾边左端（p3 为尾排左）
     expect(quads[1].p[0][0]).toBeCloseTo(quads[0].p[3][0]);
     expect(quads[1].p[1][0]).toBeCloseTo(quads[0].p[2][0]);
   });
