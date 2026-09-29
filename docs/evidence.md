@@ -54,6 +54,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **暗色分数**：`UpdateScore` 用 `num_score_11` / `num_score_12` 换精灵，不是 opacity；开局 `Clear()` 时 12 位与逗号全暗。
 - **Combo 阈值 10**：`UpdateCombo` 在 combo < 10 时不显示数字；COMBO 标签与 APRate 徽章由 `UpdateApRate`（apRate >= 1）显隐。
 - **判定字**：寿命 0.7 s 硬切（无淡出）；缩放 `JudgementRectTween` 0.5->1 / 0.1 s；combo >= 10 时 `ComboRectTween` 0.8->1 / 0.1 s。
+- **判定字高度**：level56 `Canvas` CanvasScaler ScaleWithScreenSize 1920×1080 / Expand；`SafeArea` aMin(.5,0) aMax(.5,1) 1920 宽纵向拉伸；`JudgeRoot` 锚点/轴心 (.5,.5)、pos (0,0)、400×400；`Judge` anchoredPosition (0,−270)、`Condition` (0,−210)（均为 prefab 值）。4.12.0 `ScoreResolver.Inject` @0x49A3738–0x49A3858 执行 `judge.localPosition.y += Config.JudgementY × 70`（`LineHeight`），ConfigResolver 原样照抄 `RhythmGameOptionValue.JudgementY`（`get_JudgementYRange` @0x44A126C：1..10，First 5）⇒ 默认判定字在 JudgeRoot 中心上方 **+80**，不是 −270。Condition 于 @0x49A3A68–0x49A3B8C：JudgementY == FastSlowY ⇒ 判定字 y + 60（`OverlapOffsetY`），否则 −210 + FastSlowY × 70 ⇒ 默认 +140。`PreviewScoreResolver.ApplyLayout` @0x485A244 同式。预览此前按 −270 + (档−5)×30，整体偏下 350 逻辑像素。
 - **AP/Voltage 环**：level56 Image Filled / Radial360 / fillOrigin Top / fillClockwise=false；fillAmount=ApResolver 小数部（Voltage 为 CalcGauge）；CSS 对 gage img 做 from 0deg（正上方）逆时针 conic mask（度单位）。
 - **isAuto 死码**：4.12.0 `ScoreResolver.isAuto` 无置 true 写入，`autoSprite` 运行时不出现；AutoPlay 仍走常规判定精灵。
 - **P2 chrome**：GaugeRoot + RankLabels + RankRoot（开局 SetRankNotActive / D）；PauseButton 包含遮罩内 Pattern；TechnicalScoreRoot 默认隐藏，由技术分三态设置控制。
@@ -67,7 +68,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **侧栏计分配置**：TotalAppeal + 熟练度等级（MusicMasteryLevel，默认 0）。
 - **Rank/gauge fix**: score>0 且未达 C → 显示 D（Clear 仍 none）；槽位填充结 S=0.912（非 1.0），与 RankLabels 对齐。
 - **TMP SDF 描边**：双层 .hud-ol / .hud-face 同尺寸对齐；**整层** scale(0.92)（避免字面单独缩放造成描边双侧偏移）；underlayer stroke 2×outlinePx。
-- **JudgeRoot/Condition**：(0, FastSlowY→−210±) 180×64；精灵 hantei_fast/slow/flick；与判定字同 0.7 s 硬切 + 0.5→1 缓出。ToCondition(diff==0)⇒Slow；shouldShowFastSlow 门控（Off 永不；UnderGreat type≤3；UnderPerfect type≤4）。AutoPlay 精确过线在 UnderPerfect 下显示 SLOW。
+- **JudgeRoot/Condition**：(0, −210 + FastSlowY×70，同档时判定字 +60) 180×64；精灵 hantei_fast/slow/flick；与判定字同 0.7 s 硬切 + 0.5→1 缓出。ToCondition(diff==0)⇒Slow；shouldShowFastSlow 门控（Off 永不；UnderGreat type≤3；UnderPerfect type≤4）。AutoPlay 精确过线在 UnderPerfect 下显示 SLOW。
 - **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
 - **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。 Fill 为青渐变 (29,235,199)→(118,240,224)；`value ≤ ceil(max×0.2)` 时切红 (235,37,78)→(255,114,143)（预览满血不触发）。

@@ -6,6 +6,7 @@ import {
   autoPlayJudgementType,
   conditionSprite,
   darknessAlpha,
+  fastSlowLayoutY,
   gridLaneCount,
   judgementLayoutY,
   judgementSprite,
@@ -38,8 +39,20 @@ describe('rgOptions defaults (4.12.0 OptionRange.First)', () => {
     expect(gridLaneCount(0)).toBe(0);
     expect(gridLaneCount(3)).toBe(4);
     expect(darknessAlpha(80, 130)).toBeCloseTo(80 / 130);
-    expect(judgementLayoutY(5, -270)).toBe(-270);
-    expect(judgementLayoutY(6, -270)).toBe(-240);
+  });
+
+  it('judgement / FAST·SLOW y = prefab + option × 70 (ScoreResolver.Inject)', () => {
+    // level56 Judge (0,-270) / Condition (0,-210); ConfigResolver passes JudgementY 1..10 through unchanged.
+    expect(judgementLayoutY(5)).toBe(80);
+    expect(judgementLayoutY(1)).toBe(-200);
+    expect(judgementLayoutY(10)).toBe(430);
+    expect(judgementLayoutY(6, -210)).toBe(210);
+    expect(judgementLayoutY(0)).toBe(-200); // clamped to range min
+    // Same step ⇒ judge + OverlapOffsetY 60; otherwise Condition prefab + FastSlowY × 70.
+    expect(fastSlowLayoutY(5, 5)).toBe(140);
+    expect(fastSlowLayoutY(3, 3)).toBe(0);
+    expect(fastSlowLayoutY(5, 2)).toBe(-70);
+    expect(fastSlowLayoutY(2, 9)).toBe(420);
   });
 
   it('gates judgement output with type < 6 - opt', () => {

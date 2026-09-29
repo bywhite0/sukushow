@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatTechnicalScore, hudLayout, hudScale, scoreCommaSprite, scoreDigitSprite } from '../src/hud';
+import { judgementLayoutY } from '../src/rgOptions';
 
 describe('HUD SafeArea 缩放', () => {
   it('1920×1080 时 scale=1，逻辑画布与 SafeArea 同宽', () => {
@@ -61,5 +62,21 @@ describe('TechnicalScore 文案', () => {
 
   it('按小数拆分', () => {
     expect(formatTechnicalScore(12.34567)).toEqual({ whole: '12', frac: '.3457 %' });
+  });
+});
+
+describe('判定字屏幕位置（JudgeRoot 居中于纵向拉伸的 SafeArea）', () => {
+  // 判定字中心距舞台顶部的比例：0.5 − y / logicH（Unity y 向上）。
+  const frac = (w: number, h: number) => 0.5 - judgementLayoutY(5) / hudLayout(w, h).logicH;
+  it.each([
+    ['16:9', 1920, 1080, 1080],
+    ['19.5:9', 2340, 1080, 1080],
+    ['20:9', 2400, 1080, 1080],
+    ['16:10', 1920, 1200, 1200],
+    ['4:3', 1440, 1080, 1440],
+  ])('%s：默认 JudgementY=5 位于正中上方 80 逻辑像素', (_n, w, h, logicH) => {
+    expect(hudLayout(w, h).logicH).toBeCloseTo(logicH, 6);
+    expect(frac(w, h)).toBeCloseTo(0.5 - 80 / logicH, 6);
+    expect(frac(w, h)).toBeLessThan(0.5);
   });
 });

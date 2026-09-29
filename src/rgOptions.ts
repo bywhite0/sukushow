@@ -75,13 +75,41 @@ export function gridLaneCount(opt: GridCountOption): number {
   return opt === 0 ? 0 : opt + 1;
 }
 
+/** level56 `JudgeRoot/Judge` 的 RectTransform anchoredPosition.y（prefab 值，未叠加用户设置）。 */
+export const JUDGE_PREFAB_Y = -270;
+/** level56 `JudgeRoot/Condition` 的 RectTransform anchoredPosition.y（prefab 值，未叠加用户设置）。 */
+export const CONDITION_PREFAB_Y = -210;
+/** ScoreResolver / PreviewScoreResolver 常量 `LineHeight = 70`：设置每 1 档移动 70 逻辑像素。 */
+export const JUDGEMENT_LINE_HEIGHT = 70;
+/** PreviewScoreResolver 常量 `OverlapOffsetY = 60`：JudgementY == FastSlowY 时 Condition 贴在判定字上方 60。 */
+export const FAST_SLOW_OVERLAP_OFFSET_Y = 60;
+
+function clampLayoutOption(v: number): number {
+  return Math.max(1, Math.min(10, Math.trunc(v)));
+}
+
 /**
- * Dump Judge at (0, −270) / Condition at (0, −210) when option First=5.
- * Step ±1 moves ±30px (preview mapping; option is 1..10).
+ * 判定字在 JudgeRoot（SafeArea 正中 400×400）内的 y（Unity 向上为正）。
+ *
+ * 4.12.0 `ScoreResolver.Inject` @0x49A3738–0x49A3858：
+ * `judge.localPosition.y = prefabY + Config.JudgementY × 70`；ConfigResolver 直接照抄
+ * `RhythmGameOptionValue.JudgementY`（range 1..10, First 5），不减 5。
+ * ⇒ 默认 5 档为 −270 + 350 = +80（屏幕正中偏上），不是 prefab 的 −270。
  */
-export function judgementLayoutY(optionY: number, baseY: number): number {
-  const o = Math.max(1, Math.min(10, Math.trunc(optionY)));
-  return baseY + (o - 5) * 30;
+export function judgementLayoutY(optionY: number, baseY: number = JUDGE_PREFAB_Y): number {
+  return baseY + clampLayoutOption(optionY) * JUDGEMENT_LINE_HEIGHT;
+}
+
+/**
+ * FAST/SLOW（JudgeRoot/Condition）的 y。`ScoreResolver.Inject` @0x49A3A68–0x49A3B8C：
+ * JudgementY == FastSlowY ⇒ 判定字（已偏移后）的 y + 60；否则 Condition prefab y + FastSlowY × 70。
+ * 用 level56 的两个 prefab 值时两支结果相同（−270+60 = −210），按原逻辑保留分支。
+ */
+export function fastSlowLayoutY(judgementY: number, fastSlowY: number): number {
+  const j = clampLayoutOption(judgementY);
+  const f = clampLayoutOption(fastSlowY);
+  if (j === f) return judgementLayoutY(j) + FAST_SLOW_OVERLAP_OFFSET_Y;
+  return CONDITION_PREFAB_Y + f * JUDGEMENT_LINE_HEIGHT;
 }
 
 export const RG_OPTION_DEFAULTS = {
