@@ -173,10 +173,22 @@ export class WebAudioSeOutput implements SeOutput {
   }
 
   private busFor(cueIndex: number): GainNode {
-    if (cueIndex === SE_CUE.start || (cueIndex >= SE_CUE.finish1 && cueIndex <= SE_CUE.finish4)) {
-      return this.seGain;
-    }
-    return this.tapGain;
+    return seBusFor(cueIndex) === 'se' ? this.seGain : this.tapGain;
+  }
+
+  /** 已解码的 cue 素材（导出混音用）。 */
+  get cueBuffers(): ReadonlyMap<number, AudioBuffer> {
+    return this.buffers;
+  }
+
+  /** 击中类（tap 总线）音量。 */
+  get tapVolume(): number {
+    return this.tapGain.gain.value;
+  }
+
+  /** 开场 / 曲终（se 总线）音量。 */
+  get seVolume(): number {
+    return this.seGain.gain.value;
   }
 
   play(cueIndex: number, volume: number, offset = 0): void {
@@ -266,6 +278,121 @@ export class WebAudioSeOutput implements SeOutput {
     this.stopHold();
     this.master.disconnect();
     if (this.ownContext) void this.context.close();
+  }
+}
+
+/** 开场 / 曲终走 se 总线，其余（击中、flick、hold…）走 tap 总线。 */
+export function seBusFor(cueIndex: number): 'tap' | 'se' {
+  return cueIndex === SE_CUE.start || (cueIndex >= SE_CUE.finish1 && cueIndex <= SE_CUE.finish4) ? 'se' : 'tap';
+}
+
+/** 导出时记录的音效事件（与 export/audioMix 的 CapturedSoundEvent 同形）；key = String(cue 编号)。 */
+export type CapturedSeEvent = {
+  type: 'oneShot' | 'loop';
+  key: string;
+  gain: number;
+  startSec: number;
+  endSec: number;
+  offsetSec: number;
+};
+
+/**
+ * 导出用的 SeOutput：不出声，只把 SeResolver 的输出记成带时间戳的事件。
+ *
+ * 时间戳取调用方设置的 now（导出时为该逻辑步对应的走带时刻）——实时预览里音效在派发的那一帧
+ * 以 context.currentTime 立即起播，所以「听到的走带时刻」就是派发时的走带时刻，与这里一致。
+ * gain = 事件音量 × 所在总线音量（总线在导出期间不变）。hold 为整段循环（与 WebAudioSeOutput 的 loop=true 相同）。
+ */
+export class CapturingSeOutput implements SeOutput {
+  now = 0;
+  readonly events: CapturedSeEvent[] = [];
+  private hold: CapturedSeEvent | null = null;
+  private holdVolume = 0;
+  private tapVol: number;
+  private seVol: number;
+
+  constructor(opts: { tapVolume: number; seVolume: number; hasCue?: (cueIndex: number) => boolean }) {
+    this.tapVol = opts.tapVolume;
+    this.seVol = opts.seVolume;
+    this.hasCue = opts.hasCue ?? (() => true);
+  }
+
+  private readonly hasCue: (cueIndex: number) => boolean;
+
+  private busGain(cueIndex: number): number {
+    return seBusFor(cueIndex) === 'se' ? this.seVol : this.tapVol;
+  }
+
+  play(cueIndex: number, volume: number, offset = 0): void {
+    if (!this.hasCue(cueIndex)) return;
+    this.events.push({
+      type: 'oneShot',
+      key: String(cueIndex),
+      gain: Math.max(0, volume) * this.busGain(cueIndex),
+      startSec: this.now,
+      endSec: Number.POSITIVE_INFINITY,
+      offsetSec: Math.max(0, offset),
+    });
+  }
+
+  stopOneShots(scope: 'tap' | 'all'): void {
+    for (const e of this.events) {
+      if (e.type !== 'oneShot' || Number.isFinite(e.endSec) || e.startSec > this.now) continue;
+      if (scope !== 'all' && seBusFor(Number(e.key)) !== 'tap') continue;
+      e.endSec = this.now;
+    }
+  }
+
+  startHold(volume: number): void {
+    if (this.hold || !this.hasCue(SE_CUE.hold)) return;
+    this.holdVolume = Math.max(0, volume);
+    this.openHold();
+  }
+
+  private openHold(): void {
+    this.hold = {
+      type: 'loop',
+      key: String(SE_CUE.hold),
+      gain: this.holdVolume * this.tapVol,
+      startSec: this.now,
+      endSec: Number.POSITIVE_INFINITY,
+      offsetSec: 0,
+    };
+    this.events.push(this.hold);
+  }
+
+  stopHold(): void {
+    if (!this.hold) return;
+    this.hold.endSec = this.now;
+    this.hold = null;
+  }
+
+  pauseHold(): void {
+    this.stopHold();
+  }
+
+  resumeHold(): void {
+    if (!this.hold && this.holdVolume > 0) this.openHold();
+  }
+
+  setTapVolume(v: number): void {
+    this.tapVol = Math.max(0, Math.min(1, v));
+  }
+
+  setSeVolume(v: number): void {
+    this.seVol = Math.max(0, Math.min(1, v));
+  }
+
+  /** 导出结束：仍在响的 hold 截到 endSec。 */
+  finish(endSec: number): void {
+    if (this.hold) {
+      this.hold.endSec = endSec;
+      this.hold = null;
+    }
+  }
+
+  dispose(): void {
+    this.hold = null;
   }
 }
 

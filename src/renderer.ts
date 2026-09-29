@@ -129,6 +129,10 @@ export class PreviewRenderer {
   private lastFieldTime = NaN;
   private observer: ResizeObserver;
   private disposed = false;
+  /** 导出时的固定画布尺寸（CSS px × dpr）；非 null 时忽略 ResizeObserver。 */
+  private fixedSize: { w: number; h: number; dpr: number } | null = null;
+  /** 本帧 hold 呼吸光推进的步数（实时 = 每帧 1 步；导出按 dt × 60 折算，见 setPhaseSteps）。 */
+  private phaseSteps = 1;
   constructor(private canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true });
     this.gl.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -157,6 +161,8 @@ export class PreviewRenderer {
     if (lib.fx) {
       this.fx = new HitFx(lib.fx, lib.fxTex);
       this.fx.setMode(this.hitEffectMode);
+      // 粒子随机数按启动参数播种：拖动 / 重放 / 导出在同一时刻得到同一组粒子。
+      this.fx.setDeterministic(true);
       this.notes.add(this.fx.group);
       const base = lib.fxTex.sc2_NotesEffectCircle_007;
       const move = lib.fxTex.sc2_feverLine01;
@@ -443,7 +449,7 @@ export class PreviewRenderer {
       let phase = this.phase.get(root.uid) ?? PHASE_START;
       const alpha = holdAlpha(active, phase);
       // HoldNote 呼吸光按帧推进；暂停 / 时间不动时冻结。
-      if (advance) this.phase.set(root.uid, alpha.phase);
+      if (advance) this.phase.set(root.uid, alpha.phase + (this.phaseSteps - 1) * (alpha.phase - phase));
       const segments: number[][] = [];
       let segment: Note | undefined = root;
       while (segment) { const v = holdSegment(segment, time, slope, mirror, this.laneWidthOpt); if (v.length) segments.push(v); segment = segment.next; }
@@ -547,8 +553,24 @@ export class PreviewRenderer {
       sign.n = pushBillboard(sign.pos, sign.uv, sign.col, sign.n, sign.cap, x, Y + Math.cos(PITCH) * bob, z + Math.sin(PITCH) * bob, gm.rect[2] / gm.ppu * 0.8, gm.rect[3] / gm.ppu * 0.8, [1, 1, 1, 1]);
     }
   }
+  /**
+   * 导出用：把画布固定为 w×h（CSS px）× dpr，绕过 ResizeObserver；传 null 恢复跟随元素尺寸。
+   */
+  setFixedSize(size: { w: number; h: number; dpr: number } | null) {
+    this.fixedSize = size;
+    this.gl.setPixelRatio(size ? size.dpr : Math.min(devicePixelRatio, 2));
+    this.resize();
+  }
+  /** 本帧 hold 呼吸光推进几步（原包按帧推进；导出按 dt × 60 折算，默认每帧 1 步）。 */
+  setPhaseSteps(steps: number) {
+    this.phaseSteps = Math.max(0, steps);
+  }
+  get domElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
   private resize() {
-    const w = this.canvas.clientWidth, h = this.canvas.clientHeight; if (!w || !h) return;
+    if (this.disposed) return;
+    const w = this.fixedSize?.w ?? this.canvas.clientWidth, h = this.fixedSize?.h ?? this.canvas.clientHeight; if (!w || !h) return;
     this.gl.setSize(w, h, false); this.camera.aspect = w / h;
     this.camera.fov = this.camera.aspect < 16 / 9 ? 2 * Math.atan(Math.tan(Math.PI / 6) * (16 / 9) / this.camera.aspect) * 180 / Math.PI : 60;
     this.camera.updateProjectionMatrix();
