@@ -33,7 +33,7 @@ for (const file of files) {
   try {
     const chart = decodeChartBytes(new Uint8Array(readFileSync(join(dir, file))));
     const lay = { ...defaultLayout(), duration: chart.duration };
-    const { svg, stats } = renderSvg(chart, lib, {
+    const common = {
       layout: lay,
       showMeasures: true,
       showBeats: true,
@@ -42,11 +42,22 @@ for (const file of files) {
       showBarNumbers: false,
       background: null,
       allowFallback: true,
-    });
+    };
+    // 几何自检跑单列版：切列会把跨列的长带重复绘制，绘制次数不再是几何量。
+    const { stats } = renderSvg(chart, lib, { ...common, aspect: 0 });
+    // 出图版（默认横版）只查不抛错与统计不翻倍。
+    const wide = renderSvg(chart, lib, common);
 
-    // 自洽检查：统计数不能超过谱面本身。
     if (stats.notes > chart.notes.length) throw new Error(`音符统计 ${stats.notes} > ${chart.notes.length}`);
     if (stats.holds > chart.notes.length * 2) throw new Error(`Hold 半边统计 ${stats.holds} 异常`);
+    // 切列不改变「谱面里有多少音符」。
+    if (wide.stats.notes !== stats.notes) throw new Error(`切列后音符数变了：${stats.notes} → ${wide.stats.notes}`);
+    if (wide.stats.instants !== stats.instants) throw new Error(`切列后瞬时音符数变了：${stats.instants} → ${wide.stats.instants}`);
+    for (const [name, s] of [['单列', stats], ['横版', wide.stats]] as const) {
+      if (!s.columns || !Number.isFinite(s.columnHeight)) throw new Error(`${name}版式统计异常`);
+    }
+
+    const svg = wide.svg;
     if (!svg.startsWith('<svg') || !svg.endsWith('</svg>')) throw new Error('SVG 首尾标签不完整');
     // 括号配平（粗检，防字符串拼装漏闭合）。
     const open = (svg.match(/<svg[\s>]/g) ?? []).length;

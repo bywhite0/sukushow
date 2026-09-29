@@ -104,7 +104,7 @@ describe('SVG 结构', () => {
       { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
       { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 12, 22) },
     ]);
-    const { svg, stats } = renderSvg(chart, lib(), opts());
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0 }));
     expect(stats.holds).toBe(4);
     expect((svg.match(/<path fill="url\(#bg/g) ?? [])).toHaveLength(4);
     expect((svg.match(/<linearGradient id="bg/g) ?? [])).toHaveLength(4);
@@ -181,7 +181,7 @@ describe('SVG 结构', () => {
   it('画布高度随谱面时长走，时长以谱面为准', () => {
     const chart = chartOf([{ Uid: 1, just: '100.0', holds: [], Flags: flags(0, 10, 12) }]);
     // 传入的 duration 故意写错，渲染器应以谱面为准。
-    const { svg, stats } = renderSvg(chart, lib(), opts({ layout: { ...defaultLayout(), duration: 2 } }));
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0, layout: { ...defaultLayout(), duration: 2 } }));
     expect(stats.instants).toBe(1);
     const h = 16 * 2 + chart.duration * defaultLayout().pxPerSec;
     expect(svg).toContain(`height="${Math.round(h)}"`);
@@ -252,15 +252,26 @@ describe('分列', () => {
     return decodeChartBytes(new Uint8Array(deflateRawSync(Buffer.from(json))));
   };
 
-  it('不指定上限时只有一列', () => {
-    const chart = longChart(20);
+  it('默认按长宽比切列，出横版', () => {
+    const chart = longChart(60);
     const { svg, stats } = renderSvg(chart, lib(), opts());
+    // 参考仓库的输出是 5520×2337 ≈ 2.36:1 横版。
+    expect(stats.columns).toBeGreaterThan(1);
+    const w = Number(svg.match(/width="([\d.]+)"/)![1]);
+    const h = Number(svg.match(/height="([\d.]+)"/)![1]);
+    expect(w / h).toBeGreaterThan(2.0);
+    expect(w / h).toBeLessThan(3.0);
+  });
+
+  it('aspect 为 0 时出一张单列长图', () => {
+    const chart = longChart(20);
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0 }));
     expect(stats.columns).toBe(1);
     // 单列时不标列号。
     expect(count(svg, 'col-text')).toBe(0);
   });
 
-  it('超过上限时切成多列，横向并排、底边对齐', () => {
+  it('指定每列上限时按上限切，横向并排、底边对齐', () => {
     const chart = longChart(60);
     const lay = { ...defaultLayout(), duration: chart.duration };
     // 上限 = 10 秒高；列数 = ceil(总时长 / 每列上限)。
@@ -292,18 +303,16 @@ describe('分列', () => {
 
   it('音符总数不因切列而翻倍', () => {
     const chart = longChart(60);
-    const lay = { ...defaultLayout(), duration: chart.duration };
-    const one = renderSvg(chart, lib(), opts()).stats;
-    const many = renderSvg(chart, lib(), opts({ maxColumnHeight: 10 * lay.pxPerSec })).stats;
+    const one = renderSvg(chart, lib(), opts({ aspect: 0 })).stats;
+    const many = renderSvg(chart, lib(), opts()).stats;
     expect(many.notes).toBe(one.notes);
     expect(many.instants).toBe(one.instants);
   });
 
   it('切列后标出列号与时间范围', () => {
     const chart = longChart(60);
-    const lay = { ...defaultLayout(), duration: chart.duration };
-    const cols = Math.ceil(chart.duration / 10);
-    const { svg } = renderSvg(chart, lib(), opts({ maxColumnHeight: 10 * lay.pxPerSec }));
+    const { svg, stats } = renderSvg(chart, lib(), opts());
+    const cols = stats.columns;
     expect(count(svg, 'col-text')).toBe(cols);
     expect(svg).toContain(`>1 / ${cols}</text>`);
     expect(svg).toContain(`>${cols} / ${cols}</text>`);

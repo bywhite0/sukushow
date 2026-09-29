@@ -17,7 +17,8 @@
  *   --from <秒>        只渲染该时刻起（与 --to 搭配出局部图）
  *   --to <秒>          只渲染到该时刻
  *   --max-column-height <px>
- *                      每列最大像素高，超过就切列并排（默认 8000；0 = 不切）
+ *                      每列最大像素高，超过就切列并排（0 = 不切）
+ *   --aspect <n>       目标长宽比（宽/高），按它定列数（默认 2.4）
  *   --single-column    不切列，出一张长图
  *   --column-gap <px>  列间距（默认 8）
  *   --no-col-labels    不标列号与时间范围
@@ -84,8 +85,10 @@ const { svg, stats } = renderSvg(chart, lib, {
   extraCss: cssFile ? readFileSync(cssFile, 'utf8') : undefined,
   allowFallback: true,
   range,
-  // 0 表示不切列（出一张长图）；默认 8000 一列，避免超长图。
-  maxColumnHeight: has('single-column') ? 0 : Number(arg('max-column-height', '8000')),
+  // 默认按长宽比定列数（横版）；--max-column-height 有值时以它为准。
+  // 局部图（--from/--to）默认不切列——本来就是要那一段，切了反而碎。
+  maxColumnHeight: has('single-column') ? 0 : (arg('max-column-height') ? Number(arg('max-column-height')) : 0),
+  aspect: has('single-column') ? 0 : Number(arg('aspect', range ? '0' : '2.4')),
   columnGap: Number(arg('column-gap', '8')),
   showColumnLabels: !has('no-col-labels'),
 });

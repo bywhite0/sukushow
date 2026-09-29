@@ -66,11 +66,18 @@ export interface SvgOptions {
    */
   range?: { from: number; to: number };
   /**
-   * 每列最大像素高；超过就在**小节边界**换列，横向并排。
+   * 每列最大像素高；超过就切列并排。
    *
-   * 0 或省略 = 不切，出单列长图。切列只改版式不改坐标。
+   * 0 或省略 = 按 `aspect` 定列数（默认）。切列只改版式不改坐标。
    */
   maxColumnHeight?: number;
+  /**
+   * 目标长宽比（宽 / 高），按它反推列数。
+   *
+   * 默认 2.4——参考仓库 `pjsekai-scores-rs` 的输出是 5520×2337，就是这个比例。
+   * 长曲横铺成横版才像它；只切几列会得到一张竖长条。`maxColumnHeight` 有值时以它为准。
+   */
+  aspect?: number;
   /** 列间距（像素）。 */
   columnGap?: number;
   /**
@@ -138,40 +145,74 @@ const DEFAULT_CSS = [
 export interface Column { from: number; to: number }
 
 /**
- * 切列：按**时间等分**，下刀点吸附到最近的小节边界（吸附限幅，避免被拉歪）。
+ * 切列方式。
  *
- * 为什么不直接按边界切：小节长度本身就不均匀（BPM 段多时尤其明显），硬要在边界上
- * 凑等分会切出高矮悬殊的列。时间等分保证各列高矮相近，吸附只是让刀口落在小节线上
- * 好看一点——所以吸附有上限，宁可刀口不落在边界上，也不要列高失衡。
- *
- * 列数按 `ceil(总时长 / 每列上限)` 定；若各列时间都相等则自然满足上限。
+ * - `aspect`：按目标长宽比定列数。**默认**——参考仓库的输出是 5520×2337（约 2.4:1 横版），
+ *   整谱定尺出图若只切几列会得到一张竖长条，比例上并不像它。
+ * - `height`：按每列最大像素高定列数。
+ * - `bars`：每列固定小节数——参考仓库 `sentence_length = 4` 的直译。
  */
-export function splitColumns(
-  chart: Chart, lay: Layout, from: number, to: number, maxHeight: number,
-): Column[] {
+export type ColumnMode =
+  | { kind: 'aspect'; aspect: number }
+  | { kind: 'height'; maxHeight: number }
+  | { kind: 'bars'; bars: number };
+
+/** 小节边界（含首尾）。 */
+function barBounds(chart: Chart, from: number, to: number): number[] {
   const cuts: number[] = [];
   for (const m of measures(chart)) {
     if (m.time > from + 1e-6 && m.time < to - 1e-6) cuts.push(m.time);
   }
   cuts.sort((a, b) => a - b);
+  return [from, ...cuts, to];
+}
 
+/**
+ * 切列。
+ *
+ * 定列数后按**时间等分**，下刀点吸附到最近的小节边界（限幅 20% 列长）。
+ *
+ * 为什么不直接按边界等分：小节长度本身就不均匀（BPM 段多时尤其明显），硬在边界上
+ * 凑等分会切出高矮悬殊的列（实测出现过 7384 / 700 / 14842 这种分布）。时间等分保证
+ * 各列高矮相近，吸附只是让刀口落在小节线上好看一点——宁可刀口不落边界，也不要列高失衡。
+ */
+export function splitColumns(
+  chart: Chart, lay: Layout, from: number, to: number,
+  colW: number, gap: number, mode: ColumnMode,
+): Column[] {
+  const bounds = barBounds(chart, from, to);
   const totalTime = to - from;
-  // 上限指「最终图片高」，所以要扣掉每列上下各一份 padY。
-  const maxTime = Math.max(1e-6, (maxHeight - lay.padY * 2) / lay.pxPerSec);
-  const count = Math.max(1, Math.ceil(totalTime / maxTime - 1e-9));
-  if (count === 1) return [{ from, to }];
+  const totalH = totalTime * lay.pxPerSec;
+
+  if (mode.kind === 'bars') {
+    const n = Math.max(1, Math.round(mode.bars));
+    const out: Column[] = [];
+    for (let i = 0; i < bounds.length - 1; i += n) {
+      out.push({ from: bounds[i], to: bounds[Math.min(i + n, bounds.length - 1)] });
+    }
+    return out;
+  }
+
+  if (!(totalH > 0)) return [{ from, to }];
+  // 上限指「最终图片高」，故扣掉每列上下各一份 padY。
+  const maxTime = mode.kind === 'height'
+    ? Math.max(1e-6, (mode.maxHeight - lay.padY * 2) / lay.pxPerSec)
+    : Infinity;
+  const count = mode.kind === 'height'
+    ? Math.max(1, Math.ceil(totalTime / maxTime - 1e-9))
+    // 画布宽 ≈ N·(colW + gap)、高 = totalH / N；令 宽/高 = aspect 解 N。
+    : Math.max(1, Math.round(Math.sqrt(Math.max(0.1, mode.aspect) * totalH / Math.max(1, colW + gap))));
+  if (count <= 1) return [{ from, to }];
 
   const step = totalTime / count;
-  // 吸附限幅：最多偏 20% 列长，且不能把列顶出上限。
   const snapLimit = step * 0.2;
   const snapped: number[] = [];
   for (let c = 0; c < count - 1; c++) {
     const ideal = from + step * (c + 1);
     let best = ideal, bestDist = Infinity;
-    for (const cut of cuts) {
+    for (const cut of bounds) {
       const dist = Math.abs(cut - ideal);
       if (dist > snapLimit || dist >= bestDist) continue;
-      // 只保证「本列不超限」不够——后面还有列要放，这里先粗筛。
       if ((cut - from) > step * (c + 1) + snapLimit) continue;
       bestDist = dist; best = cut;
     }
@@ -181,15 +222,17 @@ export function splitColumns(
   // 逐列校验：吸附后哪一列超限，就把那一刀退回等分位置（等分必然不超限）。
   // 每改一刀都要重算边界——否则相邻两列同时超限时，第二列的起点还是旧值。
   const cuts2 = [...snapped];
-  for (let pass = 0; pass < count; pass++) {
-    const b = [from, ...cuts2, to];
-    let bad = -1;
-    for (let c = 0; c < b.length - 1; c++) {
-      if ((b[c + 1] - b[c]) > maxTime) { bad = c; break; }
+  if (Number.isFinite(maxTime)) {
+    for (let pass = 0; pass < count; pass++) {
+      const b = [from, ...cuts2, to];
+      let bad = -1;
+      for (let c = 0; c < b.length - 1; c++) {
+        if ((b[c + 1] - b[c]) > maxTime) { bad = c; break; }
+      }
+      if (bad < 0) break;
+      if (bad < cuts2.length) cuts2[bad] = from + step * (bad + 1);
+      else cuts2[bad - 1] = to - step;
     }
-    if (bad < 0) break;
-    if (bad < cuts2.length) cuts2[bad] = from + step * (bad + 1);
-    else cuts2[bad - 1] = to - step;
   }
 
   const out: Column[] = [];
@@ -234,9 +277,15 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
   const winTo = opt.range ? opt.range.to : chart.duration;
   const maxCol = opt.maxColumnHeight ?? 0;
   const gap = opt.columnGap ?? 8;
-  const columns: Column[] = maxCol > 0
-    ? splitColumns(chart, lay, winFrom, winTo, maxCol)
-    : [{ from: winFrom, to: winTo }];
+  // 默认按长宽比定列数：参考仓库的输出是横版，只切几列会得到竖长条。
+  const mode: ColumnMode = maxCol > 0
+    ? { kind: 'height', maxHeight: maxCol }
+    : opt.aspect === 0
+      ? { kind: 'bars', bars: Number.POSITIVE_INFINITY }
+      : { kind: 'aspect', aspect: opt.aspect ?? 2.4 };
+  const columns: Column[] = mode.kind === 'bars' && !Number.isFinite(mode.bars)
+    ? [{ from: winFrom, to: winTo }]
+    : splitColumns(chart, lay, winFrom, winTo, colW, gap, mode);
   stats.columns = columns.length;
 
   const bars = measures(chart);
