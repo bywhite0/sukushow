@@ -301,7 +301,10 @@
   background:var(--shell-raised);color:var(--shell-muted);
   font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;
 }
-.difficulty-chip:hover{border-color:var(--chip);color:var(--shell-text)}
+/* 非悬停态也按难度着色（同 llll-preview-web 选曲器的做法）：描边取难度色 55%、文字取难度色；
+   悬停加实描边与 16% 难度色底；选中态整块填充难度色。色值仍用本项目自己的一套。 */
+.difficulty-chip{border-color:color-mix(in srgb,var(--chip) 55%,transparent);color:var(--chip)}
+.difficulty-chip:hover{border-color:var(--chip);background:color-mix(in srgb,var(--chip) 16%,var(--shell-raised))}
 /* 各难度沿用游戏内的配色语义（N 绿 / H 黄 / E 红 / M 紫）。 */
 .difficulty-chip[data-difficulty="NORMAL"]{--chip:oklch(76% .13 155)}
 .difficulty-chip[data-difficulty="HARD"]{--chip:oklch(80% .13 85)}
