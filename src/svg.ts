@@ -8,13 +8,14 @@
  *   背景 → 轨道栏 → 轨道格线 → 小节线 → 拍线 → 同时押连线
  *   → Hold 宽带 → Hold 端头 → 音符本体 → Flick 附加元素
  *
- * 与参考仓库的差别：那边一张图切成多段嵌套 `<svg>` 横向并排（长曲分页），
- * 这边整谱一张纵向长图，故只有一个根 `<svg>`。
+ * 长曲不出一张超长图：按**小节边界**切成多列，各列是嵌套 `<svg>`，横向并排、**底边对齐**
+ * （参考仓库同此做法）。切列只改版式不改坐标：每列的 `viewBox` 各自开窗，
+ * 跨列的长 Hold 在两侧各自被裁一次，并排看起来仍是连续的。
  */
 
 import type { Chart, Note } from './chart';
 import {
-  type Layout, LANES, canvasWidth, contentHeight, edgeX, measures, noteSpan, timeY, trackWidth,
+  type Layout, LANES, canvasWidth, edgeX, measures, noteSpan, timeY, trackWidth,
 } from './layout';
 import {
   type BandHalf, type FlickOverlay, type SpriteMeta,
@@ -61,30 +62,48 @@ export interface SvgOptions {
   /** 音符贴图缺失时是否退回纯色矩形。 */
   allowFallback: boolean;
   /**
-   * 只渲染这段时间（秒），画布按它裁剪。
-   *
-   * 实现方式是 `viewBox` 开窗 + 剔除窗外元素：坐标口径完全不变（不做重排），
-   * 长曲出局部图时文件也小得多。
+   * 只渲染这段时间（秒）。坐标口径不变，只是窗口落在这一段上。
    */
   range?: { from: number; to: number };
+  /**
+   * 每列最大像素高；超过就在**小节边界**换列，横向并排。
+   *
+   * 0 或省略 = 不切，出单列长图。切列只改版式不改坐标。
+   */
+  maxColumnHeight?: number;
+  /** 列间距（像素）。 */
+  columnGap?: number;
+  /**
+   * 切列时是否给每列标上序号与时间范围。
+   *
+   * 切列必然会在列边界切断长 Hold——同一根带子左列顶端一截、右列底端一截，
+   * 不标出来读谱时会误以为是两个音符。默认开。
+   */
+  showColumnLabels?: boolean;
 }
 
 /** 渲染统计，便于脚本与测试自检。 */
 export interface RenderStats {
-  /** 画出的音符节点数（含 Hold 链节点）。 */
+  /** 画出的音符数（去重，含 Hold 链节点）。 */
   notes: number;
-  /** 瞬时音符数。 */
+  /** 瞬时音符数（去重）。 */
   instants: number;
-  /** Hold 宽带半边数。 */
+  /** Hold 宽带半边数（**绘制次数**，跨列的长带会在两侧各计一次）。 */
   holds: number;
-  /** 小节线数。 */
+  /** 小节线数（绘制次数）。 */
   bars: number;
-  /** 拍线数。 */
+  /** 拍线数（绘制次数）。 */
   beats: number;
-  /** 同时押连线数。 */
+  /** 同时押连线数（绘制次数）。 */
   simultaneous: number;
   /** 用了兜底配色的音符数（贴图缺失）。 */
   fallback: number;
+  /** 列数。 */
+  columns: number;
+  /** 列宽（像素）。 */
+  columnWidth: number;
+  /** 列高（像素，取各列最大者）。 */
+  columnHeight: number;
 }
 
 /** XML 文本转义。 */
@@ -112,34 +131,92 @@ const DEFAULT_CSS = [
   '.beat-line{stroke:#dbe1ec;stroke-opacity:.20;stroke-width:1}',
   '.simul{stroke:#d8f0ff;stroke-opacity:.55;stroke-width:1.5}',
   '.bar-text{font:11px/1 "Segoe UI",system-ui,sans-serif;fill:#ed5eaa;fill-opacity:.8}',
+  '.col-text{font:bold 15px/1 "Segoe UI",system-ui,sans-serif;fill:#dbe1ec;fill-opacity:.85}',
+  '.col-sub{font:11px/1 "Segoe UI",system-ui,sans-serif;fill:#dbe1ec;fill-opacity:.5}',
 ].join('\n');
+
+export interface Column { from: number; to: number }
+
+/**
+ * 切列：按**时间等分**，下刀点吸附到最近的小节边界（吸附限幅，避免被拉歪）。
+ *
+ * 为什么不直接按边界切：小节长度本身就不均匀（BPM 段多时尤其明显），硬要在边界上
+ * 凑等分会切出高矮悬殊的列。时间等分保证各列高矮相近，吸附只是让刀口落在小节线上
+ * 好看一点——所以吸附有上限，宁可刀口不落在边界上，也不要列高失衡。
+ *
+ * 列数按 `ceil(总时长 / 每列上限)` 定；若各列时间都相等则自然满足上限。
+ */
+export function splitColumns(
+  chart: Chart, lay: Layout, from: number, to: number, maxHeight: number,
+): Column[] {
+  const cuts: number[] = [];
+  for (const m of measures(chart)) {
+    if (m.time > from + 1e-6 && m.time < to - 1e-6) cuts.push(m.time);
+  }
+  cuts.sort((a, b) => a - b);
+
+  const totalTime = to - from;
+  // 上限指「最终图片高」，所以要扣掉每列上下各一份 padY。
+  const maxTime = Math.max(1e-6, (maxHeight - lay.padY * 2) / lay.pxPerSec);
+  const count = Math.max(1, Math.ceil(totalTime / maxTime - 1e-9));
+  if (count === 1) return [{ from, to }];
+
+  const step = totalTime / count;
+  // 吸附限幅：最多偏 20% 列长，且不能把列顶出上限。
+  const snapLimit = step * 0.2;
+  const snapped: number[] = [];
+  for (let c = 0; c < count - 1; c++) {
+    const ideal = from + step * (c + 1);
+    let best = ideal, bestDist = Infinity;
+    for (const cut of cuts) {
+      const dist = Math.abs(cut - ideal);
+      if (dist > snapLimit || dist >= bestDist) continue;
+      // 只保证「本列不超限」不够——后面还有列要放，这里先粗筛。
+      if ((cut - from) > step * (c + 1) + snapLimit) continue;
+      bestDist = dist; best = cut;
+    }
+    snapped.push(best);
+  }
+
+  // 逐列校验：吸附后哪一列超限，就把那一刀退回等分位置（等分必然不超限）。
+  // 每改一刀都要重算边界——否则相邻两列同时超限时，第二列的起点还是旧值。
+  const cuts2 = [...snapped];
+  for (let pass = 0; pass < count; pass++) {
+    const b = [from, ...cuts2, to];
+    let bad = -1;
+    for (let c = 0; c < b.length - 1; c++) {
+      if ((b[c + 1] - b[c]) > maxTime) { bad = c; break; }
+    }
+    if (bad < 0) break;
+    if (bad < cuts2.length) cuts2[bad] = from + step * (bad + 1);
+    else cuts2[bad - 1] = to - step;
+  }
+
+  const out: Column[] = [];
+  let start = from;
+  for (const cut of [...cuts2, to]) {
+    out.push({ from: start, to: cut });
+    start = cut;
+  }
+  return out;
+}
 
 /** 生成一张谱面 SVG。 */
 export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { svg: string; stats: RenderStats } {
   // 时长以谱面为准：时间轴靠它把 0 秒锚在内容底部，让调用方另行同步是个脚枪。
   const lay: Layout = { ...opt.layout, duration: chart.duration };
-  const fullW = canvasWidth(lay);
-  const fullH = contentHeight(chart, lay);
-  const stats: RenderStats = { notes: 0, instants: 0, holds: 0, bars: 0, beats: 0, simultaneous: 0, fallback: 0 };
+  const colW = canvasWidth(lay);
 
-  // 出图窗口。坐标口径不变，只换 viewBox 并剔除窗外元素——
-  // 这样整谱图与局部图的几何完全一致，局部图不必重排。
-  let viewX = 0, viewY = 0, viewW = fullW, viewH = fullH;
-  let cullTop = -Infinity, cullBottom = Infinity;
-  if (opt.range) {
-    const yTop = timeY(opt.range.to, lay), yBottom = timeY(opt.range.from, lay);
-    viewY = yTop - lay.padY;
-    viewH = (yBottom + lay.padY) - viewY;
-    cullTop = viewY - 200;          // 留出元素自身高度（Flick Sign 会向上探出）
-    cullBottom = viewY + viewH + 200;
-  }
-  const visible = (y: number) => y >= cullTop && y <= cullBottom;
-
-  const body: string[] = [];
-  const symbols: string[] = [];
-  const grads: string[] = [];
+  const stats: RenderStats = {
+    notes: 0, instants: 0, holds: 0, bars: 0, beats: 0, simultaneous: 0, fallback: 0,
+    columns: 0, columnWidth: colW, columnHeight: 0,
+  };
+  // 音符数按 Uid 去重：跨列的长带会被画两次，但「谱面里有多少音符」不该跟着翻倍。
+  const countedNotes = new Set<number>();
+  const countedInstants = new Set<number>();
 
   // ── 贴图入库：每张只内嵌一次，正文用 <use> 引用 ──────────────────────
+  const symbols: string[] = [];
   const symbolId = (name: string) => `sp-${name}`;
   for (let t = 0; t < 4; t++) {
     const uri = lib.notes[t], m = lib.meta[t];
@@ -152,140 +229,197 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
     symbols.push(`<image id="${symbolId(FLICK_EXTRA[i])}" xlink:href="${esc(uri)}" width="${n(m.rect[2])}" height="${n(m.rect[3])}"/>`);
   }
 
-  // ── 背景与轨道 ────────────────────────────────────────────────────────
-  if (opt.background) body.push(`<rect class="bg" x="0" y="${n(viewY)}" width="${n(viewW)}" height="${n(viewH)}"/>`);
-  const trackW = trackWidth(lay);
-  body.push(`<rect class="lane" x="${n(lay.padX)}" y="${n(viewY)}" width="${n(trackW)}" height="${n(viewH)}"/>`);
+  // ── 切列 ──────────────────────────────────────────────────────────────
+  const winFrom = opt.range ? opt.range.from : 0;
+  const winTo = opt.range ? opt.range.to : chart.duration;
+  const maxCol = opt.maxColumnHeight ?? 0;
+  const gap = opt.columnGap ?? 8;
+  const columns: Column[] = maxCol > 0
+    ? splitColumns(chart, lay, winFrom, winTo, maxCol)
+    : [{ from: winFrom, to: winTo }];
+  stats.columns = columns.length;
 
-  // ── 轨道格线 ──────────────────────────────────────────────────────────
-  if (opt.showGrid) {
-    for (let lane = 1; lane < LANES; lane++) {
-      const x = edgeX(lane, lay);
-      const cls = lane % 5 === 0 ? 'lane-line-major' : 'lane-line';
-      body.push(`<line class="${cls}" x1="${n(x)}" y1="${n(viewY)}" x2="${n(x)}" y2="${n(viewY + viewH)}"/>`);
-    }
-  }
-  for (const edge of [0, LANES]) {
-    const x = edgeX(edge, lay);
-    body.push(`<line class="edge" x1="${n(x)}" y1="${n(viewY)}" x2="${n(x)}" y2="${n(viewY + viewH)}"/>`);
-  }
-
-  // ── 小节线与拍线 ──────────────────────────────────────────────────────
   const bars = measures(chart);
-  if (opt.showMeasures) {
-    for (const m of bars) {
-      const y = timeY(m.time, lay);
-      if (!visible(y)) continue;
-      body.push(`<line class="bar-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
-      stats.bars++;
+  const grads: string[] = [];
+  const rendered: { body: string; yTop: number; h: number }[] = [];
+
+  for (const col of columns) {
+    // 这一列的 viewBox 窗口：上下各留一个 padY。
+    const yTop = timeY(col.to, lay) - lay.padY;
+    const yBottom = timeY(col.from, lay) + lay.padY;
+    const h = yBottom - yTop;
+    // 剔除窗外元素；上下各放宽 200px，免得贴在边上的装饰被误裁。
+    const cullTop = yTop - 200, cullBottom = yBottom + 200;
+    const visible = (y: number) => y >= cullTop && y <= cullBottom;
+    const overlaps = (a: number, b: number) => Math.max(a, b) >= cullTop && Math.min(a, b) <= cullBottom;
+
+    const body: string[] = [];
+    const trackW = trackWidth(lay);
+
+    // 背景与轨道栏。
+    if (opt.background) body.push(`<rect class="bg" x="0" y="${n(yTop)}" width="${n(colW)}" height="${n(h)}"/>`);
+    body.push(`<rect class="lane" x="${n(lay.padX)}" y="${n(yTop)}" width="${n(trackW)}" height="${n(h)}"/>`);
+
+    // 轨道格线。
+    if (opt.showGrid) {
+      for (let lane = 1; lane < LANES; lane++) {
+        const x = edgeX(lane, lay);
+        const cls = lane % 5 === 0 ? 'lane-line-major' : 'lane-line';
+        body.push(`<line class="${cls}" x1="${n(x)}" y1="${n(yTop)}" x2="${n(x)}" y2="${n(yBottom)}"/>`);
+      }
     }
-  }
-  if (opt.showBarNumbers) {
-    for (let i = 0; i < bars.length; i++) {
-      const y = timeY(bars[i].time, lay);
-      if (!visible(y)) continue;
-      body.push(`<text class="bar-text" x="${n(lay.padX + 3)}" y="${n(y - 3)}">${i + 1}</text>`);
+    for (const edge of [0, LANES]) {
+      const x = edgeX(edge, lay);
+      body.push(`<line class="edge" x1="${n(x)}" y1="${n(yTop)}" x2="${n(x)}" y2="${n(yBottom)}"/>`);
     }
-  }
-  if (opt.showBeats) {
-    for (let i = 0; i < bars.length; i++) {
-      const t0 = bars[i].time;
-      const t1 = i + 1 < bars.length ? bars[i + 1].time : chart.duration;
-      const span = t1 - t0;
-      const per = beatsPerBar(chart, t0);
-      if (!(span > 0) || per <= 1) continue;
-      for (let b = 1; b < per; b++) {
-        const y = timeY(t0 + (span / per) * b, lay);
+
+    // 小节线与拍线。
+    if (opt.showMeasures) {
+      for (const m of bars) {
+        const y = timeY(m.time, lay);
         if (!visible(y)) continue;
-        body.push(`<line class="beat-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
-        stats.beats++;
+        body.push(`<line class="bar-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
+        stats.bars++;
       }
     }
-  }
-
-  // ── 同时押连线 ────────────────────────────────────────────────────────
-  if (opt.showSimultaneous) {
-    for (const line of chart.lines) {
-      const y = timeY(line.time, lay);
-      if (!visible(y)) continue;
-      let min = Infinity, max = -Infinity;
-      for (const p of line.points) {
-        const [a, b] = noteSpan(p.note, lay, p.tail);
-        if (a < min) min = a;
-        if (b > max) max = b;
+    if (opt.showBarNumbers) {
+      for (let i = 0; i < bars.length; i++) {
+        const y = timeY(bars[i].time, lay);
+        if (!visible(y)) continue;
+        body.push(`<text class="bar-text" x="${n(lay.padX + 3)}" y="${n(y - 3)}">${i + 1}</text>`);
       }
-      if (!(max > min)) continue;
-      body.push(`<line class="simul" x1="${n(min)}" y1="${n(y)}" x2="${n(max)}" y2="${n(y)}"/>`);
-      stats.simultaneous++;
     }
-  }
-
-  // ── Hold 宽带与端头 ───────────────────────────────────────────────────
-  // 串链允许汇合（两个节点可指向同一后继），故顺链遍历要去重，否则汇合点会画两遍、
-  // 统计也会超。`seen` 记录已处理的节点。
-  const seen = new Set<number>();
-  for (const root of chart.roots) {
-    if (root.type !== 1) continue;
-    let node: Note | undefined = root, tail: Note = root;
-    while (node) {
-      if (seen.has(node.uid)) break;
-      seen.add(node.uid);
-      const y0 = timeY(node.time, lay), y1 = timeY(node.end, lay);
-      // 区间重叠而非两端都在窗内——长带可能两端都在窗外却横穿画面。
-      const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
-      if (node.end > node.time && hi >= cullTop && lo <= cullBottom) {
-        for (const half of bandHalves(node, lay)) {
-          const { def, path } = bandElement(half, grads.length);
-          grads.push(def);
-          body.push(path);
-          stats.holds++;
+    if (opt.showBeats) {
+      for (let i = 0; i < bars.length; i++) {
+        const t0 = bars[i].time;
+        const t1 = i + 1 < bars.length ? bars[i + 1].time : chart.duration;
+        const span = t1 - t0;
+        const per = beatsPerBar(chart, t0);
+        if (!(span > 0) || per <= 1) continue;
+        for (let b = 1; b < per; b++) {
+          const y = timeY(t0 + (span / per) * b, lay);
+          if (!visible(y)) continue;
+          body.push(`<line class="beat-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
+          stats.beats++;
         }
-        stats.notes++;
       }
-      tail = node;
-      node = node.next;
     }
-    const yh = timeY(root.time, lay), yt = timeY(tail.end, lay);
-    if (visible(yh)) body.push(capElement(root.time, root.l, root.r, lay, lib));
-    if (visible(yt)) body.push(capElement(tail.end, tail.l2, tail.r2, lay, lib));
-  }
 
-  // ── 瞬时音符与 Flick 附加元素 ─────────────────────────────────────────
-  for (let type = 0; type < 4; type++) {
-    if (type === 1) continue;
-    const uri = lib.notes[type], m = lib.meta[type];
-    for (const note of chart.notes) {
-      if (note.type !== type || note.prev) continue;
-      const [x0, x1] = noteSpan(note, lay, false);
-      const y = timeY(note.time, lay);
-      if (!visible(y)) continue;
-      if (uri && m) {
-        body.push(slicedImage(symbolId(NOTE_SPRITE[type]), m, (x0 + x1) / 2, y, note.r - note.l + 1, type, lay));
-      } else if (opt.allowFallback) {
-        const h = Math.max(2, noteDepthWorld(type) * SPRITE_SCALE_X * pxPerWorld(lay));
-        body.push(`<rect x="${n(x0)}" y="${n(y - h / 2)}" width="${n(Math.max(1, x1 - x0))}" height="${n(h)}" fill="${FALLBACK[type]}"/>`);
-        stats.fallback++;
-      } else {
-        continue;
+    // 同时押连线。
+    if (opt.showSimultaneous) {
+      for (const line of chart.lines) {
+        const y = timeY(line.time, lay);
+        if (!visible(y)) continue;
+        let min = Infinity, max = -Infinity;
+        for (const p of line.points) {
+          const [a, b] = noteSpan(p.note, lay, p.tail);
+          if (a < min) min = a;
+          if (b > max) max = b;
+        }
+        if (!(max > min)) continue;
+        body.push(`<line class="simul" x1="${n(min)}" y1="${n(y)}" x2="${n(max)}" y2="${n(y)}"/>`);
+        stats.simultaneous++;
       }
-      // Flick 的三层附加元素画在本体之上（原版 sortingOrder 21 / 25）。
-      if (type === 2) {
-        const overlays = flickOverlays(note, lay, {
-          arrow: lib.extra.meta[0], icon: lib.extra.meta[1], sign: lib.extra.meta[2],
-        });
-        for (const o of overlays) body.push(flickElement(o, lib));
-      }
-      stats.notes++; stats.instants++;
     }
+
+    // ── Hold 宽带与端头 ────────────────────────────────────────────────
+    // 串链允许汇合（两个节点可指向同一后继），故顺链遍历要去重，否则汇合点会画两遍。
+    const seen = new Set<number>();
+    for (const root of chart.roots) {
+      if (root.type !== 1) continue;
+      let node: Note | undefined = root, tail: Note = root;
+      while (node) {
+        if (seen.has(node.uid)) break;
+        seen.add(node.uid);
+        const y0 = timeY(node.time, lay), y1 = timeY(node.end, lay);
+        // 区间重叠而非两端都在窗内——长带可能两端都在窗外却横穿画面。
+        if (node.end > node.time && overlaps(y0, y1)) {
+          for (const half of bandHalves(node, lay)) {
+            const { def, path } = bandElement(half, grads.length);
+            grads.push(def);
+            body.push(path);
+            stats.holds++;
+          }
+          if (!countedNotes.has(node.uid)) { countedNotes.add(node.uid); stats.notes++; }
+        }
+        tail = node;
+        node = node.next;
+      }
+      // 端头按「整条链的首尾」画；切列时两端各归自己那一列。
+      if (visible(timeY(root.time, lay))) body.push(capElement(root.time, root.l, root.r, lay, lib));
+      if (visible(timeY(tail.end, lay))) body.push(capElement(tail.end, tail.l2, tail.r2, lay, lib));
+    }
+
+    // ── 瞬时音符与 Flick 附加元素 ──────────────────────────────────────
+    for (let type = 0; type < 4; type++) {
+      if (type === 1) continue;
+      const uri = lib.notes[type], m = lib.meta[type];
+      for (const note of chart.notes) {
+        if (note.type !== type || note.prev) continue;
+        const [x0, x1] = noteSpan(note, lay, false);
+        const y = timeY(note.time, lay);
+        if (!visible(y)) continue;
+        if (uri && m) {
+          body.push(slicedImage(symbolId(NOTE_SPRITE[type]), m, (x0 + x1) / 2, y, note.r - note.l + 1, type, lay));
+        } else if (opt.allowFallback) {
+          const hh = Math.max(2, noteDepthWorld(type) * SPRITE_SCALE_X * pxPerWorld(lay));
+          body.push(`<rect x="${n(x0)}" y="${n(y - hh / 2)}" width="${n(Math.max(1, x1 - x0))}" height="${n(hh)}" fill="${FALLBACK[type]}"/>`);
+          stats.fallback++;
+        } else {
+          continue;
+        }
+        // Flick 的三层附加元素画在本体之上（原版 sortingOrder 21 / 25）。
+        if (type === 2) {
+          const overlays = flickOverlays(note, lay, {
+            arrow: lib.extra.meta[0], icon: lib.extra.meta[1], sign: lib.extra.meta[2],
+          });
+          for (const o of overlays) body.push(flickElement(o, lib));
+        }
+        if (!countedNotes.has(note.uid)) { countedNotes.add(note.uid); stats.notes++; }
+        if (!countedInstants.has(note.uid)) { countedInstants.add(note.uid); stats.instants++; }
+      }
+    }
+
+    rendered.push({ body: body.join(''), yTop, h });
   }
 
   // ── 组装 ──────────────────────────────────────────────────────────────
   const css = opt.extraCss ? `${DEFAULT_CSS}\n${opt.extraCss}` : DEFAULT_CSS;
+  const maxH = Math.max(...rendered.map(r => r.h));
+  const totalW = rendered.length * colW + (rendered.length - 1) * gap;
+  // 列号表头占一条独立横带——各列高矮不同，标签跟着列顶走会散落在不同高度，读起来乱。
+  const label = opt.showColumnLabels !== false && rendered.length > 1;
+  const headerH = label ? 26 : 0;
+  const bodyTop = headerH;
+  stats.columnHeight = maxH + headerH;
+
+  const parts: string[] = [];
+  if (label) {
+    parts.push(`<rect class="bg" x="0" y="0" width="${n(totalW)}" height="${n(headerH)}"/>`);
+  }
+  for (let i = 0; i < rendered.length; i++) {
+    const r = rendered[i];
+    const x = i * (colW + gap);
+    // 底边对齐：各列时间范围的起点落在同一条基线上（参考仓库同此）。
+    const y = bodyTop + (maxH - r.h);
+    if (label) {
+      const c = columns[i];
+      parts.push(
+        `<text class="col-text" x="${n(x + lay.padX)}" y="${n(headerH - 8)}">${i + 1} / ${rendered.length}</text>`
+        + `<text class="col-sub" x="${n(x + lay.padX + 52)}" y="${n(headerH - 8)}">${n(c.from)}s – ${n(c.to)}s</text>`,
+      );
+    }
+    parts.push(
+      `<svg class="col" x="${n(x)}" y="${n(y)}" width="${n(colW)}" height="${n(r.h)}"`
+      + ` viewBox="0 ${n(r.yTop)} ${n(colW)} ${n(r.h)}">${r.body}</svg>`,
+    );
+  }
+
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"`,
-    ` width="${n(viewW)}" height="${n(viewH)}" viewBox="${n(viewX)} ${n(viewY)} ${n(viewW)} ${n(viewH)}">`,
+    ` width="${n(totalW)}" height="${n(stats.columnHeight)}" viewBox="0 0 ${n(totalW)} ${n(stats.columnHeight)}">`,
     `<defs><style>${css}</style>${symbols.join('')}${grads.join('')}</defs>`,
-    body.join(''),
+    parts.join(''),
     `</svg>`,
   ].join('');
 

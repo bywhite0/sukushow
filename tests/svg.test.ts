@@ -240,3 +240,79 @@ describe('SVG 结构', () => {
     expect(part).toContain('<path fill="url(#bg0)"');
   });
 });
+
+describe('分列', () => {
+  /** 造一段够长的谱面：每 0.5 秒一个音符，共 60 秒。 */
+  const longChart = (seconds = 60) => {
+    const notes: unknown[] = [];
+    for (let i = 0; i < seconds * 2; i++) {
+      notes.push({ Uid: i + 1, just: String(i * 0.5), holds: [], Flags: flags(0, 10, 12) });
+    }
+    const json = JSON.stringify({ Notes: notes, Bpms: [{ Time: 0, Bpm: 120 }] });
+    return decodeChartBytes(new Uint8Array(deflateRawSync(Buffer.from(json))));
+  };
+
+  it('不指定上限时只有一列', () => {
+    const chart = longChart(20);
+    const { svg, stats } = renderSvg(chart, lib(), opts());
+    expect(stats.columns).toBe(1);
+    // 单列时不标列号。
+    expect(count(svg, 'col-text')).toBe(0);
+  });
+
+  it('超过上限时切成多列，横向并排、底边对齐', () => {
+    const chart = longChart(60);
+    const lay = { ...defaultLayout(), duration: chart.duration };
+    // 上限 = 10 秒高；列数 = ceil(总时长 / 每列上限)。
+    const maxH = 10 * lay.pxPerSec;
+    const expectCols = Math.ceil(chart.duration / 10);
+    const { svg, stats } = renderSvg(chart, lib(), opts({ maxColumnHeight: maxH, showColumnLabels: false }));
+    expect(stats.columns).toBe(expectCols);
+    // 根画布宽 = 列数 × 列宽 + 列间距。
+    expect(svg).toContain(`width="${expectCols * 992 + (expectCols - 1) * 8}"`);
+    // 每列一条左边界线、一条右边界线。
+    expect(count(svg, 'edge')).toBe(expectCols * 2);
+    // 各列底边对齐：顶层列 svg 的 y + height 都等于根画布高。
+    const rootH = Number(svg.match(/height="([\d.]+)"/)![1]);
+    const cols = [...svg.matchAll(/<svg class="col" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" viewBox="0 /g)];
+    expect(cols.length).toBe(expectCols);
+    for (const c of cols) {
+      expect(Number(c[2]) + Number(c[4])).toBeCloseTo(rootH, 0);
+    }
+  });
+
+  it('切列后每列都不超过上限', () => {
+    const chart = longChart(60);
+    const lay = { ...defaultLayout(), duration: chart.duration };
+    const maxH = 10 * lay.pxPerSec;
+    const { svg } = renderSvg(chart, lib(), opts({ maxColumnHeight: maxH, showColumnLabels: false }));
+    const cols = [...svg.matchAll(/<svg class="col" x="[\d.]+" y="[\d.]+" width="[\d.]+" height="([\d.]+)" viewBox="0 /g)];
+    for (const c of cols) expect(Number(c[1])).toBeLessThanOrEqual(maxH + 1);
+  });
+
+  it('音符总数不因切列而翻倍', () => {
+    const chart = longChart(60);
+    const lay = { ...defaultLayout(), duration: chart.duration };
+    const one = renderSvg(chart, lib(), opts()).stats;
+    const many = renderSvg(chart, lib(), opts({ maxColumnHeight: 10 * lay.pxPerSec })).stats;
+    expect(many.notes).toBe(one.notes);
+    expect(many.instants).toBe(one.instants);
+  });
+
+  it('切列后标出列号与时间范围', () => {
+    const chart = longChart(60);
+    const lay = { ...defaultLayout(), duration: chart.duration };
+    const cols = Math.ceil(chart.duration / 10);
+    const { svg } = renderSvg(chart, lib(), opts({ maxColumnHeight: 10 * lay.pxPerSec }));
+    expect(count(svg, 'col-text')).toBe(cols);
+    expect(svg).toContain(`>1 / ${cols}</text>`);
+    expect(svg).toContain(`>${cols} / ${cols}</text>`);
+    // 标签在独立表头横带里，位于各列之上（不与列重叠）。
+    const labelY = Number(svg.match(/<text class="col-text"[^>]*y="([\d.]+)"/)![1]);
+    const colY = Number(svg.match(/<svg class="col"[^>]*y="([\d.]+)"/)![1]);
+    expect(labelY).toBeLessThan(colY);
+    // 时间范围标注。
+    expect(svg).toContain('0s – ');
+    expect(svg).toContain(`– ${n3(chart.duration)}s`);
+  });
+});

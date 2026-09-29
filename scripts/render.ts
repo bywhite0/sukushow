@@ -16,6 +16,11 @@
  *   --bar-numbers      标小节号
  *   --from <秒>        只渲染该时刻起（与 --to 搭配出局部图）
  *   --to <秒>          只渲染到该时刻
+ *   --max-column-height <px>
+ *                      每列最大像素高，超过就切列并排（默认 8000；0 = 不切）
+ *   --single-column    不切列，出一张长图
+ *   --column-gap <px>  列间距（默认 8）
+ *   --no-col-labels    不标列号与时间范围
  *   --transparent      透明背景
  *   --link-assets      贴图用链接而非内嵌（SVG 更小）
  *   --css <file>       追加样式表
@@ -79,6 +84,10 @@ const { svg, stats } = renderSvg(chart, lib, {
   extraCss: cssFile ? readFileSync(cssFile, 'utf8') : undefined,
   allowFallback: true,
   range,
+  // 0 表示不切列（出一张长图）；默认 8000 一列，避免超长图。
+  maxColumnHeight: has('single-column') ? 0 : Number(arg('max-column-height', '8000')),
+  columnGap: Number(arg('column-gap', '8')),
+  showColumnLabels: !has('no-col-labels'),
 });
 
 mkdirSync(dirname(out), { recursive: true });
@@ -87,10 +96,7 @@ writeFileSync(out, svg);
 const kb = (svg.length / 1024).toFixed(1);
 console.log(`谱面：${input}`);
 console.log(`音符 ${chart.notes.length}（链首 ${chart.roots.length}）／时长 ${chart.duration.toFixed(2)}s／BPM ${chart.bpms.length} 段`);
-const w = Math.round(lay.padX * 2 + 60 * lay.lanePx);
-const h = range
-  ? Math.round((range.to - range.from) * lay.pxPerSec + lay.padY * 2)
-  : Math.round(lay.padY * 2 + chart.duration * lay.pxPerSec);
-console.log(`画布：${w} × ${h} px${range ? `（${range.from}s → ${range.to}s）` : '（整谱）'}`);
+const totalW = stats.columns * stats.columnWidth + (stats.columns - 1) * Number(arg('column-gap', '8'));
+console.log(`版式：${stats.columns} 列 × ${stats.columnWidth}px，列高 ${Math.round(stats.columnHeight)}px，合计 ${Math.round(totalW)} × ${Math.round(stats.columnHeight)} px${range ? `（${range.from}s → ${range.to}s）` : ''}`);
 console.log(`绘制：音符 ${stats.notes}（瞬时 ${stats.instants}）／Hold 半边 ${stats.holds}／小节线 ${stats.bars}／拍线 ${stats.beats}／同时押 ${stats.simultaneous}${stats.fallback ? `／兜底 ${stats.fallback}` : ''}`);
 console.log(`输出：${out}（${kb} KiB）`);

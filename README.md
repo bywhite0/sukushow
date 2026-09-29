@@ -15,9 +15,15 @@
 - 分层的元素组织（背景 / 轨道 / 小节线 / 拍线 / 带身 / 音符 / 装饰）
 - 九宫格与平铺都靠嵌套 `<svg>` + `viewBox` 裁剪源图实现
 
-差别：那边把长曲切成多段嵌套 `<svg>` 横向并排，这边整谱一张纵向长图（`--from/--to` 出局部图）。
+差别：那边把长曲切成多段嵌套 `<svg>` 横向并排；这边同此思路——整谱默认按**列**切开并排
+（`--max-column-height`，默认 8000px），不出一张超长图。想要一张长图用 `--single-column`，
+只看某一段用 `--from/--to`。
 
 口径来源见 [`docs/evidence.md`](docs/evidence.md)。
+
+![整谱分列渲染示例](docs/shots/columns.png)
+
+*上例：抱きしめる花びら MASTER 整谱，`--px-per-sec 220` 切 4 列并排。*
 
 ![局部渲染示例](docs/shots/heart.png)
 
@@ -43,6 +49,10 @@ pnpm render <谱面.bytes|.json> -o <输出.svg> [选项]
 | `--px-per-sec <n>` | 每秒纵向像素（默认 220） |
 | `--pad <n>` | 上下左右留白（默认 16） |
 | `--from <秒>` / `--to <秒>` | 只渲染这一段（长曲出局部图，文件小很多） |
+| `--max-column-height <px>` | 每列最大像素高，超过就切列并排（默认 8000；0 = 不切） |
+| `--single-column` | 不切列，出一张长图 |
+| `--column-gap <px>` | 列间距（默认 8） |
+| `--no-col-labels` | 不标列号与时间范围 |
 | `--mirror` | 左右镜像 |
 | `--no-grid` / `--no-measures` / `--no-beats` / `--no-simul` | 关掉对应层 |
 | `--bar-numbers` | 标小节号 |
@@ -53,8 +63,11 @@ pnpm render <谱面.bytes|.json> -o <输出.svg> [选项]
 例：
 
 ```bash
-# 整谱
+# 整谱（默认切列并排，不出超长图）
 pnpm render chart.bytes -o chart.svg --px-per-sec 240
+
+# 整谱一张长图
+pnpm render chart.bytes -o chart.svg --px-per-sec 240 --single-column
 
 # 只看 103.0–104.7 秒（抱花的爱心段）
 pnpm render chart.bytes -o heart.svg --from 103.0 --to 104.7 --px-per-sec 900 --lane-px 20
@@ -62,27 +75,31 @@ pnpm render chart.bytes -o heart.svg --from 103.0 --to 104.7 --px-per-sec 900 --
 
 ## 输出
 
-一张自包含的 SVG：
+一张自包含的 SVG。整谱默认切成多列并排（每列一个嵌套 `<svg>`，底边对齐）：
 
 ```
-<svg width="992" height="30214" viewBox="0 0 992 30214">
+<svg width="3992" height="7797" viewBox="0 0 3992 7797">
   <defs><style>…CSS 类…</style>
         <image id="sp-ui_sc2_ingame_notes_tap" xlink:href="data:image/png;base64,…" …/>
         <linearGradient id="bg0" gradientUnits="userSpaceOnUse" …/></defs>
-  <rect class="bg" …/>          ← 背景
-  <rect class="lane" …/>        ← 轨道栏
-  <line class="lane-line" …/>   ← 格线（每 5 格一条加粗）
-  <line class="bar-line" …/>    ← 小节线
-  <line class="beat-line" …/>   ← 拍线
-  <line class="simul" …/>       ← 同时押连线
-  <path fill="url(#bg0)" …/>    ← Hold 宽带（三列顶点色）
-  <svg viewBox="0 0 60 68" …>   ← 音符（九宫格三段）
+  <rect class="bg" …/>              ← 列号表头横带
+  <text class="col-text">1 / 4</text>
+  <svg class="col" x="0" …>         ← 第 1 列（viewBox 开窗到该段）
+    <rect class="lane" …/>          ← 轨道栏
+    <line class="lane-line" …/>     ← 格线（每 5 格一条加粗）
+    <line class="bar-line" …/>      ← 小节线
+    <line class="beat-line" …/>     ← 拍线
+    <line class="simul" …/>         ← 同时押连线
+    <path fill="url(#bg0)" …/>      ← Hold 宽带（三列顶点色）
+    <svg viewBox="0 0 60 68" …>     ← 音符（九宫格三段）
+  </svg>
+  <svg class="col" x="1000" …>…</svg>  ← 第 2 列
   …
 </svg>
 ```
 
 配色由 `defs` 里的 CSS 类控制，用 `--css` 追加即可覆盖。类名：`.bg` `.lane` `.edge`
-`.lane-line` `.lane-line-major` `.bar-line` `.beat-line` `.simul` `.bar-text`。
+`.lane-line` `.lane-line-major` `.bar-line` `.beat-line` `.simul` `.bar-text` `.col-text` `.col-sub`。
 
 ## 已实现
 
@@ -91,6 +108,7 @@ pnpm render chart.bytes -o heart.svg --from 103.0 --to 104.7 --px-per-sec 900 --
 - Hold 链按源数组顺序逐节点绘制，同 tick 折返的航点不被重排；串链汇合点去重
 - Flick 三层附加元素：平铺箭头（左右各一）、`Symbol`、`Sign`（沿「上」抬 1 世界单位）
 - 小节线 / 拍线 / 轨道格线 / 同时押连线（判定时刻差 < 4 ms）
+- 长曲按列切开并排（时间等分、吸附小节边界），列号与时间范围标注
 - 时间段渲染、镜像、透明背景、外挂样式表
 
 ## 范围
