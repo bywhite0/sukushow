@@ -115,11 +115,21 @@ test('音符贴图载入后就位', async ({ page }) => {
       const res = await fetch(`/rg/sprites/ui_sc2_ingame_notes_${n}.png`, { method: 'HEAD' });
       if (!res.ok) out.push(n);
     }
+    // Flick 附加元素（箭头 / Symbol / Sign）也要在盘上。
+    const extra = ['ui_sc2_ingame_notes_texture_arrow', 'ui_sc2_ingame_notes_icon_flick', 'ui_sc2_ingame_flick_sign'];
+    for (const n of extra) {
+      const res = await fetch(`/rg/sprites/${n}.png`, { method: 'HEAD' });
+      if (!res.ok) out.push(n);
+    }
     const meta = await (await fetch('/rg/sprite_meta.json')).json();
-    return { bad: out, keys: Object.keys(meta).length };
+    const missingMeta = [...names.map(n => `ui_sc2_ingame_notes_${n}`), ...extra]
+      .filter(k => !meta[k]);
+    return { bad: out, keys: Object.keys(meta).length, missingMeta };
   });
   expect(missing.bad).toEqual([]);
-  expect(missing.keys).toBe(4);
+  // 四类音符 + 箭头 + Symbol + Sign。
+  expect(missing.keys).toBe(7);
+  expect(missing.missingMeta).toEqual([]);
 });
 
 test('音符端头是圆角，中段不拉伸端头', async ({ page }) => {
@@ -226,6 +236,40 @@ test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
   expect(Math.abs(prof.left - prof.right)).toBeLessThan(30);
 });
 
+test('Flick 叠加绿色箭头与 Sign，且不画到别的音符上', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  const lay = await layoutOf(page);
+  // 采样谱面的 Flick 在 5.0 s、轨道 30–32。
+  const [x0, x1] = [lay.padX + 30 * lay.lanePx, lay.padX + 33 * lay.lanePx];
+  const y = yOf(5.0, lay);
+  // 附加元素比本体高出若干，取一个包住上下各 40px 的窗口。
+  const box = { x: x0 - 30, y: y - 40, w: x1 - x0 + 60, h: 80 };
+  const flick = await greenIn(page, box);
+  expect(flick.n).toBeGreaterThan(200);
+
+  // 同一时刻的 Trace（轨道 50–58）不该出现绿色。
+  const tX0 = lay.padX + 50 * lay.lanePx, tX1 = lay.padX + 59 * lay.lanePx;
+  const trace = await greenIn(page, { x: tX0 - 20, y: yOf(6.0, lay) - 40, w: tX1 - tX0 + 40, h: 80 });
+  expect(trace.n).toBe(0);
+
+  // 1.0 s 的两条 Single 也不该有绿色。
+  const single = await greenIn(page, { x: lay.padX + 8 * lay.lanePx, y: yOf(1.0, lay) - 40, w: 10 * lay.lanePx, h: 80 });
+  expect(single.n).toBe(0);
+});
+
+test('Flick 附加元素的纵向跨度大于音符本体厚度', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  const lay = await layoutOf(page);
+  // 本体厚度 = 0.45 世界单位 × scale.x。Sign 高 2.5×0.8 = 2.0 世界单位，远高于它。
+  const bodyPx = 0.45 * 0.75 * (lay.lanePx / 0.15);
+  const y = yOf(5.0, lay);
+  const box = { x: lay.padX + 28 * lay.lanePx, y: y - 120, w: 9 * lay.lanePx, h: 240 };
+  const g = await greenIn(page, box);
+  expect(g.n).toBeGreaterThan(200);
+  // 绿色像素在纵向铺开得比本体厚。
+  expect(g.maxY - g.minY).toBeGreaterThan(bodyPx * 2);
+});
+
 async function importChart(page: import('@playwright/test').Page, data: unknown) {
   await page.setInputFiles('#file', {
     name: 'sample.json',
@@ -280,4 +324,30 @@ async function drawnBox(page: import('@playwright/test').Page) {
     }
     return { x: minX, w: maxX - minX, y: minY, h: maxY - minY, n };
   });
+}
+
+/** 某个矩形区域内「绿色系」像素的计数与包围盒。Flick 附加元素是绿色。 */
+async function greenIn(page: import('@playwright/test').Page, box: { x: number; y: number; w: number; h: number }) {
+  const lay = await layoutOf(page);
+  return page.locator('#canvas').evaluate((el, { lay, box }) => {
+    const c = el as HTMLCanvasElement;
+    const dpr = lay.dpr as number;
+    const x0 = Math.max(0, Math.round(box.x * dpr)), y0 = Math.max(0, Math.round(box.y * dpr));
+    const w = Math.round(box.w * dpr), h = Math.round(box.h * dpr);
+    const { data, width } = c.getContext('2d')!.getImageData(x0, y0, w, h);
+    let n = 0, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * width + x) * 4;
+        const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+        // 绿色系：G 明显高于 R/B，且不透明。
+        if (a > 60 && g > 70 && g > r + 25 && g > b + 25) {
+          n++;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return n ? { n, minX, maxX, minY, maxY } : { n: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }, { lay, box });
 }

@@ -62,5 +62,53 @@
       48
     ],
     "ppu": 100
+  },
+  "ui_sc2_ingame_notes_texture_arrow": {
+    "name": "ui_sc2_ingame_notes_texture_arrow",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      52,
+      50
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_icon_flick": {
+    "name": "ui_sc2_ingame_notes_icon_flick",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      120,
+      90
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_flick_sign": {
+    "name": "ui_sc2_ingame_flick_sign",
+    "border": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      323,
+      250
+    ],
+    "ppu": 100
   }
 }

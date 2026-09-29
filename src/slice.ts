@@ -15,7 +15,7 @@
 
 import type { Note } from './chart';
 import type { Layout } from './view';
-import { timeY } from './view';
+import { noteSpan, timeY } from './view';
 
 /** 原版一格轨宽（SlopeResolver.laneWidth 出厂值）。 */
 export const LANE_WORLD = 0.15;
@@ -48,6 +48,76 @@ export const NOTE_SPRITE: readonly string[] = [
   'ui_sc2_ingame_notes_flick',
   'ui_sc2_ingame_notes_trace',
 ];
+
+/** Flick 附加元素的贴图名（原版 NoteFlickView 的三个子节点）。 */
+export const FLICK_ARROW = 'ui_sc2_ingame_notes_texture_arrow';
+export const FLICK_ICON = 'ui_sc2_ingame_notes_icon_flick';
+export const FLICK_SIGN = 'ui_sc2_ingame_flick_sign';
+
+/** prefab 授权值：Symbol 与 Sign 的 localScale。 */
+export const FLICK_ICON_SCALE = 0.6;
+export const FLICK_SIGN_SCALE = 0.8;
+/** Arrow 的定尺法则：宽 = ISx×0.45、高 = 音符厚度×1.45（prefab m_Size.y=0.5、localScale.y=1.45）。 */
+export const ARROW_WIDTH = 0.45;
+export const ARROW_SIZE_Y = 0.5;
+export const ARROW_SCALE_Y = 1.45;
+
+export interface FlickOverlay {
+  kind: 'arrow' | 'icon' | 'sign';
+  /** 中心（画布像素）。 */
+  cx: number;
+  cy: number;
+  /** 目标尺寸（画布像素）。 */
+  w: number;
+  h: number;
+  /** 水平翻转：Arrow-Right 绕 Y 180°，随镜像开关联动。 */
+  flip: boolean;
+  /** 横向平铺时单块贴图的画布宽（像素）；0 表示不铺、直接拉伸。 */
+  tile: number;
+}
+
+/**
+ * Flick 的三层附加元素，几何取自 prefab 授权值：
+ *
+ * - `Arrow-Left/Right`：贴图**横向平铺**，单块宽 = ISx×0.45×0.75、高 = 0.45×1.45，
+ *   两块各偏音符中心 ±宽/2（即左右并排铺满 90% 音符宽），右侧水平翻转。
+ * - `Symbol`：`ui_sc2_ingame_notes_icon_flick` 原生尺寸 × 0.6，居中。
+ * - `Sign`：`ui_sc2_ingame_flick_sign` 原生尺寸 × 0.8，居中。
+ *
+ * 原版 Sign 另有 0.9↔1.1 的纵向余弦浮动（周期 1s）与 localPos.y=1 的抬高，静态读谱都不实现。
+ * 尺寸一律按 `pxPerWorld` 换算而非时间轴比例——它们在世界空间里是固定尺寸的装饰，
+ * 不该随时间缩放变化。
+ */
+export function flickOverlays(
+  note: Note, lay: Layout,
+  meta: { arrow?: SpriteMeta; icon?: SpriteMeta; sign?: SpriteMeta },
+): FlickOverlay[] {
+  const isx = noteWidthWorld(note.r - note.l + 1);
+  const k = pxPerWorld(lay);
+  const [x0, x1] = noteSpan(note, lay, false);
+  const cx = (x0 + x1) / 2;
+  const cy = timeY(note.time, lay);
+  const aw = ARROW_WIDTH * isx * SPRITE_SCALE_X * k;
+  const ah = ARROW_SIZE_Y * noteDepthWorld(2) * ARROW_SCALE_Y * k;
+  // 单块贴图的画布宽：贴图原生宽 × scale.x。uTile 随音符变宽而增大，故此值恒定。
+  const tile = meta.arrow ? SPRITE_SCALE_X * k * (meta.arrow.rect[2] / meta.arrow.ppu) : 0;
+  const out: FlickOverlay[] = [
+    { kind: 'arrow', cx: cx - aw / 2, cy, w: aw, h: ah, flip: lay.mirror, tile },
+    { kind: 'arrow', cx: cx + aw / 2, cy, w: aw, h: ah, flip: !lay.mirror, tile },
+  ];
+  const box = (m: SpriteMeta | undefined, scale: number, kind: 'icon' | 'sign'): FlickOverlay | null =>
+    m ? {
+      kind, cx, cy,
+      w: (m.rect[2] / m.ppu) * scale * k,
+      h: (m.rect[3] / m.ppu) * scale * k,
+      flip: false, tile: 0,
+    } : null;
+  const icon = box(meta.icon, FLICK_ICON_SCALE, 'icon');
+  if (icon) out.push(icon);
+  const sign = box(meta.sign, FLICK_SIGN_SCALE, 'sign');
+  if (sign) out.push(sign);
+  return out;
+}
 
 /** 世界单位 → 像素。 */
 export function pxPerWorld(lay: Layout): number {

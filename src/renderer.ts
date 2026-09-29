@@ -10,7 +10,8 @@ import {
   type Layout, chainEnd, contentHeight, edgeX, noteSpan, measures, timeY, trackWidth, yTime,
 } from './view';
 import {
-  type BandHalf, type SpriteMeta, NOTE_SPRITE, SPRITE_SCALE_X, chainBandHalves, cssRgba,
+  type BandHalf, type FlickOverlay, type SpriteMeta, NOTE_SPRITE, SPRITE_SCALE_X,
+  FLICK_ARROW, FLICK_ICON, FLICK_SIGN, chainBandHalves, cssRgba, flickOverlays,
   laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld, pxPerWorld, sliceCaps,
 } from './slice';
 
@@ -47,9 +48,14 @@ export interface RenderOptions {
 export interface SpriteLibrary {
   images: (HTMLImageElement | undefined)[];
   meta: (SpriteMeta | undefined)[];
+  /** Flick 附加元素（箭头、Sign），按 `FLICK_EXTRA` 顺序。 */
+  extra: { images: (HTMLImageElement | undefined)[]; meta: (SpriteMeta | undefined)[] };
 }
 
-export const emptyLibrary = (): SpriteLibrary => ({ images: [], meta: [] });
+/** Flick 附加元素的贴图顺序。 */
+const FLICK_EXTRA = [FLICK_ARROW, FLICK_ICON, FLICK_SIGN] as const;
+
+export const emptyLibrary = (): SpriteLibrary => ({ images: [], meta: [], extra: { images: [], meta: [] } });
 
 /** 载入四类音符贴图与九宫格边距；任一缺失即回退为纯色矩形。 */
 export async function loadSprites(base = '/rg'): Promise<SpriteLibrary> {
@@ -61,12 +67,19 @@ export async function loadSprites(base = '/rg'): Promise<SpriteLibrary> {
   } catch { /* 回退纯色 */ }
   lib.images = NOTE_SPRITE.map(() => undefined);
   lib.meta = NOTE_SPRITE.map(name => meta[name]);
-  await Promise.all(NOTE_SPRITE.map((name, i) => new Promise<void>(resolve => {
-    const img = new Image();
-    img.onload = () => { lib.images[i] = img; resolve(); };
-    img.onerror = () => resolve();
-    img.src = `${base}/sprites/${name}.png`;
-  })));
+  lib.extra.images = FLICK_EXTRA.map(() => undefined);
+  lib.extra.meta = FLICK_EXTRA.map(name => meta[name]);
+  const load = (names: readonly string[], images: (HTMLImageElement | undefined)[]) =>
+    Promise.all(names.map((name, i) => new Promise<void>(resolve => {
+      const img = new Image();
+      img.onload = () => { images[i] = img; resolve(); };
+      img.onerror = () => resolve();
+      img.src = `${base}/sprites/${name}.png`;
+    })));
+  await Promise.all([
+    load(NOTE_SPRITE, lib.images),
+    load(FLICK_EXTRA, lib.extra.images),
+  ]);
   return lib;
 }
 
@@ -199,6 +212,8 @@ export class FlatRenderer {
           const th = Math.max(instantPx, noteSpriteSize(n.r - n.l + 1, type, lay).h);
           ctx.fillRect(x0, y - th / 2, Math.max(1, x1 - x0), th);
         }
+        // Flick 的箭头与 Sign 叠加在本体之上（原版 sortingOrder 21 / 25）。
+        if (type === 2) this.paintFlick(n, lay);
         drawn++; instants++;
       }
     }
@@ -230,6 +245,41 @@ export class FlatRenderer {
     if (!img || !meta) return;
     const x0 = laneX(l, lay), x1 = laneX(r + 1, lay);
     this.drawSliced(img, meta, (x0 + x1) / 2, timeY(time, lay), r - l + 1, 1, lay);
+  }
+
+  /**
+   * Flick 的三层附加元素：箭头（横向平铺）、Symbol、Sign。
+   * 缺贴图时静默跳过——它们只是装饰，不影响音符本体。
+   */
+  private paintFlick(n: Note, lay: Layout) {
+    const [arrowMeta, iconMeta, signMeta] = this.lib.extra.meta;
+    if (!arrowMeta && !iconMeta && !signMeta) return;
+    const overlays = flickOverlays(n, lay, { arrow: arrowMeta, icon: iconMeta, sign: signMeta });
+    for (const o of overlays) {
+      const img = o.kind === 'arrow' ? this.lib.extra.images[0]
+        : o.kind === 'icon' ? this.lib.extra.images[1] : this.lib.extra.images[2];
+      const meta = o.kind === 'arrow' ? arrowMeta : o.kind === 'icon' ? iconMeta : signMeta;
+      if (!img || !meta || o.w <= 0.01 || o.h <= 0.01) continue;
+      const sw = meta.rect[2] || img.naturalWidth, sh = meta.rect[3] || img.naturalHeight;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.translate(o.cx, o.cy);
+      if (o.flip) ctx.scale(-1, 1);
+      if (o.kind === 'arrow' && o.tile > 0.5) {
+        // 原版靠 UV repeat 平铺：重复次数 = 目标宽 / 单块宽，可为小数，
+        // 故最后一块按剩余宽度裁源图，不做取整。
+        const step = o.tile, total = o.w, x0 = -total / 2;
+        let x = x0;
+        while (x < x0 + total - 0.5) {
+          const wRemain = Math.min(step, x0 + total - x);
+          ctx.drawImage(img, 0, 0, sw * (wRemain / step), sh, x, -o.h / 2, wRemain, o.h);
+          x += step;
+        }
+      } else {
+        ctx.drawImage(img, 0, 0, sw, sh, -o.w / 2, -o.h / 2, o.w, o.h);
+      }
+      ctx.restore();
+    }
   }
 
   /** 一个宽带半边：横向从一列渐变到另一列。 */

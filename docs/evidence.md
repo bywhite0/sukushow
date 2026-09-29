@@ -42,6 +42,26 @@ GetNoteSize(width) = ((width − 6) × 0.2 + 1.15, 1.0)   // width = |l − r| +
 贴图纵横比与原版一致。**九宫格边距与世界尺寸必须同一口径**：把像素宽当世界宽传进去，
 端头会缩到不足 1px，圆角就没了。
 
+### Flick 的附加元素
+
+原版 `NoteFlickView` 除了本体 `Silhouette`，还挂三个装饰子节点，全部不染色（颜色来自贴图本身）：
+
+| 子节点 | 贴图 | 尺寸来源 | 摆放 |
+|---|---|---|---|
+| `Arrow-Left` / `Arrow-Right` | `ui_sc2_ingame_notes_texture_arrow` 52×50 | 宽 `ISx×0.45`、高 `0.45×1.45`（`ISx` = `GetNoteSize(width).x`） | 两块各偏中心 ±宽/2，右侧水平翻转 |
+| `Symbol` | `ui_sc2_ingame_notes_icon_flick` 120×90 | 原生尺寸 × 0.6 | 居中 |
+| `Sign` | `ui_sc2_ingame_flick_sign` 323×250 | 原生尺寸 × 0.8 | 居中 |
+
+箭头贴图靠 **UV repeat 平铺**（`spriteMeshType` 已改 FullRect），重复次数 = 目标宽 / 单块宽，
+可为小数 —— 故最后一块按剩余宽度裁源图，不能取整。单块宽 = 贴图原生宽 × `scale.x`，
+与音符宽度无关；音符变宽只会让重复次数变多。
+
+尺寸一律按 `pxPerWorld` 换算，不随 `pxPerSec` 变化 —— 它们是世界空间里的固定尺寸装饰。
+`Arrow` 贴图 alpha 上限仅 82（一层很淡的光晕），`Symbol` 与 `Sign` 则是实心绿色。
+
+未实现的两项原版动态：`Sign` 的 0.9↔1.1 纵向余弦浮动（`FlickSignView`，周期 1s、全场同相、
+无相位种子）与 `localPos.y = 1` 的抬高。静态读谱下都不影响形状判读。
+
 ## Hold 宽带
 
 照 `HoldMeshView`：每节点三列顶点，左列与右列取 `SideColor`、中列取 `CenterColor`，

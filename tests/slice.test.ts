@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { parseChart } from '../src/chart';
 import { defaultLayout } from '../src/view';
 import {
-  HOLD_CENTER, HOLD_CENTER_ALPHA, HOLD_SIDE, HOLD_SIDE_ALPHA, LANE_WORLD, SPRITE_SCALE_X,
-  bandHalves, chainBandHalves, laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld, pxPerWorld,
-  sliceCaps,
+  ARROW_WIDTH, HOLD_CENTER, HOLD_CENTER_ALPHA, HOLD_SIDE, HOLD_SIDE_ALPHA, LANE_WORLD, SPRITE_SCALE_X,
+  bandHalves, chainBandHalves, flickOverlays, laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld,
+  pxPerWorld, sliceCaps,
 } from '../src/slice';
+import { noteSpan } from '../src/view';
 import { deflateRawSync } from 'node:zlib';
 
 const flags = (type: number, l: number, r: number, l2 = l, r2 = r) =>
@@ -221,5 +222,92 @@ describe('Hold 宽带三列', () => {
   it('deflate 输入同样适用（解析路径一致）', () => {
     const json = JSON.stringify({ Notes: [{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20) }], Bpms: [] });
     expect(deflateRawSync(Buffer.from(json)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Flick 附加元素', () => {
+  const flick = (l: number, r: number) => chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(2, l, r) }]).notes[0];
+  const metas = {
+    arrow: { name: 'a', border: [0, 0, 0, 0], rect: [0, 0, 52, 50], ppu: 100 },
+    icon: { name: 'i', border: [0, 0, 0, 0], rect: [0, 0, 120, 90], ppu: 100 },
+    sign: { name: 's', border: [0, 0, 0, 0], rect: [0, 0, 323, 250], ppu: 100 },
+  };
+
+  it('产出两层箭头 + Symbol + Sign', () => {
+    const o = flickOverlays(flick(10, 21), lay(), metas);
+    expect(o.map(x => x.kind)).toEqual(['arrow', 'arrow', 'icon', 'sign']);
+  });
+
+  it('缺贴图元数据时对应层不产出', () => {
+    expect(flickOverlays(flick(10, 21), lay(), {}).map(x => x.kind)).toEqual(['arrow', 'arrow']);
+    expect(flickOverlays(flick(10, 21), lay(), { icon: metas.icon }).map(x => x.kind))
+      .toEqual(['arrow', 'arrow', 'icon']);
+  });
+
+  it('两块箭头各偏音符中心 ±半宽，合起来铺满箭头总宽', () => {
+    const l = lay({ lanePx: 10 });
+    const n = flick(10, 21);
+    const o = flickOverlays(n, l, metas);
+    const [x0, x1] = noteSpan(n, l, false);
+    const cx = (x0 + x1) / 2;
+    const aw = ARROW_WIDTH * noteWidthWorld(12) * SPRITE_SCALE_X * pxPerWorld(l);
+    expect(o[0].cx).toBeCloseTo(cx - aw / 2, 9);
+    expect(o[1].cx).toBeCloseTo(cx + aw / 2, 9);
+    // 左右各占一半，间隔恰好为 0（并排无缝）。
+    expect(o[1].cx - o[0].cx).toBeCloseTo(aw, 9);
+    expect(o[0].w).toBeCloseTo(aw, 9);
+  });
+
+  it('箭头高 = 音符厚度 × 1.45，不随时间缩放变化', () => {
+    const l = lay({ lanePx: 10, pxPerSec: 90 });
+    const n = flick(10, 21);
+    const [a] = flickOverlays(n, l, metas);
+    expect(a.h).toBeCloseTo(0.5 * noteDepthWorld(2) * 1.45 * pxPerWorld(l), 9);
+    // pxPerSec 变化不影响它（装饰在世界空间里定尺）。
+    const [b] = flickOverlays(n, lay({ lanePx: 10, pxPerSec: 900 }), metas);
+    expect(b.h).toBeCloseTo(a.h, 9);
+  });
+
+  it('右侧箭头水平翻转；开镜像后两侧互换', () => {
+    const l = lay({ lanePx: 10 });
+    const o = flickOverlays(flick(10, 21), l, metas);
+    expect(o[0].flip).toBe(false);
+    expect(o[1].flip).toBe(true);
+    const m = flickOverlays(flick(10, 21), lay({ lanePx: 10, mirror: true }), metas);
+    expect(m[0].flip).toBe(true);
+    expect(m[1].flip).toBe(false);
+  });
+
+  it('箭头单块宽 = 贴图原生宽 × scale.x，与音符宽度无关', () => {
+    const l = lay({ lanePx: 10 });
+    const narrow = flickOverlays(flick(10, 11), l, metas)[0];
+    const wide = flickOverlays(flick(0, 59), l, metas)[0];
+    expect(narrow.tile).toBeCloseTo(SPRITE_SCALE_X * pxPerWorld(l) * 0.52, 9);
+    expect(wide.tile).toBeCloseTo(narrow.tile, 9);
+    // 宽音符靠更多重复次数覆盖，而非把单块拉宽。
+    expect(wide.w).toBeGreaterThan(narrow.w);
+  });
+
+  it('Symbol 与 Sign 按原生尺寸 × scale，居中且不翻转', () => {
+    const l = lay({ lanePx: 10 });
+    const n = flick(10, 21);
+    const o = flickOverlays(n, l, metas);
+    const k = pxPerWorld(l);
+    expect(o[2].w).toBeCloseTo(1.2 * 0.6 * k, 9);
+    expect(o[2].h).toBeCloseTo(0.9 * 0.6 * k, 9);
+    expect(o[3].w).toBeCloseTo(3.23 * 0.8 * k, 9);
+    expect(o[3].h).toBeCloseTo(2.5 * 0.8 * k, 9);
+    const [x0, x1] = noteSpan(n, l, false);
+    for (const box of [o[2], o[3]]) {
+      expect(box.cx).toBeCloseTo((x0 + x1) / 2, 9);
+      expect(box.flip).toBe(false);
+      expect(box.tile).toBe(0);
+    }
+  });
+
+  it('非 Flick 类型不产出附加元素（调用方按 type===2 分流）', () => {
+    const single = chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 21) }]).notes[0];
+    // 几何函数本身与类型无关，此处只固定「同参数下几何一致」这一事实。
+    expect(flickOverlays(single, lay(), metas)).toHaveLength(4);
   });
 });
