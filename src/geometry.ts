@@ -14,6 +14,11 @@ export const worldX = (lane: number, laneWidthOpt = 100) => lanePitch(laneWidthO
 
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+/** Mathf.Clamp01：`v < 0 ? 0 : v > 1 ? 1 : v`；NaN 预览兜底为 0（Unity 原样返回 NaN）。 */
+export const unityClamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : Number.isNaN(v) ? 0 : v);
+
+/** Mathf.Min(a, b) = `a < b ? a : b`（a 为 NaN 时返回 b，与 Math.min 不同）。 */
+export const unityMin = (a: number, b: number) => (a < b ? a : b);
 /**
  * NoteStartZ (0..100): RefreshNoteStartZ shortens look-ahead.
  * spawn ≈ BORDER + (SPAWN−BORDER)×(1 − startZ/100).
@@ -50,9 +55,16 @@ export function holdSegment(n: Note, now: number, s: Slope, mirror: boolean, lan
   const lane0Left = pitch * -30;
   const length = n.end - n.time, e = now - n.time + s.duration;
   const zh = Math.max(s.zAt(n.time - now), BORDER), zt = s.zAt(n.end - now);
-  if (length <= 0 || zh >= s.spawn || zt <= BORDER) return [];
-  const head = edges(n, clamp((now - n.time) / length, 0, 1), mirror);
-  const tail = edges(n, Math.min(e / length, 1), mirror), far = Math.min(zt, s.spawn);
+  // HoldNoteView.EmitSegment（HOLD_MESH §4）只按 zHead >= SpawnZ / zTailRaw <= BorderLine 跳过，
+  // **不因 HoldLength == 0 跳过**：零长段（链中的瞬移点，holds[^1] == Just）照样出一排头、一排尾，
+  // 两排同 z（零纵深、不可见），但它占住「第 2 个已发射段」的位置，缝合时第 1 段的尾排接到它的头排
+  // （= 第 1 段自己的尾端 lane）。此前这里 length <= 0 直接返回 []，缝合落到瞬移之后那段的头排，
+  // 第 1 段尾端被拉到下一段的 lane 上。
+  if (zh >= s.spawn || zt <= BORDER) return [];
+  // pHead = Mathf.Clamp01((t − just) / HoldLength)，pTail = Mathf.Min(e / HoldLength, 1)：
+  // 零长时 ±x/0 = ±Inf，按 Unity 的比较式钳位。0/0（恰在该时刻）Unity 得 NaN，预览取 0 以免 NaN 进顶点缓冲（预览兜底）。
+  const head = edges(n, unityClamp01((now - n.time) / length), mirror);
+  const tail = edges(n, unityMin(e / length, 1), mirror), far = Math.min(zt, s.spawn);
   const x = (lr: [number, number]) => [
     lane0Left + pitch * (lr[0] + 1),
     worldX((lr[0] + lr[1]) / 2, laneWidthOpt),
