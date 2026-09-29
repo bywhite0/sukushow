@@ -38,7 +38,8 @@ test('导入 JSON 谱面后画出全部音符与同时押', async ({ page }) => 
   await expect(canvas).toHaveAttribute('data-total', '6');
   await expect(canvas).toHaveAttribute('data-roots', '5');
   await expect(canvas).toHaveAttribute('data-instants', '4');
-  await expect(canvas).toHaveAttribute('data-holds', '2');
+  // 两个链节点 × 每条宽带两个半边 = 4。
+  await expect(canvas).toHaveAttribute('data-holds', '4');
   // 只有「链首」与「链尾」参与同时押分组（与原版 Prepare 同律），
   // 故 1.0 s 的两条 Single 成一组；链中节点 3.0 s 的接缝不算。
   await expect(canvas).toHaveAttribute('data-lines', '1');
@@ -100,6 +101,54 @@ test('损坏文件保留已有谱面并报错', async ({ page }) => {
   await page.setInputFiles('#file', { name: 'broken.bytes', mimeType: 'application/octet-stream', buffer: Buffer.from('not a chart') });
   await expect(page.locator('#status')).toHaveClass(/error/);
   await expect(page.locator('#canvas')).toHaveAttribute('data-total', '6');
+});
+
+test('音符贴图载入后就位', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  // 四张音符贴图与九宫格边距来自 /rg/，载入成功后画布标记 textured。
+  await expect(page.locator('#canvas')).toHaveAttribute('data-textured', '1');
+  const missing = await page.evaluate(async () => {
+    const names = ['tap', 'hold', 'flick', 'trace'];
+    const out: string[] = [];
+    for (const n of names) {
+      const res = await fetch(`/rg/sprites/ui_sc2_ingame_notes_${n}.png`, { method: 'HEAD' });
+      if (!res.ok) out.push(n);
+    }
+    const meta = await (await fetch('/rg/sprite_meta.json')).json();
+    return { bad: out, keys: Object.keys(meta).length };
+  });
+  expect(missing.bad).toEqual([]);
+  expect(missing.keys).toBe(4);
+});
+
+test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  // 在 2.5 s 处整行扫描，先定位宽带实际跨度（节点斜置时跨度随时间平移），
+  // 再比较左右边缘与中列的绿通道。两侧列 alpha 0.6 > 中列 0.2。
+  const prof = await page.locator('#canvas').evaluate(el => {
+    const c = el as HTMLCanvasElement;
+    const ctx = c.getContext('2d')!;
+    const dpr = c.width / c.clientWidth;
+    const padY = 16, pxPerSec = 90;
+    const y = Math.round((padY + 2.5 * pxPerSec) * dpr);
+    const row = ctx.getImageData(0, y, c.width, 1).data;
+    const cyan: number[] = [];
+    for (let x = 0; x < c.width; x++) {
+      const r = row[x * 4], g = row[x * 4 + 1], b = row[x * 4 + 2];
+      if (g > 90 && b > 90 && g > r + 25) cyan.push(x);
+    }
+    if (cyan.length < 10) return { width: 0, left: 0, mid: 0, right: 0 };
+    const at = (f: number) => {
+      const x = cyan[Math.round((cyan.length - 1) * f)];
+      return row[x * 4 + 1];
+    };
+    return { width: cyan.length, left: at(0.02), mid: at(0.5), right: at(0.98) };
+  });
+  expect(prof.width).toBeGreaterThan(50);
+  expect(prof.left).toBeGreaterThan(prof.mid + 40);
+  expect(prof.right).toBeGreaterThan(prof.mid + 40);
+  // 左右对称。
+  expect(Math.abs(prof.left - prof.right)).toBeLessThan(30);
 });
 
 async function importChart(page: import('@playwright/test').Page, data: unknown) {

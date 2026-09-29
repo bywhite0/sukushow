@@ -26,7 +26,8 @@ pnpm verify:corpus "<本地谱面目录>"   # 对语料跑解析与几何校验
 
 ## 已实现
 
-- 四类音符：Single / Hold / Flick / Trace，Hold 的纵向长度即按住时长。
+- 四类音符：Single / Hold / Flick / Trace，使用原版贴图 `ui_sc2_ingame_notes_*`，横向九宫格拉伸。
+- Hold 走原版三列顶点色宽带：左/右列 SideColor(45,248,255)、中列 CenterColor(46,198,255)，未按住时 alpha 分别 0.60 / 0.20；头尾另贴端头贴图。
 - Hold 链按源数组顺序逐节点绘制，同 tick 折返的航点不被重排。
 - 同时押连线（判定时刻差 < 4 ms 分组）。
 - 小节线：按 BPM 段与拍号段推进，段首为强拍。

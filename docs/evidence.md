@@ -19,17 +19,53 @@
 
 按判定时刻分组，容差 4 ms。**只有链首与链尾参与**：链首取 `just`，链尾取末节点终点。链中节点的接缝不参与分组，这与原版 Prepare 的口径一致。
 
+## 音符外观
+
+四类音符使用原版贴图 `ui_sc2_ingame_notes_{tap,hold,flick,trace}.png`（128×68 / Trace 128×48），
+九宫格边距 `border = (60,0,60,0)`、`ppu = 100`，与 `llll-preview-web/public/rg/` 同源。
+
+尺寸照 `ISlopeResolver`：
+
+```
+GetNoteSize(width) = ((width − 6) × 0.2 + 1.15, 1.0)   // width = |l − r| + 1
+```
+
+再乘 prefab 里 `SpriteRenderer` 的 `scale.x = 0.75`。纵向厚度 `type === 3 ? 0.35 : 0.45`。
+单格音符的视觉宽度 0.15 恰等于一格逻辑宽度（`laneWidth`）。
+
+横向九宫格按 Unity `SpriteDrawMode.Sliced`：左右端头各取 `border / ppu × scale`，
+两端头之和超过目标宽度时等比缩到恰好铺满、中段为 0。
+
+平面视图令一格 = `lanePx` 像素，于是 `pxPerWorld = lanePx / 0.15`，横纵共用同一比例，
+贴图纵横比与原版一致。
+
+## Hold 宽带
+
+照 `HoldMeshView`：每节点三列顶点，左列与右列取 `SideColor`、中列取 `CenterColor`，
+RGB 恒定、alpha 随是否按住变化（未按住 0.60 / 0.20）。三列的轨道坐标：
+
+```
+GetLeftMeshX(xl)  = lane0Left + laneWidth * (xl + 1)   ⇒ 轨道坐标 l + 1
+GetRightMeshX(xr) = lane0Left + laneWidth * xr         ⇒ 轨道坐标 r
+GetCenterMeshX(m) = lane0Left + laneWidth * (m + 0.5)  ⇒ 轨道坐标 (l+r)/2 + 0.5
+```
+
+⇒ **宽带比音符本体左右各内缩整一格**，带宽 `(Width − 2)` 格。`Width = 1` 时带宽为负、
+绕序翻转，原版照画不补最小宽度；`Width = 2` 时恰为 0。
+
+头尾另贴 `ui_sc2_ingame_notes_hold`（原版 prefab 的 `Silhouette` / `Silhouette-End`）。
+
 ## 坐标系
 
-原版轨道在世界空间里是 `lanePitch × (lane − 29.5)` 的连续坐标（`laneWidthOpt = 100` 时 `lanePitch = 0.15`），60 格铺开为 ±4.5。
-
-平面视图只关心相对关系，故取单位轨宽 = 1：
+原版轨道在世界空间是 `lanePitch × (lane − 29.5)` 的连续坐标（`laneWidthOpt = 100` 时 `lanePitch = 0.15`），
+60 格铺开为 ±4.5。平面视图只关心相对关系，故取单位轨宽 = 1：
 
 ```
 左缘 = lane − 29.5,  右缘 = (lane + 1) − 29.5
 ```
 
-**不搬 3D 侧的 `worldWidthOf(width) = ((width − 6) × 0.2 + 1.15) × 0.75`**：那条公式把 60 轨映射到世界宽度的观感口径，平面视图直接用格宽更忠实。
+**不搬 3D 侧的 `worldWidthOf(width)`**：那条公式把 60 轨映射到世界宽度的观感口径，
+平面视图直接用格宽更忠实。音符自身宽度走原版 `GetNoteSize`（见上）。
 
 ## 朝向
 
@@ -39,9 +75,9 @@
 
 ## 音符几何
 
-- 瞬时音符（Single / Flick / Trace）：以时刻为中心的矩形，纵向给最小可见厚度，横向覆盖 `[l, r]`。
-- Hold：每个节点画一个四边形，头边在 `[l, r]`、尾边在 `[l2, r2]`，中间线性。纵向长度即按住时长。
-- 链：逐节点画四边形，**顺序 = 源数组顺序**。同 tick 折返的航点靠顺序表达路径，任何按轨道号二次排序都会让图形走形。
+- 瞬时音符（Single / Flick / Trace）：贴图以时刻为中心，横向覆盖 `[l, r]`。
+- Hold：每个节点画两条宽带半边（左列→中列、中列→右列），头边在 `[l, r]`、尾边在 `[l2, r2]`，中间线性。
+- 链：逐节点画，**顺序 = 源数组顺序**。同 tick 折返的航点靠顺序表达路径，任何按轨道号二次排序都会让图形走形。
 - 零时长节点（`end ≤ time`）不画。
 
 ## 小节线
@@ -58,10 +94,18 @@
 
 原版没有这个视角，本工具是另一种读谱方式，不宣称与任何原版视图一致。
 
-音符配色取原版四类的色值，但平面视图的呈现（矩形、格线、小节线、连线）均为本工具自有，不是原版渲染的还原。
+音符与 Hold 宽带的外观沿用原版贴图与顶点色口径；平面视图的**排版**（轨道格线、小节线、
+同时押连线、判定线）均为本工具自有，不是原版渲染的还原。原版 Hold 有按帧推进的呼吸光
+（`HoldMeshView.ProcessView` 的余弦脉动），本工具是静态读谱，不实现该动画。
 
 JavaScript double 不模拟 float32 逐指令语义；只有串链判据按 float32 域比较。
 
+## 素材来源
+
+`public/rg/sprites/` 与 `public/rg/sprite_meta.json` 取自游戏客户端资源，与 `llll-preview-web/public/rg/` 同源，
+权利归各原权利人所有，仅供非商业研究与互操作验证，不构成授权转载、再分发或商用许可。
+
 ## 参考
 
-`llll-preview-web` 提供源格式解析与链语义的口径；`llll-chart2sus` 提供同 tick 折返航点必须保序的结论。本仓库不复制其代码。
+`llll-preview-web` 提供源格式解析、链语义与音符外观的口径；`llll-chart2sus` 提供同 tick 折返航点必须保序的结论。
+Hold 宽带规格取自原包二进制核准的 `HOLD_MESH.md`。本仓库不复制其代码。

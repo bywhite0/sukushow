@@ -1,7 +1,7 @@
 /** 工作台：文件导入、视图参数、悬停探针。 */
 
 import { type Chart, decodeChart } from './chart';
-import { FlatRenderer, noteLabel } from './renderer';
+import { FlatRenderer, loadSprites, noteLabel } from './renderer';
 import { type Layout, defaultLayout } from './view';
 
 const el = <T extends HTMLElement>(id: string) => {
@@ -156,3 +156,10 @@ canvas.addEventListener('pointerleave', () => { probe.textContent = '把鼠标�
 
 new ResizeObserver(() => draw()).observe(stage);
 draw();
+
+// 音符贴图与九宫格边距：载入完成后重绘一次。
+void loadSprites().then(lib => {
+  renderer.setLibrary(lib);
+  if (lib.images.some(Boolean)) canvas.dataset.textured = '1';
+  draw();
+});

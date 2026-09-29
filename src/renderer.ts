@@ -1,17 +1,21 @@
-/** 平面谱面渲染：Canvas 2D，横轴 = 60 格轨道，纵轴 = 时间。 */
+/**
+ * 平面谱面渲染：Canvas 2D，横轴 = 60 格轨道，纵轴 = 时间。
+ *
+ * 音符外观与 Hold 宽带沿用原版：贴图取自 `ui_sc2_ingame_notes_*`，横向九宫格拉伸，
+ * Hold 走三列顶点色宽带（左/右列 SideColor、中列 CenterColor）。几何口径见 `slice.ts`。
+ */
 
 import type { Chart, Note } from './chart';
 import {
-  type Layout, chainEnd, chainQuads, contentHeight, edgeX, instantRect,
-  measures, noteSpan, timeY, trackWidth,
+  type Layout, chainEnd, contentHeight, edgeX, noteSpan, measures, timeY, trackWidth,
 } from './view';
+import {
+  type BandHalf, type SpriteMeta, NOTE_SPRITE, chainBandHalves, cssRgba,
+  laneX, noteSpriteSize, sliceCaps,
+} from './slice';
 
-/** 音符配色沿用原版四类：Single / Hold / Flick / Trace。 */
-const COLORS: readonly [number, number, number][] = [
-  [1, 0.37, 0.67], [0.18, 0.78, 1], [1, 0.37, 0.67], [0.33, 0.84, 0.94],
-];
-const FILL: readonly string[] = COLORS.map(c => `rgb(${c.map(v => Math.round(v * 255)).join(' ')})`);
-const FILL_DIM: readonly string[] = COLORS.map(c => `rgba(${c.map(v => Math.round(v * 255)).join(' ')},.72)`);
+/** 未加载到贴图时的兜底配色，沿用原版四类。 */
+const FALLBACK: readonly string[] = ['#ff5eab', '#2ec6ff', '#ff5eab', '#54d6ef'];
 const LANE_TYPE_NAME = ['Single', 'Hold', 'Flick', 'Trace'] as const;
 
 export interface RenderStats {
@@ -19,10 +23,12 @@ export interface RenderStats {
   drawn: number;
   /** 视口内绘制的瞬时音符数。 */
   instants: number;
-  /** 视口内绘制的 Hold 四边形数。 */
+  /** 视口内绘制的 Hold 宽带半边数。 */
   holds: number;
   /** 谱面音符总数。 */
   total: number;
+  /** 贴图是否已就绪。 */
+  textured: boolean;
 }
 
 export interface RenderOptions {
@@ -37,15 +43,45 @@ export interface RenderOptions {
   showGrid: boolean;
 }
 
+/** 音符贴图与九宫格元数据；由 `loadSprites` 填充。 */
+export interface SpriteLibrary {
+  images: (HTMLImageElement | undefined)[];
+  meta: (SpriteMeta | undefined)[];
+}
+
+export const emptyLibrary = (): SpriteLibrary => ({ images: [], meta: [] });
+
+/** 载入四类音符贴图与九宫格边距；任一缺失即回退为纯色矩形。 */
+export async function loadSprites(base = '/rg'): Promise<SpriteLibrary> {
+  const lib = emptyLibrary();
+  let meta: Record<string, SpriteMeta> = {};
+  try {
+    const res = await fetch(`${base}/sprite_meta.json`);
+    if (res.ok) meta = (await res.json()) as Record<string, SpriteMeta>;
+  } catch { /* 回退纯色 */ }
+  lib.images = NOTE_SPRITE.map(() => undefined);
+  lib.meta = NOTE_SPRITE.map(name => meta[name]);
+  await Promise.all(NOTE_SPRITE.map((name, i) => new Promise<void>(resolve => {
+    const img = new Image();
+    img.onload = () => { lib.images[i] = img; resolve(); };
+    img.onerror = () => resolve();
+    img.src = `${base}/sprites/${name}.png`;
+  })));
+  return lib;
+}
+
 export class FlatRenderer {
   private ctx: CanvasRenderingContext2D;
   private cache: { chart: Chart; measures: ReturnType<typeof measures> } | null = null;
+  private lib: SpriteLibrary = emptyLibrary();
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('当前浏览器不支持 Canvas 2D');
     this.ctx = ctx;
   }
+
+  setLibrary(lib: SpriteLibrary) { this.lib = lib; }
 
   /** 谱面或拍号相关的预计算在换谱时重建。 */
   private prepared(chart: Chart) {
@@ -82,7 +118,11 @@ export class FlatRenderer {
     if (opt.showSimultaneous) this.paintSimultaneous(chart, lay, h);
 
     const stats = this.paintNotes(chart, lay, opt.instantPx, h);
-    return { ...stats, total: chart.notes.length };
+    return { ...stats, total: chart.notes.length, textured: this.textured() };
+  }
+
+  private textured(): boolean {
+    return this.lib.images.some(Boolean);
   }
 
   private paintBackdrop(lay: Layout, trackW: number, h: number, top: number, bottom: number) {
@@ -144,35 +184,97 @@ export class FlatRenderer {
     // 瞬时音符：同类型合批，减少状态切换。
     for (let type = 0; type < 4; type++) {
       if (type === 1) continue;
-      ctx.fillStyle = FILL[type];
+      const img = this.lib.images[type];
+      const meta = this.lib.meta[type];
+      if (!img || !meta) ctx.fillStyle = FALLBACK[type];
       for (const n of chart.notes) {
         if (n.type !== type || n.prev) continue;
         if (n.time < topTime - 1 || n.time > bottomTime + 1) continue;
-        const r = instantRect(n, lay, instantPx);
-        ctx.fillRect(r.x, r.y, r.w, r.h);
+        const [x0, x1] = noteSpan(n, lay, false);
+        const y = timeY(n.time, lay);
+        if (img && meta) {
+          this.drawSliced(img, meta, x0, y, Math.max(1, x1 - x0), n.r - n.l + 1, type, lay);
+        } else {
+          const th = Math.max(instantPx, noteSpriteSize(n.r - n.l + 1, type, lay).h);
+          ctx.fillRect(x0, y - th / 2, Math.max(1, x1 - x0), th);
+        }
         drawn++; instants++;
       }
     }
 
-    // Hold 链：按源顺序逐节点画四边形，节点头尾相接即连成折返路径。
-    ctx.fillStyle = FILL_DIM[1];
+    // Hold 宽带：三列顶点色，逐节点画两条半边，顺序 = 源数组顺序。
     for (const root of chart.roots) {
       if (root.type !== 1) continue;
       const end = chainEnd(root);
       if (end < topTime - 1 || root.time > bottomTime + 1) continue;
-      for (const q of chainQuads(root, lay)) {
-        if (q.p[0][1] > h + 4 || q.p[2][1] < -4) continue;
-        ctx.beginPath();
-        ctx.moveTo(q.p[0][0], q.p[0][1]);
-        ctx.lineTo(q.p[1][0], q.p[1][1]);
-        ctx.lineTo(q.p[2][0], q.p[2][1]);
-        ctx.lineTo(q.p[3][0], q.p[3][1]);
-        ctx.closePath();
-        ctx.fill();
+      for (const half of chainBandHalves(root, lay)) {
+        const ys = half.corners.map(c => c[1]);
+        if (Math.min(...ys) > h + 4 || Math.max(...ys) < -4) continue;
+        this.paintBand(half);
         drawn++; holds++;
       }
+      // 头尾端头贴图（原版 Silhouette / Silhouette-End）。
+      let tail = root; while (tail.next) tail = tail.next;
+      this.paintCap(root, root.time, root.l, root.r, lay, topTime, bottomTime);
+      this.paintCap(tail, tail.end, tail.l2, tail.r2, lay, topTime, bottomTime);
     }
     return { drawn, instants, holds };
+  }
+
+  /** Hold 头 / 尾的端头贴图，与瞬时音符同款九宫格。 */
+  private paintCap(n: Note, time: number, l: number, r: number, lay: Layout, topTime: number, bottomTime: number) {
+    if (time < topTime - 1 || time > bottomTime + 1) return;
+    const img = this.lib.images[1];
+    const meta = this.lib.meta[1];
+    if (!img || !meta) return;
+    const x0 = laneX(l, lay), x1 = laneX(r + 1, lay);
+    const a = Math.min(x0, x1), b = Math.max(x0, x1);
+    this.drawSliced(img, meta, a, timeY(time, lay), Math.max(1, b - a), r - l + 1, 1, lay);
+  }
+
+  /** 一个宽带半边：横向从一列渐变到另一列。 */
+  private paintBand(half: BandHalf) {
+    const ctx = this.ctx;
+    const [a, b, c, d] = half.corners;
+    const grad = ctx.createLinearGradient(half.gradFrom[0], half.gradFrom[1], half.gradTo[0], half.gradTo[1]);
+    grad.addColorStop(0, cssRgba(half.fromColor));
+    grad.addColorStop(1, cssRgba(half.toColor));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.lineTo(c[0], c[1]);
+    ctx.lineTo(d[0], d[1]);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  /** 九宫格横向拉伸：左右端头原样、中段拉伸，纵向整体缩放到原版厚度。 */
+  private drawSliced(
+    img: HTMLImageElement, meta: SpriteMeta, x0: number, yCenter: number,
+    targetW: number, widthUnits: number, type: number, lay: Layout,
+  ) {
+    const ctx = this.ctx;
+    const { w: worldW, h: worldH } = noteSpriteSize(widthUnits, type, lay);
+    const w = Math.max(targetW, worldW);
+    const h = Math.max(2, worldH);
+    const rect = meta.rect;
+    const sw = rect[2] || img.naturalWidth, sh = rect[3] || img.naturalHeight;
+    const caps = sliceCaps(meta, worldW);
+    const scale = worldW > 0 ? w / worldW : 1;
+    const left = caps.left * scale, right = caps.right * scale;
+    const mid = Math.max(0, w - left - right);
+    const x = x0 + (targetW - w) / 2;
+    const y = yCenter - h / 2;
+    const uL = caps.uL, uR = caps.uR;
+    const draw = (dx: number, dw: number, sx: number, sWidth: number) => {
+      if (dw <= 0.01 || sWidth <= 0.01) return;
+      ctx.drawImage(img, sx, 0, sWidth, sh, dx, y, dw, h);
+    };
+    // 端头若超出目标宽度，sliceCaps 已按比例缩小，三段仍首尾相接。
+    draw(x, left, 0, sw * uL);
+    draw(x + left, mid, sw * uL, sw * (1 - uL - uR));
+    draw(x + left + mid, right, sw * (1 - uR), sw * uR);
   }
 
   /** 命中测试：返回鼠标位置下的音符（先 Hold 后瞬时，取纵向最近者）。 */

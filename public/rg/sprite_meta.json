@@ -1,0 +1,66 @@
+{
+  "ui_sc2_ingame_notes_tap": {
+    "name": "ui_sc2_ingame_notes_tap",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_hold": {
+    "name": "ui_sc2_ingame_notes_hold",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_flick": {
+    "name": "ui_sc2_ingame_notes_flick",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      68
+    ],
+    "ppu": 100
+  },
+  "ui_sc2_ingame_notes_trace": {
+    "name": "ui_sc2_ingame_notes_trace",
+    "border": [
+      60,
+      0,
+      60,
+      0
+    ],
+    "rect": [
+      0,
+      0,
+      128,
+      48
+    ],
+    "ppu": 100
+  }
+}
