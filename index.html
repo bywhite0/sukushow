@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llll 平面谱面预览</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <h1>llll 平面谱面预览</h1>
+    <span class="tag">非官方研究工具</span>
+    <span class="spacer"></span>
+    <label class="file">导入谱面<input id="file" type="file" accept=".json,.bytes,application/json"></label>
+    <span id="status" class="status" role="status">未载入谱面</span>
+  </header>
+
+  <aside class="panel" aria-label="视图设置">
+    <fieldset>
+      <legend>视图</legend>
+      <label>横向缩放 <input id="zoom" type="range" min="20" max="600" step="5" value="90"><output id="zoom-out">90 px/s</output></label>
+      <label>轨道宽度 <input id="lane" type="range" min="4" max="40" step="1" value="14"><output id="lane-out">14 px</output></label>
+      <label>音符厚度 <input id="thick" type="range" min="2" max="16" step="1" value="6"><output id="thick-out">6 px</output></label>
+      <label>定位到 <input id="goto" type="number" min="0" step="0.1" value="0"><output id="goto-out">秒</output></label>
+      <label class="check"><input id="grid" type="checkbox" checked>轨道格线</label>
+      <label class="check"><input id="measure" type="checkbox" checked>小节线</label>
+      <label class="check"><input id="simul" type="checkbox" checked>同时押连线</label>
+      <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
+    </fieldset>
+    <fieldset>
+      <legend>谱面</legend>
+      <dl id="meta"><dt>—</dt><dd>尚未导入</dd></dl>
+    </fieldset>
+    <fieldset>
+      <legend>悬停</legend>
+      <p id="probe" class="probe">把鼠标移到音符上</p>
+    </fieldset>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="canvas" aria-label="平面谱面画布"></canvas>
+    <div id="empty" class="empty">
+      <p>拖入谱面文件，或点上方「导入谱面」。</p>
+      <p class="hint">支持原格式 JSON 与 raw-deflate <code>.bytes</code>；文件不上传。</p>
+    </div>
+  </main>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
