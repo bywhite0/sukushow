@@ -51,8 +51,8 @@ export interface Chart {
    * 非 Hold 每个算 1；Hold **只算链首**，链首本身 1 + 判定航点数：单段 Hold 用 JSON
    * 的 `holds`，多段链用 `getHolds` 按半拍重采样。链中节点不计（它们由链首的航点覆盖）。
    *
-   * 全量 616 张实测与 `MusicScores.yaml` 的 `MaxCombo` 命中 **614**；差的两张出在
-   * 变速段（见 `getHolds` 注释）。标注用权威 `MaxCombo` 更稳妥，此值供无主数据时兜底。
+   * 全量 616 张实测与 `MusicScores.yaml` 的 `MaxCombo` **全部一致**（`getHolds` 按原版 float32 口径，
+   * 见其注释）。标注仍优先用权威 `MaxCombo`，此值供无主数据时兜底与自检。
    */
   maxCombo: number;
 }
@@ -83,7 +83,12 @@ function parseNote(value: unknown): Note {
   return { uid, time, end: holds.at(-1) ?? time, holds, type, l, r, l2, r2 };
 }
 
-/** BpmMath.Get：取 Time ≤ t 的最后一段；早于首段则取首段。 */
+/**
+ * 取 Time ≤ t 的最后一段；早于首段则取首段（读谱/出图用的宽松口径）。
+ *
+ * 注意：判定航点重采样**不用它**——原版 `RhythmGameConsts.Get` 早于首段时回落到**最后一段**，
+ * 见 `bpmGetF32`。
+ */
 export function bpmAt(bpms: Bpm[], time: number): number {
   if (!bpms.length) return 120;
   let cur = bpms[0].bpm;
@@ -106,23 +111,19 @@ export function beatAt(beats: Beat[], time: number): Beat {
   return cur;
 }
 
+const f32 = Math.fround;
+
 /**
- * 串链判据与原版同律：原版在 C# float 域比较，故两侧压回 float32 再比。
+ * `RhythmGameConsts.LooseEquals` @0x485CF1C：单精度 `fabd(x, y) < 9.9999997e-5f`
+ * （容差字面量 @0x1AA0E84 = 0x38D1B717）。串链与航点重采样共用。
+ * 原版在 C# float 域比较，故两侧压回 float32、差值也压回 float32 再比；
  * 用 double 容差会漏连（|Δ| 恰好落在 1e-4 两侧）。
  */
-const HOLD_LINK_EPSILON = Math.fround(0.0001);
+const LOOSE_EPSILON = f32(0.0001);
+const looseEquals = (a: number, b: number): boolean => f32(Math.abs(f32(a) - f32(b))) < LOOSE_EPSILON;
 
 /** 同时押分组容差：4 ms。 */
 export const SIMULTANEOUS_WINDOW = 0.004;
-
-/**
- * Hold 航点重采样的末端容差。
- *
- * RE 文档的 `(long)(|end−last| × 10000) <= 1` 即 `|Δ| < 2e-4`。原版在 C# float 域比较，
- * 这个值比 `1e-4` 宽——用 `1e-4` 会让末端刚好差几个 ulp 的链少算一点
- * （全量 616 张实测：`1e-4` 命中 610，`2e-4` 命中 614）。
- */
-export const END_TOLERANCE = 2e-4;
 
 export function parseChart(input: unknown): Chart {
   const data = object(input);
@@ -149,7 +150,11 @@ export function parseChart(input: unknown): Chart {
 
   const offset = data.Offset === undefined ? 0 : number(data.Offset, 'Offset');
 
-  // 按 (l,r) 分桶，Uid 递增 + float32 容差判连；允许汇合，Prev 只作非根标记。
+  // ChartResolver.Prepare @0x48694A4 Pass1：按数组顺序对每个 unit 取
+  // FirstOrDefault(units, IsCombine(prev, x))，命中即 prev.Next = x; x.Prev = prev（后写覆盖，允许汇合，
+  // Prev 只作非根标记）。IsCombine @0x485CFFC：两者 Type==Hold、x.Uid > prev.Uid、prev.L2==x.L1、
+  // prev.R2==x.R1、LooseEquals(prev.Holds[^1], x.Just)。**不看段长**：零长段（holds[^1]==just，
+  // 链中的横向瞬移点）照样串进链里。按 (l,r) 分桶只是加速，桶内仍保持数组顺序。
   const starts = new Map<string, Note[]>();
   for (const n of notes) {
     if (n.type !== 1) continue;
@@ -160,8 +165,7 @@ export function parseChart(input: unknown): Chart {
   }
   for (const n of notes) {
     if (n.type !== 1) continue;
-    const end = Math.fround(n.end);
-    const next = starts.get(`${n.l2}/${n.r2}`)?.find(x => x.uid > n.uid && Math.abs(Math.fround(x.time) - end) < HOLD_LINK_EPSILON);
+    const next = starts.get(`${n.l2}/${n.r2}`)?.find(x => x.uid > n.uid && looseEquals(n.end, x.time));
     if (next) { n.next = next; next.prev = n; }
   }
 
@@ -202,32 +206,58 @@ export function decodeChartBytes(bytes: Uint8Array): Chart {
 }
 
 /**
- * 单段 Hold 的判定点（不含起点）——口径同 llll-preview-web 的 `getHolds`。
+ * `RhythmGameConsts.Get(bpms, time)` @0x485D410，float32 口径：
+ * 顺序扫相邻两段，返回首个 `prev.StartTime <= time && cur.StartTime > time` 的 prev；
+ * 扫完没命中（含 time 早于首段）返回**最后一段**。Bpm 为 int（`ChartBpmUnit.Bpm`）。
+ */
+function bpmGetF32(bpms: Bpm[], time: number): number {
+  if (!bpms.length) return 120; // 原版返回 null 后 NRE；这里兜底
+  for (let i = 0; i + 1 < bpms.length; i++) {
+    if (f32(bpms[i].time) <= time && f32(bpms[i + 1].time) > time) return bpms[i].bpm;
+  }
+  return bpms[bpms.length - 1].bpm;
+}
+
+/**
+ * 多段链的判定点（不含起点）——`RhythmGameConsts.GetHolds` @0x485D11C（4.12.0 逐指令核对），
+ * **全部 float32 运算**：
+ * ```
+ * holds.Clear();
+ * if (start < end) do {
+ *   start += (60f / (float)Get(bpms, start).Bpm) * 0.5f;   // fdiv / fmul / fadd 均为单精度
+ *   if (start > end) break;
+ *   if (LooseEquals(start, end)) break;                     // fabd(single) < 9.9999997e-5f
+ *   holds.Add(start);
+ * } while (start < end);
+ * if (holds.Count > 0 && (long)(|end − holds[^1]| * 10000f) <= 1) holds.RemoveAt(^1);  // fcvtzs 截断
+ * holds.Add(end);
+ * ```
+ * start/end 来自 `Just` / `Holds`（`Single.Parse` 的 float）。此前这里用 double 累加半拍步长、
+ * 循环内用 `2e-4` 容差：`204103_04` 少 1（循环内容差比原版 `LooseEquals` 宽）、`405138_04` 少 2
+ * （84.6s 的连续变速段上 double 累加与 float32 分岔）。改成 float32 后全量 616 张与主数据一致。
  *
- * 原版按 **半拍** 推进航点，末端判定用「越过终点」或「贴近终点」。
- * **容差取 `2e-4`**——RE 文档给的是 `(long)(|end−last| × 10000) <= 1`，即 `|Δ| < 2e-4`。
- * 全量 616 张实测命中数：`1e-4` → 610、`2e-4` → **614**、去掉容差 → 610。
- *
- * 剩余 2 张（`204103_04` 差 1、`405138_04` 差 2）出在**变速段**：`405138_04` 在 84.6s
- * 有 190→38→380→760→1140→190 的连续变速，半拍网格在那里步长骤变，原版 float32
- * 累加与这里的 double 累加会分岔。这是实现细节差异，不是口径错误。
- *
- * 多段链（有后继）的航点由这里重算，而不是直接用 JSON 里的 `holds`——
  * 原版 Pass2 只对多段链头重采样，单段 Hold 保留 JSON 端点。
  */
 export function getHolds(start: number, end: number, bpms: Bpm[]): number[] {
   const out: number[] = [];
-  let t = start;
-  for (let guard = 0; guard < 100_000; guard++) {
-    t += (60 / bpmAt(bpms, t)) * 0.5;
-    if (t > end) break;
-    if (Math.abs(t - end) < END_TOLERANCE) break;
-    out.push(t);
-    if (t >= end) break;
+  let t = f32(start);
+  const e = f32(end);
+  if (t < e) {
+    for (let guard = 0; guard < 1_000_000; guard++) {
+      const step = f32(f32(60 / f32(bpmGetF32(bpms, t))) * 0.5);
+      t = f32(t + step);
+      if (t > e) break;
+      if (looseEquals(t, e)) break;
+      out.push(t);
+      if (!(t < e)) break;
+    }
   }
-  // (long)(|end−last| * 10000) <= 1  ⇒  |Δ| < 2e-4
-  if (out.length && Math.abs(end - out[out.length - 1]) * 10_000 <= 1) out.pop();
-  out.push(end);
+  if (out.length) {
+    const v = f32(f32(Math.abs(e - out[out.length - 1])) * 10_000);
+    // fcvtzs 截断后比较 `<= 1`；+Inf 跳过删除。
+    if (v !== Infinity && Math.trunc(v) <= 1) out.pop();
+  }
+  out.push(e);
   return out;
 }
 
@@ -251,7 +281,7 @@ export function noteJudgementTimes(note: Note, bpms: Bpm[]): number[] {
  * 全谱判定点总数 == **最大连击数**（max combo）。
  *
  * 口径同 llll-preview-web 的 `chartAllNoteSize`。实测对全量 616 张谱面与主数据
- * `MusicScores.yaml` 的 `*MaxCombo` 比对：610 张精确一致，余下差 1～18（原版浮点边界）。
+ * `MusicScores.yaml` 的 `*MaxCombo` 比对：全部一致。
  * 出图时若要显示 combo，**优先用主数据的 `*MaxCombo`**（那是权威值），
  * 这个函数用于谱面内逐点计数与校验。
  */
