@@ -35,23 +35,60 @@ export function bpmAt(bpms: Chart['bpms'], time: number): number {
   return cur;
 }
 
+const f32 = Math.fround;
+/** RhythmGameConsts.LooseEquals 的容差（字面量 @0x1AA0E84 = 0x38D1B717 ≈ 9.9999997e-5f）。 */
+const LOOSE_EPSILON = f32(0.0001);
+
 /**
- * BpmMath.GetHolds @0x49A6164 — half-beat samples in (start, end], always ends with `end`.
- * Does not include `start` (head Just is the separate +1 in AllNoteSize).
+ * RhythmGameConsts.Get(bpms, time) @0x485D410，float32 口径：
+ * 顺序扫相邻两段，返回首个 `prev.StartTime <= time && cur.StartTime > time` 的 prev；
+ * 扫完没命中（含 time 早于首段）返回**最后一段**。Bpm 为 int（ChartBpmUnit.Bpm）。
+ */
+function bpmGetF32(bpms: Chart['bpms'], time: number): number {
+  if (!bpms.length) return 120; // 原版返回 null 后 NRE；预览兜底
+  for (let i = 0; i + 1 < bpms.length; i++) {
+    if (f32(bpms[i].time) <= time && f32(bpms[i + 1].time) > time) return bpms[i].bpm;
+  }
+  return bpms[bpms.length - 1].bpm;
+}
+
+/**
+ * RhythmGameConsts.GetHolds @0x485D11C（4.12.0 apk so 逐指令核对）——全部 float32 运算：
+ * ```
+ * holds.Clear();
+ * if (start < end) do {
+ *   start += (60f / (float)Get(bpms, start).Bpm) * 0.5f;   // fdiv / fmul / fadd 均为单精度
+ *   if (start > end) break;
+ *   if (LooseEquals(start, end)) break;                     // fabd(single) < 9.9999997e-5f
+ *   holds.Add(start);
+ * } while (start < end);
+ * if (holds.Count > 0 && (long)(|end − holds[^1]| * 10000f) <= 1) holds.RemoveAt(^1);
+ * holds.Add(end);
+ * ```
+ * start/end 来自 ChartNoteUnit.Just / Holds（`Single.Parse` 的 float）。预览此前用 double 累加半拍步长，
+ * 长 hold 的累计舍入与 float32 分叉，个别采样点落在 `end` 的容差两侧，combo 数 ±1。
+ * 返回值不含 start（头 Just 在 AllNoteSize 里另计 +1）。
  */
 export function getHolds(start: number, end: number, bpms: Chart['bpms']): number[] {
   const out: number[] = [];
-  let t = start;
-  for (let guard = 0; guard < 100_000; guard++) {
-    t += (60 / bpmAt(bpms, t)) * 0.5;
-    if (t > end) break;
-    if (Math.abs(t - end) < 1e-4) break;
-    out.push(t);
-    if (t >= end) break;
+  let t = f32(start);
+  const e = f32(end);
+  if (t < e) {
+    for (let guard = 0; guard < 1_000_000; guard++) {
+      const step = f32(f32(60 / f32(bpmGetF32(bpms, t))) * 0.5);
+      t = f32(t + step);
+      if (t > e) break;
+      if (f32(Math.abs(t - e)) < LOOSE_EPSILON) break;
+      out.push(t);
+      if (!(t < e)) break;
+    }
   }
-  // (long)(|end−last| * 10000) <= 1  ⇒  |Δ| < 2e-4
-  if (out.length && Math.abs(end - out[out.length - 1]) * 10_000 <= 1) out.pop();
-  out.push(end);
+  if (out.length) {
+    const v = f32(f32(Math.abs(e - out[out.length - 1])) * 10_000);
+    // fcvtzs + 无符号比较 `<= 1`；+Inf 跳过删除。
+    if (v !== Infinity && Math.trunc(v) <= 1) out.pop();
+  }
+  out.push(e);
   return out;
 }
 
