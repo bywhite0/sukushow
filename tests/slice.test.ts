@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { parseChart } from '../src/chart';
 import { defaultLayout } from '../src/view';
 import {
-  ARROW_WIDTH, HOLD_CENTER, HOLD_CENTER_ALPHA, HOLD_SIDE, HOLD_SIDE_ALPHA, LANE_WORLD, SPRITE_SCALE_X,
+  ARROW_WIDTH, FLICK_SIGN_OFFSET_Y, HOLD_CENTER, HOLD_CENTER_ALPHA, HOLD_SIDE, HOLD_SIDE_ALPHA, LANE_WORLD, SPRITE_SCALE_X,
   bandHalves, chainBandHalves, flickOverlays, laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld,
   pxPerWorld, sliceCaps,
 } from '../src/slice';
-import { noteSpan } from '../src/view';
+import { noteSpan, timeY } from '../src/view';
 import { deflateRawSync } from 'node:zlib';
 
 const flags = (type: number, l: number, r: number, l2 = l, r2 = r) =>
@@ -303,6 +303,24 @@ describe('Flick 附加元素', () => {
       expect(box.flip).toBe(false);
       expect(box.tile).toBe(0);
     }
+  });
+
+  it('Sign 抬到音符上方 1 世界单位，Symbol 与箭头留在原位', () => {
+    const l = lay({ lanePx: 10 });
+    const n = flick(10, 21);
+    const o = flickOverlays(n, l, metas);
+    const k = pxPerWorld(l);
+    const bodyY = timeY(1.0, l);
+    // 平面视图时间向上 ⇒ 抬高 = 画布 y 减小。
+    expect(o[3].cy).toBeCloseTo(bodyY - FLICK_SIGN_OFFSET_Y * k, 9);
+    expect(o[3].cy).toBeLessThan(bodyY);
+    // 箭头与 Symbol 不吃这个偏移。
+    expect(o[0].cy).toBeCloseTo(bodyY, 9);
+    expect(o[1].cy).toBeCloseTo(bodyY, 9);
+    expect(o[2].cy).toBeCloseTo(bodyY, 9);
+    // 抬高量随 pxPerWorld 缩放，不随 pxPerSec 变化。
+    const wide = flickOverlays(n, lay({ lanePx: 20, pxPerSec: 900 }), metas);
+    expect(wide[3].cy).toBeCloseTo(timeY(1.0, lay({ lanePx: 20, pxPerSec: 900 })) - FLICK_SIGN_OFFSET_Y * pxPerWorld(lay({ lanePx: 20 })), 9);
   });
 
   it('非 Flick 类型不产出附加元素（调用方按 type===2 分流）', () => {

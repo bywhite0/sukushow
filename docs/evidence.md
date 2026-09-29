@@ -50,7 +50,7 @@ GetNoteSize(width) = ((width − 6) × 0.2 + 1.15, 1.0)   // width = |l − r| +
 |---|---|---|---|
 | `Arrow-Left` / `Arrow-Right` | `ui_sc2_ingame_notes_texture_arrow` 52×50 | 宽 `ISx×0.45`、高 `0.45×1.45`（`ISx` = `GetNoteSize(width).x`） | 两块各偏中心 ±宽/2，右侧水平翻转 |
 | `Symbol` | `ui_sc2_ingame_notes_icon_flick` 120×90 | 原生尺寸 × 0.6 | 居中 |
-| `Sign` | `ui_sc2_ingame_flick_sign` 323×250 | 原生尺寸 × 0.8 | 居中 |
+| `Sign` | `ui_sc2_ingame_flick_sign` 323×250 | 原生尺寸 × 0.8 | 居中，并沿「上」抬 1 世界单位 |
 
 箭头贴图靠 **UV repeat 平铺**（`spriteMeshType` 已改 FullRect），重复次数 = 目标宽 / 单块宽，
 可为小数 —— 故最后一块按剩余宽度裁源图，不能取整。单块宽 = 贴图原生宽 × `scale.x`，
@@ -59,8 +59,8 @@ GetNoteSize(width) = ((width − 6) × 0.2 + 1.15, 1.0)   // width = |l − r| +
 尺寸一律按 `pxPerWorld` 换算，不随 `pxPerSec` 变化 —— 它们是世界空间里的固定尺寸装饰。
 `Arrow` 贴图 alpha 上限仅 82（一层很淡的光晕），`Symbol` 与 `Sign` 则是实心绿色。
 
-未实现的两项原版动态：`Sign` 的 0.9↔1.1 纵向余弦浮动（`FlickSignView`，周期 1s、全场同相、
-无相位种子）与 `localPos.y = 1` 的抬高。静态读谱下都不影响形状判读。
+未实现的原版动态：`Sign` 的 0.9↔1.1 纵向余弦浮动（`FlickSignView`，周期 1s、全场同相、
+无相位种子）。它只是让 Sign 在基准位上下荡，静态读谱取中值即 prefab 的 `y = 1`。
 
 ## Hold 宽带
 

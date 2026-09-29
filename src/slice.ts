@@ -57,6 +57,13 @@ export const FLICK_SIGN = 'ui_sc2_ingame_flick_sign';
 /** prefab 授权值：Symbol 与 Sign 的 localScale。 */
 export const FLICK_ICON_SCALE = 0.6;
 export const FLICK_SIGN_SCALE = 0.8;
+/**
+ * Sign 的 localPosition.y（prefab 授权 `pos(0,1,0)`），世界单位。
+ *
+ * 原版 `FlickSignView` 让它在 0.9↔1.1 之间做周期 1s 的纵向余弦浮动，
+ * 静态读谱取中值 1 即可——这里就是那个基准位，不是浮动幅度。
+ */
+export const FLICK_SIGN_OFFSET_Y = 1;
 /** Arrow 的定尺法则：宽 = ISx×0.45、高 = 音符厚度×1.45（prefab m_Size.y=0.5、localScale.y=1.45）。 */
 export const ARROW_WIDTH = 0.45;
 export const ARROW_SIZE_Y = 0.5;
@@ -82,9 +89,10 @@ export interface FlickOverlay {
  * - `Arrow-Left/Right`：贴图**横向平铺**，单块宽 = ISx×0.45×0.75、高 = 0.45×1.45，
  *   两块各偏音符中心 ±宽/2（即左右并排铺满 90% 音符宽），右侧水平翻转。
  * - `Symbol`：`ui_sc2_ingame_notes_icon_flick` 原生尺寸 × 0.6，居中。
- * - `Sign`：`ui_sc2_ingame_flick_sign` 原生尺寸 × 0.8，居中。
+ * - `Sign`：`ui_sc2_ingame_flick_sign` 原生尺寸 × 0.8，居中并沿「上」抬 1 世界单位。
  *
- * 原版 Sign 另有 0.9↔1.1 的纵向余弦浮动（周期 1s）与 localPos.y=1 的抬高，静态读谱都不实现。
+ * 原版 Sign 另有 0.9↔1.1 的纵向余弦浮动（周期 1s），静态读谱取中值（= prefab 的 y=1），
+ * 不做浮动。
  * 尺寸一律按 `pxPerWorld` 换算而非时间轴比例——它们在世界空间里是固定尺寸的装饰，
  * 不该随时间缩放变化。
  */
@@ -105,16 +113,18 @@ export function flickOverlays(
     { kind: 'arrow', cx: cx - aw / 2, cy, w: aw, h: ah, flip: lay.mirror, tile },
     { kind: 'arrow', cx: cx + aw / 2, cy, w: aw, h: ah, flip: !lay.mirror, tile },
   ];
-  const box = (m: SpriteMeta | undefined, scale: number, kind: 'icon' | 'sign'): FlickOverlay | null =>
+  const box = (m: SpriteMeta | undefined, scale: number, kind: 'icon' | 'sign', dy = 0): FlickOverlay | null =>
     m ? {
-      kind, cx, cy,
+      kind, cx, cy: cy + dy,
       w: (m.rect[2] / m.ppu) * scale * k,
       h: (m.rect[3] / m.ppu) * scale * k,
       flip: false, tile: 0,
     } : null;
   const icon = box(meta.icon, FLICK_ICON_SCALE, 'icon');
   if (icon) out.push(icon);
-  const sign = box(meta.sign, FLICK_SIGN_SCALE, 'sign');
+  // Sign 沿音符平面的「上」抬 1 世界单位（prefab localPosition.y = 1）。平面视图时间向上，
+  // 故画布 y 减小。原版在 0.9↔1.1 之间浮动，静态取中值即 prefab 的 1。
+  const sign = box(meta.sign, FLICK_SIGN_SCALE, 'sign', -FLICK_SIGN_OFFSET_Y * k);
   if (sign) out.push(sign);
   return out;
 }
