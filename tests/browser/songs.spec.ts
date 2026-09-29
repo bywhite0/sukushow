@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { introInfo } from './lpwHook';
 test('?song= 打开本地曲目，开场过场带上曲名 / 难度 / 封面',async({page,request})=>{
  const list=await (await request.get('/song-list.json')).json();
  const song=list.songs.find((s:any)=>s.hasChart&&s.hasJacket&&s.charts.MASTER);
@@ -10,9 +11,11 @@ test('?song= 打开本地曲目，开场过场带上曲名 / 难度 / 封面',as
  await expect(page.locator('#chart-name')).toHaveText(`${song.title} [MASTER]`);
  await expect(page.locator('.difficulty-chip.is-active')).toHaveAttribute('data-difficulty','MASTER');
  await page.getByRole('button',{name:'播放',exact:true}).click();
- await expect(page.locator('.sa-title')).toHaveText(song.title);
- await expect(page.locator('.sa-diff-name')).toHaveText('MASTER');
- await expect(page.locator('.sa-jacket-image')).toHaveAttribute('src',`/assets/jacket/${song.jacketId}.png`);
+ await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','playing');
+ const intro=await introInfo(page);
+ expect(intro.title).toBe(song.title);
+ expect(intro.difficulty).toBe('MASTER');
+ expect(intro.jacketUrl).toBe(`/assets/jacket/${song.jacketId}.png`);
  await page.getByRole('button',{name:'跳过开场',exact:true}).click();
  expect(errors).toEqual([]);
 });

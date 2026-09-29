@@ -7,11 +7,13 @@ for (const missingSe of [false, true]) {
     if (missingSe) await page.route('**/se/*.wav', route => route.fulfill({ status: 404, body: '' }));
     await page.goto('/');
     await expect(page.locator('#message')).toContainText('就绪');
-    await expect(page.locator('.hud')).toBeAttached();
+    await expect(page.locator('#stage-canvas')).toBeAttached();
+    await expect.poll(() => page.evaluate(() => typeof (window as any).__LPW__?.hud?.inspect)).toBe('function');
     const play = page.getByRole('button', { name: '播放', exact: true });
     await expect(play).toBeEnabled();
     await play.click();
-    await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeGreaterThan(0.1);
+    // 默认先放约 3.7 s 开场过场，留足余量。
+    await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-time')), { timeout: 12_000 }).toBeGreaterThan(0.1);
     await page.getByRole('button', { name: '暂停', exact: true }).click();
     await expect(play).toBeVisible();
     expect(errors).toEqual([]);

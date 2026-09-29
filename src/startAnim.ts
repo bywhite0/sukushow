@@ -15,6 +15,7 @@
  * 所以这里各层 alpha 只落在自身的填充色 / 文字色 / 叶子图片上，不用会级联的 CSS opacity 包父节点。
  */
 import { hudScale } from './hud';
+import { type Ctx, drawText, fillRoundRect, image, preloadImages } from './canvasKit';
 import { START_CLIP_CURVES, START_CLIP_DURATION, type ClipKey, type StartCurveName } from './startAnimClip';
 
 export { START_CLIP_DURATION };
@@ -24,6 +25,8 @@ export { START_CLIP_DURATION };
  * 取其起点；原版过场之后再无 HUD 入场动画，HUD 在 3.0–3.667 s 的整体淡出中露出。
  */
 export const START_IDLE_TIME = 1.75;
+
+const BASE01_URL = '/rg/sprites/ui_sc2_result_base_01.png';
 
 /** ColorPreset.GetDifficultyColor（表 @0x1AA4430）。 */
 export const DIFFICULTY_COLORS: Record<string, readonly [number, number, number]> = {
@@ -67,15 +70,6 @@ export function sampleStartClip(t: number): StartFrame {
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const rgba = (rgb: readonly number[], a: number) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${clamp01(a).toFixed(4)})`;
 
-function div(className: string, parent?: HTMLElement): HTMLDivElement {
-  const node = document.createElement('div');
-  node.className = className;
-  parent?.append(node);
-  return node;
-}
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
 /** [x0, y0, x1, y1]，jacket 局部坐标（576 方框左上为原点，y 向下）。 */
 export type DotRect = readonly [number, number, number, number];
 /**
@@ -102,76 +96,32 @@ export function dotOutlinePath(f: StartFrame): string {
   return dotOutlineRects(f).map(([x0, y0, x1, y1]) => `M${n(x0)} ${n(y0)}H${n(x1)}V${n(y1)}H${n(x0)}Z`).join('');
 }
 
+/** 过场画到的视口（与 HUD 相同）。 */
+export type StartView = { cssW: number; cssH: number; dpr: number };
+
 export class StartAnimation {
-  readonly root: HTMLDivElement;
-  private readonly logic: HTMLDivElement;
-  private readonly bg: HTMLDivElement;
-  private readonly diffRoot: HTMLDivElement;
-  private readonly white: HTMLDivElement;
-  private readonly diffColor: HTMLDivElement;
-  private readonly base01: HTMLImageElement;
-  private readonly diffName: HTMLDivElement;
-  private readonly dotPath: SVGPathElement;
-  private readonly jacket: HTMLImageElement;
-  private readonly title: HTMLDivElement;
-  private readonly resize: ResizeObserver | null;
   private color: readonly [number, number, number] = DIFFICULTY_COLORS.MASTER!;
-  private hasJacket = false;
+  private info: StartAnimationInfo = { title: '', difficulty: null, jacketUrl: null };
+  private diffName = 'MASTER';
   /** 当前显示：null = 隐藏，'idle' = 起点待机静止帧，数字 = clip 时刻（秒）。 */
   private shown: number | 'idle' | null = null;
 
-  constructor(private readonly stage: HTMLElement) {
-    this.root = div('start-anim');
-    this.root.setAttribute('aria-hidden', 'true');
-    this.root.hidden = true;
-    this.bg = div('sa-bg', this.root);
-    this.logic = div('sa-logic', this.root);
-
-    this.diffRoot = div('sa-diff-root', this.logic);
-    this.white = div('sa-white', this.diffRoot);
-    this.diffColor = div('sa-diff-color', this.white);
-    this.base01 = document.createElement('img');
-    this.base01.className = 'sa-base01';
-    this.base01.alt = '';
-    this.base01.src = '/rg/sprites/ui_sc2_result_base_01.png';
-    this.diffColor.append(this.base01);
-    this.diffName = div('sa-diff-name', this.diffColor);
-
-    const jacketBox = div('sa-jacket', this.logic);
-    // right/btm 两条：按各自 RectMask 裁出可见矩形后合成一条 SVG 路径一次填充，
-    // 拼接边在同一路径内抵消，不会出现两层抗锯齿叠加的亮线/色点。
-    const dots = document.createElementNS(SVG_NS, 'svg');
-    dots.setAttribute('class', 'sa-dots');
-    dots.setAttribute('viewBox', '0 0 606 606');
-    dots.setAttribute('aria-hidden', 'true');
-    this.dotPath = document.createElementNS(SVG_NS, 'path');
-    dots.append(this.dotPath);
-    jacketBox.append(dots);
-    this.jacket = document.createElement('img');
-    this.jacket.className = 'sa-jacket-image';
-    this.jacket.alt = '';
-    this.jacket.decoding = 'async';
-    jacketBox.append(this.jacket);
-
-    this.title = div('sa-title', this.logic);
-    stage.append(this.root);
-
-    this.resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.layout());
-    this.resize?.observe(stage);
-    this.layout();
+  constructor() {
+    void preloadImages([BASE01_URL]);
     this.setInfo({ title: '', difficulty: null, jacketUrl: null });
   }
 
   setInfo(info: StartAnimationInfo): void {
     const key = (info.difficulty ?? 'MASTER').toUpperCase();
     this.color = DIFFICULTY_COLORS[key] ?? DIFFICULTY_COLORS.MASTER!;
-    this.diffName.textContent = key;
-    this.title.textContent = info.title;
-    this.hasJacket = Boolean(info.jacketUrl);
-    if (info.jacketUrl) this.jacket.src = info.jacketUrl;
-    else this.jacket.removeAttribute('src');
-    this.jacket.hidden = !this.hasJacket;
-    if (this.shown !== null) this.renderAt(this.shown === 'idle' ? START_IDLE_TIME : this.shown);
+    this.diffName = key;
+    this.info = { ...info };
+    if (info.jacketUrl) void preloadImages([info.jacketUrl]);
+  }
+
+  /** 曲名 / 难度名 / 封面（测试与调试用）。 */
+  get current(): { title: string; difficulty: string; jacketUrl: string | null } {
+    return { title: this.info.title, difficulty: this.diffName, jacketUrl: this.info.jacketUrl };
   }
 
   get idling(): boolean {
@@ -182,54 +132,80 @@ export class StartAnimation {
     return this.shown !== null;
   }
 
+  /** 'idle' / 'playing' / null（隐藏）。 */
+  get state(): 'idle' | 'playing' | null {
+    return this.shown === null ? null : this.shown === 'idle' ? 'idle' : 'playing';
+  }
+
+  /** 当前显示的 clip 时刻（秒）；隐藏时为 null。 */
+  get clipTime(): number | null {
+    return this.shown === null ? null : this.shown === 'idle' ? START_IDLE_TIME : this.shown;
+  }
+
   /**
    * 由走带时间驱动（过场计入进度条 [−START_CLIP_DURATION, 0)）：
    * 'idle' = 停在起点未播放时的待机静止帧；数字 = clip 时刻；null 或 ≥ 时长 = 隐藏。
    */
   show(frame: number | 'idle' | null): void {
     if (typeof frame === 'number' && !(frame >= 0 && frame < START_CLIP_DURATION)) frame = null;
-    if (frame === this.shown) return;
-    if (frame === null) {
-      this.shown = null;
-      this.root.hidden = true;
-      delete this.root.dataset.state;
-      return;
-    }
-    if (this.shown === null) {
-      this.root.hidden = false;
-      this.layout();
-    }
     this.shown = frame;
-    this.root.dataset.state = frame === 'idle' ? 'idle' : 'playing';
-    this.renderAt(frame === 'idle' ? START_IDLE_TIME : frame);
   }
 
-  private layout(): void {
-    const w = this.stage.clientWidth, h = this.stage.clientHeight;
-    if (w <= 0 || h <= 0) return;
-    this.logic.style.transform = `scale(${hudScale(w, h)})`;
-  }
-
-  /** 按 clip 时刻写一帧（秒）。 */
-  renderAt(t: number): void {
+  /**
+   * 画当前帧（盖在 HUD 之上）。坐标 = level56 RectTransform，原点为画面中心、y 向下，
+   * 按 HUD 同一 hudScale 缩放。uGUI 的 Graphic.color.a 不向子节点相乘，
+   * 所以各层 alpha 只落在自身的填充色 / 文字色 / 叶子图片上。
+   */
+  draw(ctx: Ctx, view: StartView): void {
+    const t = this.clipTime;
+    if (t === null) return;
     const f = sampleStartClip(t);
     const c = this.color;
-    this.bg.style.backgroundColor = rgba([0, 0, 0], f.bg_a);
-    this.diffRoot.style.backgroundColor = rgba(RIM_RGB, f.difficultyRoot_a);
-    this.white.style.backgroundColor = rgba([255, 255, 255], f.white_a);
-    this.diffColor.style.backgroundColor = rgba(c, f.difficultyColor_a);
-    this.base01.style.opacity = clamp01(f.base01_a).toFixed(4);
-    this.diffName.style.color = rgba([255, 255, 255], f.difficultyName_a);
-    this.jacket.style.opacity = clamp01(f.jacket_a).toFixed(4);
-    // anchoredPosition 为 y 向上；DOM y 向下。
-    this.dotPath.setAttribute('d', dotOutlinePath(f));
-    this.dotPath.setAttribute('fill', `rgb(${c[0]},${c[1]},${c[2]})`);
-    this.dotPath.setAttribute('fill-opacity', clamp01(f.right_a).toFixed(4));
-    this.title.style.color = rgba([255, 255, 255], f.scoreLabel_a);
+    const pw = view.cssW * view.dpr, ph = view.cssH * view.dpr;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = rgba([0, 0, 0], f.bg_a);
+    ctx.fillRect(0, 0, pw, ph);
+    const k = hudScale(view.cssW, view.cssH) * view.dpr;
+    ctx.setTransform(k, 0, 0, k, pw / 2, ph / 2);
+    // DifficultyRoot (0,384) 236×72，三层圆角（r=50，按边长钳制），逐层 inset 4
+    fillRoundRect(ctx, -118, -420, 236, 72, 50, rgba(RIM_RGB, f.difficultyRoot_a));
+    fillRoundRect(ctx, -114, -416, 228, 64, 50, rgba([255, 255, 255], f.white_a));
+    fillRoundRect(ctx, -110, -412, 220, 56, 50, rgba(c, f.difficultyColor_a));
+    // Base01：anchor/pivot (0.5,0)，218×36，贴 DifficultyColor 底边；不受圆角裁切
+    const base01 = image(BASE01_URL);
+    if (base01 && f.base01_a > 0) {
+      ctx.globalAlpha = clamp01(f.base01_a);
+      ctx.drawImage(base01, -110 + 2, -412 + 20, 218, 36);
+      ctx.globalAlpha = 1;
+    }
+    // DifficultyName：EB 32，居中，characterSpacing −1
+    drawText(ctx, this.diffName, { size: 32, weight: 800, color: rgba([255, 255, 255], f.difficultyName_a), letterSpacing: -0.32 },
+      -110, -412, 220, 56);
+    // Jacket 框 (0,22) 576×576：点缀条（按遮罩裁出的矩形合成一条路径）在下，封面在上
+    const jx = -288, jy = -310;
+    const rects = dotOutlineRects(f);
+    if (rects.length && f.right_a > 0) {
+      ctx.beginPath();
+      for (const [x0, y0, x1, y1] of rects) ctx.rect(jx + x0, jy + y0, x1 - x0, y1 - y0);
+      ctx.fillStyle = rgba(c, f.right_a);
+      ctx.fill();
+    }
+    const jacket = this.info.jacketUrl ? image(this.info.jacketUrl) : null;
+    if (jacket && f.jacket_a > 0) {
+      ctx.globalAlpha = clamp01(f.jacket_a);
+      ctx.drawImage(jacket, jx, jy, 576, 576);
+      ctx.globalAlpha = 1;
+    }
+    // ScoreLabel (0,−387) 1200×64：RODIN B 40，居中，characterSpacing −3.5
+    drawText(ctx, this.info.title, { size: 40, weight: 700, color: rgba([255, 255, 255], f.scoreLabel_a), letterSpacing: -1.4 },
+      -600, 355, 1200, 64);
+    ctx.restore();
   }
 
   dispose(): void {
-    this.resize?.disconnect();
-    this.root.remove();
+    this.shown = null;
   }
 }
