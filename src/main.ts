@@ -144,7 +144,7 @@ stage.addEventListener('wheel', event => {
   event.preventDefault();
   const step = event.deltaY > 0 ? -5 : 5;
   if (event.shiftKey) {
-    setZoom(Math.max(20, Math.min(600, layout.pxPerSec + step * 5)));
+    setZoom(Math.max(20, Math.min(2400, layout.pxPerSec + step * 5)));
   } else {
     const px = Math.max(4, Math.min(40, layout.lanePx + (event.deltaY > 0 ? -1 : 1)));
     layout = { ...layout, lanePx: px };
