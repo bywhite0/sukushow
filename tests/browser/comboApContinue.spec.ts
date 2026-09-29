@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// AP 継続特效（ComboEffectOutLine_01/_02 + ComboEffectBG_01）的 DOM 契约。
+// AP 継続特效（ComboEffectOutLine_01/_02 + ComboEffectBG_01）的绘制契约（读 window.__LPW__.hud.inspect()）。
 // 依据：level56 ComboRoot > SpriteRoot / SpriteUpperRoot（HorizontalLayoutGroup spacing −13、槽 90×120）；
 // 粒子 scalingMode = Local、SizeModule 关闭；描边面片 85×109（shader UV 表）；
 // 同位 burst：下描边 4、上描边 5、底光 2。层级：上底光 1 → 数字 3/4 → 描边 9 → 下底光 10。
@@ -16,10 +16,8 @@ async function loadAndPlay(page: import('@playwright/test').Page): Promise<void>
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '0'; e.dispatchEvent(new Event('input')); });
   await page.getByRole('button', { name: '播放', exact: true }).click();
   await page.waitForFunction(() => {
-    const r = document.querySelector('.hud-combo-fx.is-lower-outline') as HTMLElement | null;
-    const vis = Array.from(document.querySelectorAll('.hud-combo-digits > .hud-cdigit'))
-      .filter((x) => !(x as HTMLElement).hidden);
-    return r && !r.hidden && vis.length > 0;
+    const i = (window as any).__LPW__?.hud?.inspect();
+    return !!i && i.fx.lowerOutline.visible && i.combo.sprites.length > 0;
   }, { timeout: 25_000 });
 }
 
@@ -28,24 +26,17 @@ test('四层结构、层序与每槽粒子副本数', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await loadAndPlay(page);
   const info = await page.evaluate(() => {
-    const q = (c: string) => document.querySelector(`.hud-combo-fx.${c}`) as HTMLElement;
-    const row = document.querySelector('.hud-combo-digits') as HTMLElement;
-    const kids = Array.from(row.parentElement!.children);
-    const idx = (e: Element) => kids.indexOf(e);
-    const parts = (c: string, p: string) => Array.from(q(c).querySelectorAll('.hud-combo-fx-slot'))
-      .map((s) => s.querySelectorAll(p).length);
+    const i = (window as any).__LPW__.hud.inspect();
+    const order: string[] = i.fx.order;
+    const idx = (n: string) => order.indexOf(n);
+    const per = (n: string) => Array.from({ length: 4 }, () => i.fx[n].partsPerSlot as number);
     return {
-      order: {
-        upperGlow: idx(q('is-upper-glow')), row: idx(row),
-        lowerOutline: idx(q('is-lower-outline')), lowerGlow: idx(q('is-lower-glow')),
-      },
-      lowerOutline: parts('is-lower-outline', '.hud-combo-fx-outline'),
-      upperOutline: parts('is-upper-outline', '.hud-combo-fx-outline'),
-      lowerGlow: parts('is-lower-glow', '.hud-combo-fx-glow'),
-      upperGlow: parts('is-upper-glow', '.hud-combo-fx-glow'),
-      upperHidden: q('is-upper-outline').hidden && q('is-upper-glow').hidden,
-      blend: getComputedStyle(q('is-lower-outline')).mixBlendMode,
-      glowBlend: getComputedStyle(q('is-lower-glow')).mixBlendMode,
+      order: { upperGlow: idx('upperGlow'), row: idx('row'), lowerOutline: idx('lowerOutline'), lowerGlow: idx('lowerGlow') },
+      lowerOutline: per('lowerOutline'), upperOutline: per('upperOutline'),
+      lowerGlow: per('lowerGlow'), upperGlow: per('upperGlow'),
+      upperHidden: !i.fx.upperOutline.visible && !i.fx.upperGlow.visible,
+      blend: i.fx.lowerOutline.composite === 'lighter' ? 'plus-lighter' : i.fx.lowerOutline.composite,
+      glowBlend: i.fx.lowerGlow.composite === 'source-over' ? 'normal' : i.fx.lowerGlow.composite,
     };
   });
   expect(info.order.upperGlow).toBeLessThan(info.order.row);
@@ -65,17 +56,10 @@ test('四层结构、层序与每槽粒子副本数', async ({ page }) => {
 test('下层与数字行同槽位、同 ComboRectTween 展开', async ({ page }) => {
   await loadAndPlay(page);
   const snap = await page.evaluate(() => {
-    const digits = Array.from(document.querySelectorAll('.hud-combo-digits > .hud-cdigit'))
-      .filter((x) => !(x as HTMLElement).hidden) as HTMLElement[];
-    const layer = document.querySelector('.hud-combo-fx.is-lower-outline') as HTMLElement;
-    const glow = document.querySelector('.hud-combo-fx.is-lower-glow') as HTMLElement;
-    const slots = Array.from(layer.querySelectorAll('.hud-combo-fx-slot'))
-      .filter((x) => !(x as HTMLElement).hidden) as HTMLElement[];
-    const row = document.querySelector('.hud-combo-digits') as HTMLElement;
-    const c = (e: HTMLElement) => { const b = e.getBoundingClientRect(); return b.left + b.width / 2; };
+    const i = (window as any).__LPW__.hud.inspect();
     return {
-      d: digits.map(c), s: slots.map(c),
-      rowT: row.style.transform, layerT: layer.style.transform, glowT: glow.style.transform,
+      d: i.combo.slotCenters as number[], s: i.fx.lowerOutline.slotCenters as number[],
+      rowT: i.combo.rowScale, layerT: i.fx.lowerOutline.layerScale, glowT: i.fx.lowerGlow.layerScale,
     };
   });
   expect(snap.s).toHaveLength(snap.d.length);
@@ -90,25 +74,11 @@ test('描边面片 85×109 居中、按 shader 列表取 mask；尺寸与不透�
     const out: any[] = [];
     const t0 = performance.now();
     const tick = () => {
-      const lo = document.querySelector('.hud-combo-fx.is-lower-outline') as HTMLElement;
-      const lg = document.querySelector('.hud-combo-fx.is-lower-glow') as HTMLElement;
-      const slots = Array.from(lo.querySelectorAll('.hud-combo-fx-slot'))
-        .filter((x) => !(x as HTMLElement).hidden) as HTMLElement[];
-      const g = Array.from(lg.querySelectorAll('.hud-combo-fx-slot'))
-        .filter((x) => !(x as HTMLElement).hidden)
-        .map((s) => s.querySelector('.hud-combo-fx-glow') as HTMLElement);
+      const i = (window as any).__LPW__.hud.inspect();
       out.push({
-        parts: slots.flatMap((s) => Array.from(s.querySelectorAll('.hud-combo-fx-outline')).map((p) => {
-          const e = p as HTMLElement;
-          return {
-            w: parseFloat(e.style.width), h: parseFloat(e.style.height),
-            l: parseFloat(e.style.left), t: parseFloat(e.style.top),
-            mx: parseFloat(e.style.maskPosition || (e.style as any).webkitMaskPosition), op: Number(e.style.opacity),
-            img: e.style.maskImage || (e.style as any).webkitMaskImage || '',
-          };
-        })),
-        glowW: g.map((e) => parseFloat(getComputedStyle(e).width)),
-        glowOp: g.map((e) => Number(e.style.opacity)),
+        parts: i.fx.lowerOutline.parts.flatMap((p: any) => Array.from({ length: i.fx.lowerOutline.partsPerSlot }, () => p)),
+        glowW: i.fx.lowerGlow.glow.map((g: any) => g.w),
+        glowOp: i.fx.lowerGlow.glow.map((g: any) => g.op),
       });
       if (performance.now() - t0 > 3000) resolve(out);
       else requestAnimationFrame(tick);

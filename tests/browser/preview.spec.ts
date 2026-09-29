@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { hudInfo } from './lpwHook';
 test('演示绘制、播放暂停、跳转与倍率',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
  await expect(page.getByRole('button',{name:'播放',exact:true})).toBeEnabled();
- await expect(page.locator('.hud')).toBeAttached();
+ await expect(page.locator('#stage-canvas')).toBeAttached();
  await expect.poll(async()=>Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
  await page.getByRole('button',{name:'播放',exact:true}).click();
- await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeVisible();
+ // 默认先放约 3.7 s 开场过场（按钮期间为「跳过开场」），留足余量。
+ await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeVisible({timeout:12_000});
  await expect.poll(async()=>Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeGreaterThan(.1);
  await page.getByRole('button',{name:'暂停',exact:true}).click();
  await page.locator('#timeline').evaluate((e:HTMLInputElement)=>{e.value='2.2';e.dispatchEvent(new Event('input'));});
@@ -22,11 +24,11 @@ test('过线后 combo 递增并显示 PERFECT',async({page})=>{
  await page.locator('#timeline').evaluate((e:HTMLInputElement)=>{e.value='1.95';e.dispatchEvent(new Event('input'));});
  await expect.poll(async()=>Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeCloseTo(1.95,1);
  await page.getByRole('button',{name:'播放',exact:true}).click();
- await expect.poll(async()=>page.locator('.hud-combo-digits .hud-cdigit').count(),{timeout:15_000}).toBeGreaterThan(0);
+ await expect.poll(async()=>(await hudInfo(page)).combo.value,{timeout:15_000}).toBeGreaterThan(0);
  await expect.poll(async()=>{
-  const opacity=await page.locator('.hud-perfect').evaluate((el:HTMLElement)=>getComputedStyle(el).opacity);
-  return Number(opacity);
- },{timeout:15_000}).toBeGreaterThan(0);
+  const j=(await hudInfo(page)).judge;
+  return j.visible&&String(j.sprite).startsWith('ui_sc2_ingame_hantei_perfect')?1:0;
+ },{timeout:15_000}).toBe(1);
  await page.getByRole('button',{name:'暂停',exact:true}).click();
  expect(errors).toEqual([]);
 });

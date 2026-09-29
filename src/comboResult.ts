@@ -16,6 +16,7 @@
  * 粒子按「距播放开始的时间」解析求解（位置、尺寸、颜色都是时间的纯函数），拖动进度也能复现同一帧。
  */
 import { hudScale } from './hud';
+import { fnv1a, lcg } from './rng';
 import { sampleCurve } from './startAnim';
 import {
   COMBO_RESULT_BANNERS,
@@ -41,22 +42,7 @@ export const BANNER_UNIT = 100;
 const DESIGN_H = 1080;
 
 // ── 随机数（确定性；Unity 自身的随机序列无法复现，只保证同一时刻同一结果）──────────
-export function fnv1a(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
-
-export function lcg(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return (state >>> 8) / 16777216;
-  };
-}
+export { fnv1a, lcg } from './rng';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const range = (r: readonly [number, number], u: number) => lerp(r[0], r[1], u);
@@ -306,42 +292,18 @@ function tinted(tex: Tex, left: readonly number[], right: readonly number[] = le
 const TINT_STEPS = 64;
 
 // ── 渲染器 ───────────────────────────────────────────────────────
+/** 横幅画到的视口（与 HUD 相同）。 */
+export type ResultView = { cssW: number; cssH: number; dpr: number };
+
 export class ComboResult {
-  readonly root: HTMLDivElement;
-  private readonly glow: HTMLCanvasElement;
-  private readonly ui: HTMLCanvasElement;
-  private readonly fx: HTMLCanvasElement;
   private tex = new Map<string, Tex>();
   /** 每档每个节点预着色好的贴图（键 = kind × 1000 + 节点下标）。 */
   private nodeImg = new Map<number, CanvasImageSource>();
   private kind: ResultKind = 0;
   private tintCache = new Map<string, CanvasImageSource>();
   private ready: Promise<void> | null = null;
+  private loaded = false;
   private last: number | null = null;
-  private readonly resize: ResizeObserver | null;
-
-  constructor(private readonly stage: HTMLElement) {
-    // 容器不设 z-index（不建立层叠上下文），加色层的 mix-blend-mode 才能直接与下面的画面相加。
-    this.root = document.createElement('div');
-    this.root.className = 'combo-result';
-    this.root.setAttribute('aria-hidden', 'true');
-    this.root.hidden = true;
-    this.root.dataset.kind = '0';
-    const mk = (cls: string) => {
-      const c = document.createElement('canvas');
-      c.className = `cr-layer ${cls}`;
-      this.root.append(c);
-      return c;
-    };
-    this.glow = mk('cr-glow');
-    this.ui = mk('cr-ui');
-    this.fx = mk('cr-fx');
-    stage.append(this.root);
-    this.resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
-      if (this.last !== null) this.render(this.last);
-    });
-    this.resize?.observe(stage);
-  }
 
   /** 预载贴图（首次调用时开始）。 */
   load(): Promise<void> {
@@ -356,9 +318,14 @@ export class ComboResult {
         const mul = (g: readonly number[]) => [base[0]! * g[0]!, base[1]! * g[1]!, base[2]! * g[2]!, g[3]!];
         this.nodeImg.set(k * 1000 + i, n.gradL && n.gradR ? tinted(t, mul(n.gradL), mul(n.gradR)) : tinted(t, base));
       }));
-      if (this.last !== null) this.render(this.last);
+      this.loaded = true;
     });
     return this.ready;
+  }
+
+  /** 贴图是否已全部就绪（导出前等待）。 */
+  get texturesReady(): boolean {
+    return this.loaded;
   }
 
   /** 当前显示的档位（roots[kind]）。 */
@@ -367,94 +334,103 @@ export class ComboResult {
   }
 
   setKind(kind: ResultKind): void {
-    if (kind === this.kind) return;
     this.kind = kind;
-    this.root.dataset.kind = String(kind);
-    if (this.last !== null) this.render(this.last);
   }
 
   get visible(): boolean {
-    return !this.root.hidden;
+    return this.last !== null;
+  }
+
+  /** 当前显示的 clip 时刻；隐藏时为 null。 */
+  get clipTime(): number | null {
+    return this.last;
   }
 
   dispose(): void {
-    this.resize?.disconnect();
-    this.root.remove();
+    this.last = null;
     this.tintCache.clear();
   }
 
   hide(): void {
     this.last = null;
-    this.root.hidden = true;
   }
 
-  /** 画 clip 时刻 t（秒，钳制在 [0, 4]；4 s 之后停在末帧）。 */
+  /** 设定 clip 时刻 t（秒，钳制在 [0, 4]；4 s 之后停在末帧），下一次 draw 画出。 */
   render(t: number): void {
     void this.load();
-    const time = Math.max(0, Math.min(COMBO_RESULT_CLIP_DURATION, t));
-    this.last = time;
-    this.root.hidden = false;
-    const w = this.stage.clientWidth, h = this.stage.clientHeight;
-    if (w <= 0 || h <= 0) return;
-    const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
-    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
-    const s = hudScale(w, h) * dpr;
-    const ctxs = [this.glow, this.ui, this.fx].map((c) => {
-      if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
-      const x = c.getContext('2d')!;
-      x.setTransform(1, 0, 0, 1, 0, 0);
-      x.globalCompositeOperation = 'source-over';
-      x.globalAlpha = 1;
-      x.clearRect(0, 0, pw, ph);
-      return x;
-    });
-    const [gx, ux, fx] = ctxs as [CanvasRenderingContext2D, CanvasRenderingContext2D, CanvasRenderingContext2D];
+    this.last = Math.max(0, Math.min(COMBO_RESULT_CLIP_DURATION, t));
+  }
 
-    // Bg：全屏黑罩（常量，无曲线）
-    ux.fillStyle = `rgba(${COMBO_RESULT_BG[0] * 255},${COMBO_RESULT_BG[1] * 255},${COMBO_RESULT_BG[2] * 255},${COMBO_RESULT_BG[3]})`;
-    ux.fillRect(0, 0, pw, ph);
-
-    // UI：层级顺序；变换沿父链累乘（y 向上 → 画布 y 向下）
+  /**
+   * 画当前帧（最上层）。原先三张叠放的 canvas（glow 加色 / ui 普通 / fx 加色）直接按顺序画进同一画布：
+   * 加色层先在自身内相加再加到画面上，与逐个粒子直接加到画面上结果相同（饱和截断只影响已为 1 的通道）；
+   * 普通 alpha 层按 source-over 结合律同样等价。
+   */
+  draw(ctx: CanvasRenderingContext2D, view: ResultView): void {
+    const time = this.last;
+    if (time === null) return;
+    const pw = view.cssW * view.dpr, ph = view.cssH * view.dpr;
+    if (pw <= 0 || ph <= 0) return;
+    const s = hudScale(view.cssW, view.cssH) * view.dpr;
     const b = BANNERS[this.kind]!;
     const nodes = b.clip.nodes;
     const states = nodes.map((n) => nodeStateAt(n, time, b));
     const visible = (i: number): boolean => i < 0 || (states[i]!.active && visible(nodes[i]!.parent));
-    const place = (x: CanvasRenderingContext2D, i: number) => {
+    ctx.save();
+    // 原三张图层用画布默认的平滑质量（low），这里保持一致。
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'low';
+
+    const particles = (under: boolean) => {
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of b.particles) {
+        const e = b.clip.emitters[p.emitter]!;
+        if (!!e.underCanvas !== under) continue;
+        if (!visible(b.index.get(e.path) ?? -1)) continue;
+        const f = particleAt(p, e, time);
+        if (!f || f.a <= 0 || f.w <= 0 || f.h <= 0) continue;
+        const img = this.particleImage(e.tex, f.r, f.g, f.b);
+        if (!img) continue;
+        ctx.setTransform(s, 0, 0, s, pw / 2, ph / 2);
+        ctx.translate(f.x, -f.y);
+        if (f.rot) ctx.rotate(-f.rot);
+        ctx.globalAlpha = Math.min(1, f.a);
+        ctx.drawImage(img, -f.w / 2, -f.h / 2, f.w, f.h);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    };
+
+    // 1. Glow（黑罩之下）
+    particles(true);
+
+    // 2. Bg：全屏黑罩（常量，无曲线）+ UI（层级顺序；变换沿父链累乘，y 向上 → 画布 y 向下）
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(${COMBO_RESULT_BG[0] * 255},${COMBO_RESULT_BG[1] * 255},${COMBO_RESULT_BG[2] * 255},${COMBO_RESULT_BG[3]})`;
+    ctx.fillRect(0, 0, pw, ph);
+    const place = (i: number) => {
       const n = nodes[i]!;
-      if (n.parent >= 0) place(x, n.parent);
+      if (n.parent >= 0) place(n.parent);
       const st = states[i]!;
-      x.translate(st.x, -st.y);
-      if (n.rot) x.rotate(-n.rot * Math.PI / 180);
-      x.scale(st.sx, st.sy);
+      ctx.translate(st.x, -st.y);
+      if (n.rot) ctx.rotate(-n.rot * Math.PI / 180);
+      ctx.scale(st.sx, st.sy);
     };
     nodes.forEach((n, i) => {
       const img = this.nodeImg.get(this.kind * 1000 + i);
       if (!img || !visible(i)) return;
       const a = states[i]!.a;
       if (a <= 0) return;
-      ux.setTransform(s, 0, 0, s, pw / 2, ph / 2);
-      place(ux, i);
-      ux.globalAlpha = Math.min(1, a);
-      ux.drawImage(img, -n.w / 2, -n.h / 2, n.w, n.h);
+      ctx.setTransform(s, 0, 0, s, pw / 2, ph / 2);
+      place(i);
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.drawImage(img, -n.w / 2, -n.h / 2, n.w, n.h);
     });
+    ctx.globalAlpha = 1;
 
-    // 粒子：加色
-    gx.globalCompositeOperation = 'lighter';
-    fx.globalCompositeOperation = 'lighter';
-    for (const p of b.particles) {
-      const e = b.clip.emitters[p.emitter]!;
-      if (!visible(b.index.get(e.path) ?? -1)) continue;
-      const f = particleAt(p, e, time);
-      if (!f || f.a <= 0 || f.w <= 0 || f.h <= 0) continue;
-      const img = this.particleImage(e.tex, f.r, f.g, f.b);
-      if (!img) continue;
-      const x = e.underCanvas ? gx : fx;
-      x.setTransform(s, 0, 0, s, pw / 2, ph / 2);
-      x.translate(f.x, -f.y);
-      if (f.rot) x.rotate(-f.rot);
-      x.globalAlpha = Math.min(1, f.a);
-      x.drawImage(img, -f.w / 2, -f.h / 2, f.w, f.h);
-    }
+    // 3. 其余发射器（加色，压在 Canvas 之上）
+    particles(false);
+    ctx.restore();
   }
 
   private particleImage(name: string, r: number, g: number, b: number): CanvasImageSource | null {

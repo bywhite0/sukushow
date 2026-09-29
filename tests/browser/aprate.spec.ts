@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // APRateEffect 的爆发（level56 ComboRoot/APRateUpper/APRateEffect）：#227 Root 自身带
 // APRate_OutlineEffect 底光，子节点 #41 Bg_core（Premultiply 底光）、#229 Particle、
 // #228 ClossParticle（粉色四角星）从 240×40 徽章中心向外飞散。
-// Root 用几何探针核对；火花与 Bg_core 画在画布上，读画布像素核对。
+// Root 用 HUD 绘制状态（window.__LPW__.hud.inspect()）核对几何；火花与 Bg_core 读离屏画布像素核对。
 //
 // 注意：爆发寿命只有 1s，从 Node 侧用 expect.poll 采样（间隔约 1s）必然漏帧，
 // 因此所有采样都在页面内用 rAF 完成，只做一次往返。
@@ -38,7 +38,7 @@ async function loadAndSeek(page: import('@playwright/test').Page, errors: string
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '1.9'; e.dispatchEvent(new Event('input')); });
 }
 
-/** 在页面内录完「第一段爆发」：取平台期的几何 + 该段的 scale 序列。 */
+/** 在页面内录完「第一段爆发」：取平台期的几何 + 该段的 scale 序列（读 HUD 绘制状态，与画到画布上的是同一份）。 */
 async function captureBurst(page: import('@playwright/test').Page): Promise<Capture> {
   return page.evaluate((peak) => new Promise<Capture>((resolve) => {
     const firstScales: number[] = [];
@@ -46,36 +46,31 @@ async function captureBurst(page: import('@playwright/test').Page): Promise<Capt
     let inFirst = true;
     let peakSample: Capture['peak'] = null;
     const t0 = performance.now();
+    const hud = (window as any).__LPW__.hud;
     const tick = () => {
-      const root = document.querySelector('.hud-aprate-burst .burst-root') as HTMLElement | null;
-      const badge = document.querySelector('.hud-aprate') as HTMLElement | null;
-      if (root && badge) {
-        const m = /scale\(([-\d.e]+)\)/.exec(root.style.transform);
-        if (m) {
-          const s = Number(m[1]);
-          if (inFirst) {
-            // scale 回落 ⇒ apRate 升级触发了下一段爆发，第一段到此为止。
-            if (s < prev - 1e-6) inFirst = false;
-            else { firstScales.push(s); prev = s; }
-          }
-          // 平台期很长（0.26s→1.0s），阈值取 0.999×peak，确保量到的是曲线终值。
-          if (!peakSample && s >= peak * 0.999) {
-            const b = badge.getBoundingClientRect();
-            const r = root.getBoundingClientRect();
-            const rootImg = root.querySelector('img') as HTMLImageElement | null;
-            peakSample = {
-              badgeW: b.width, badgeH: b.height, rootW: r.width, rootH: r.height,
-              dCx: Math.abs((r.left + r.width / 2) - (b.left + b.width / 2)),
-              dCy: Math.abs((r.top + r.height / 2) - (b.top + b.height / 2)),
-              rootSrc: rootImg?.getAttribute('src') ?? '',
-              rootLoaded: !!rootImg?.complete && rootImg.naturalWidth > 0,
-              hasCore: !!document.querySelector('.hud-aprate-burst canvas.burst-core-shade')
-                && !!document.querySelector('.hud-aprate-burst canvas.burst-core-light'),
-            };
-          }
-          if (peakSample && firstScales.length >= 4) {
-            return resolve({ peak: peakSample, firstScales });
-          }
+      const info = hud.inspect();
+      const b = info.burst, badge = info.apRate.badge;
+      if (b.active && b.root) {
+        const s = b.scale as number;
+        if (inFirst) {
+          // scale 回落 ⇒ apRate 升级触发了下一段爆发，第一段到此为止。
+          if (s < prev - 1e-6) inFirst = false;
+          else { firstScales.push(s); prev = s; }
+        }
+        // 平台期很长（0.26s→1.0s），阈值取 0.999×peak，确保量到的是曲线终值。
+        if (!peakSample && s >= peak * 0.999) {
+          const r = b.root;
+          peakSample = {
+            badgeW: badge.w, badgeH: badge.h, rootW: r.w, rootH: r.h,
+            dCx: Math.abs((r.x + r.w / 2) - (badge.x + badge.w / 2)),
+            dCy: Math.abs((r.y + r.h / 2) - (badge.y + badge.h / 2)),
+            rootSrc: b.rootSrc,
+            rootLoaded: b.rootLoaded,
+            hasCore: b.hasCore,
+          };
+        }
+        if (peakSample && firstScales.length >= 4) {
+          return resolve({ peak: peakSample, firstScales });
         }
       }
       if (performance.now() - t0 > 15_000) return resolve({ peak: peakSample, firstScales });
@@ -127,13 +122,14 @@ test('爆发结束后节点被清空，不残留', async ({ page }) => {
   await page.getByRole('button', { name: '播放', exact: true }).click();
 
   // 爆发确实出现过……
-  await expect.poll(async () => page.locator('.hud-aprate-burst > *').count(), { timeout: 20_000 }).toBeGreaterThan(0);
+  const active = () => page.evaluate(() => (window as any).__LPW__.hud.inspect().burst.active as boolean);
+  await expect.poll(active, { timeout: 20_000, intervals: [50] }).toBe(true);
   // ……且寿命（1s）过后被清空。apRate 封顶 5 后不再重启，故最终必然归零。
-  await expect.poll(async () => page.locator('.hud-aprate-burst > *').count(), { timeout: 30_000 }).toBe(0);
+  await expect.poll(active, { timeout: 30_000 }).toBe(false);
   expect(errors).toEqual([]);
 });
 
-// 火花层（#229 + #228，Additive）画在 burst-sparks 画布上，画布中心 = 徽章中心。
+// 火花层（#229 + #228，Additive）画在离屏火花画布上，画布中心 = 徽章中心。
 // 守住三件事：确实画出了东西、颜色偏粉（贴图纯白/灰，粉色来自 TwoGradients）、
 // 确实飞散到徽章之外；另核对 Bg_core 加亮层有像素。
 test('火花粒子呈粉色且飞散到徽章之外，Bg_core 有底光', async ({ page }) => {
@@ -147,12 +143,12 @@ test('火花粒子呈粉色且飞散到徽章之外，Bg_core 有底光', async 
     const t0 = performance.now();
     let n = 0;
     const tick = () => {
-      const c = document.querySelector('.hud-aprate-burst canvas.burst-sparks') as HTMLCanvasElement | null;
-      const badge = document.querySelector('.hud-aprate') as HTMLElement | null;
-      if (c && badge && (n++ % 3 === 0)) {
-        cssW = parseFloat(c.style.width);
-        // 徽章半宽换算到画布 CSS 坐标（两者同处 HUD 坐标系，不受舞台缩放影响）。
-        halfBadge = badge.offsetWidth / 2;
+      const info = (window as any).__LPW__.hud.inspect();
+      const c = info.sparksCanvas as HTMLCanvasElement | null;
+      if (c && info.burst.active && (n++ % 3 === 0)) {
+        cssW = info.burst.sparksCssW;
+        // 徽章半宽换算到画布 HUD 坐标（两者同处 HUD 坐标系，不受舞台缩放影响）。
+        halfBadge = info.apRate.badgeCssW / 2;
         const k = c.width / cssW;
         const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
         const cx = c.width / 2, cy = c.height / 2;
@@ -166,7 +162,7 @@ test('火花粒子呈粉色且飞散到徽章之外，Bg_core 有底光', async 
             if (dist > maxTravel) maxTravel = dist;
           }
         }
-        const light = document.querySelector('.hud-aprate-burst canvas.burst-core-light') as HTMLCanvasElement | null;
+        const light = info.coreLightCanvas as HTMLCanvasElement | null;
         if (light) {
           const ld = light.getContext('2d')!.getImageData(0, 0, light.width, light.height).data;
           for (let i = 3; i < ld.length; i += 4) if (ld[i] > 0) coreLit++;

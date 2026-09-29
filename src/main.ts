@@ -9,6 +9,8 @@ import { AudioPlayer } from './audio';
 import { createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
+import { loadHudFonts, preloadImages } from './canvasKit';
+import { StageCompositor, type StageView } from './stageCompositor';
 import { StartAnimation, START_CLIP_DURATION } from './startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from './comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from './songAssets';
@@ -25,7 +27,7 @@ app.innerHTML=`
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
- <div class="stage-shell"><div class="stage" id="stage"><div id="live-bg" class="live-bg" aria-hidden="true"><div class="live-bg-image"></div><div class="live-bg-dot"></div></div><div id="live-bg-dim" class="live-bg-dim" aria-hidden="true"></div><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas></div></div>
+ <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-hidden="true"></canvas><canvas id="stage-canvas" aria-label="谱面预览画面"></canvas></div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
  <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button></div></div>
 </section>
@@ -196,8 +198,11 @@ let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:Re
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
 function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart.duration);}metadata();
-const startAnim=new StartAnimation(el('stage'));
-const comboResult=new ComboResult(el('stage'));
+const startAnim=new StartAnimation();
+const comboResult=new ComboResult();
+void comboResult.load();
+/** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
+const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
 comboResult.setKind(readSettings().comboResult);
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
@@ -253,7 +258,9 @@ input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0]
 el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
-const hud=new LiveHud(el('stage'));
+const hud=new LiveHud();
+void loadHudFonts();
+void preloadImages(LiveHud.textureUrls());
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
 let baseDuration = chart.duration;
@@ -342,9 +349,8 @@ const applyVisualOptions=()=>{
  el('opt-lane-dark-value').textContent=String(laneDarkness);
  el('opt-bg-dark-value').textContent=String(backgroundDarkness);
  renderer?.setVisualOptions({noteStartZ,laneWidth,gridCount,laneDarkness});
- const dim=el<HTMLElement>('live-bg-dim');
- // ChangeBackgroundAlpha: Dim _Color.a = BackgroundDarkness/100 (not whole viewer)
- if(dim) dim.style.opacity=String(Math.max(0,Math.min(1,backgroundDarkness/100)));
+ // ChangeBackgroundAlpha: Dim _Color.a = BackgroundDarkness/100（只盖舞台背景，不盖 3D / HUD）
+ compositor.setBackgroundDim(backgroundDarkness/100);el('stage-canvas').dataset.bgDim=String(compositor.backgroundDim);
  persistSettings();
 };
 input('opt-start-z').oninput=applyVisualOptions;
@@ -376,6 +382,18 @@ applyScoreCfg();
 
 let frame=0;
 let comboLastT=0;
+/** 实时预览的视口：舞台 CSS 尺寸 × min(dpr, 2)（与渲染器同一上限）。 */
+function liveView():StageView{
+ const stage=el('stage');
+ return {cssW:stage.clientWidth,cssH:stage.clientHeight,dpr:Math.min(2,globalThis.devicePixelRatio||1)};
+}
+/** 3D 画布 render() 之后立即合成（preserveDrawingBuffer 关闭，缓冲只在本帧内有效）。 */
+function composeStage(view:StageView){
+ compositor.draw(view,{gl:el<HTMLCanvasElement>('chart-canvas'),hud,startAnim,comboResult});
+ const c=el('stage-canvas');
+ const intro=startAnim.state??'';if(c.dataset.intro!==intro)c.dataset.intro=intro;
+ const result=comboResult.visible?String(comboResult.resultKind):'';if(c.dataset.result!==result)c.dataset.result=result;
+}
 /**
  * 曲终横幅：t ≥ FinishTime 时显示 clip 时刻 t − FinishTime（随走带时间，拖动可复现）；
  * 播放中正向越过 FinishTime 时播一次 se_rhythm_finish_0004（自动演奏恒为 AllPerfect）。
@@ -396,11 +414,17 @@ function animate(){
   input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;
   // 过场：停在起点未播放 = 待机静止帧；[start, 0) 内按走带时间取 clip 帧（可暂停 / 拖动）。
   startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);
+  composeStage(liveView());
   const skip=playing&&t<0;
   el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');
  }
  frame=requestAnimationFrame(animate);
 }animate();
+/** 测试 / 调试钩子（只读取状态，不改变行为）。 */
+(window as unknown as {__LPW__:unknown}).__LPW__={
+ hud,startAnim,comboResult,compositor,
+ get renderer(){return renderer;},get player(){return player;},
+};
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();},{once:true});
 
 /* ── 选曲：本地 assets（scripts/link-assets.py）+ 可搜索曲目列表，同 llll-pjsk-preview ── */

@@ -49,6 +49,28 @@ import {
   SCORE_ADD_REST_X,
 } from './hudFxMath';
 
+import {
+  type Ctx,
+  type Rect,
+  deviceScale,
+  drawContain,
+  drawGroup,
+  drawOutlinedText,
+  drawSprite,
+  drawText,
+  fillRoundRect,
+  fontExtents,
+  image,
+  insetRing,
+  outerBlurShadow,
+  outerRing,
+  placeRect,
+  preloadImages,
+  scaleAbout,
+  setTextStyle,
+  tintedMask,
+} from './canvasKit';
+import { lcg, mixSeed } from './rng';
 import { isFeverAt, type FeverWindow } from './fever';
 import { noteJudgementTimes } from './chart';
 import {
@@ -153,106 +175,6 @@ interface ApRateSpark {
   limit: number; dampen: number;
 }
 
-function place(
-  node: HTMLElement,
-  parentW: number, parentH: number,
-  ax: number, ay: number, px: number, py: number,
-  x: number, y: number, w: number, h: number,
-): void {
-  const pivotX = parentW * ax + x;
-  const pivotY = parentH * ay + y;
-  node.style.position = 'absolute';
-  node.style.left = `${pivotX - px * w}px`;
-  node.style.top = `${parentH - (pivotY + (1 - py) * h)}px`;
-  node.style.width = `${w}px`;
-  node.style.height = `${h}px`;
-}
-
-// Missing /rg sprites must not throw. Text fallback stays up until the image loads;
-// a 404 removes the image and keeps the fallback (or a CSS disc for empty bases).
-function mountSprite(host: HTMLElement, name: string, fallback: string): void {
-  host.dataset.sprite = name;
-  const text = document.createElement('span');
-  text.className = 'hud-fb';
-  text.textContent = fallback;
-  text.hidden = fallback.length === 0;
-  const img = document.createElement('img');
-  img.alt = '';
-  img.draggable = false;
-  img.decoding = 'async';
-  img.hidden = true;
-  const reveal = () => {
-    img.hidden = false;
-    // Drop the text fallback once the sprite is up — otherwise .hud-fb{display:flex}
-    // can fight [hidden] and leave PERFECT/COMBO/digits stacked on the image.
-    text.remove();
-  };
-  const fail = () => {
-    img.remove();
-    host.classList.add('is-missing');
-    text.hidden = fallback.length === 0;
-  };
-  img.addEventListener('load', reveal);
-  img.addEventListener('error', fail);
-  host.append(img, text);
-  img.src = spriteUrl(name);
-  if (img.complete) {
-    if (img.naturalWidth > 0) reveal();
-    else fail();
-  }
-}
-
-/** Swap sprite in place — used by live score digits to avoid clear+remount flicker. */
-function setSprite(host: HTMLElement, name: string, fallback: string): void {
-  if (host.dataset.sprite === name) return;
-  const img = host.querySelector(':scope > img') as HTMLImageElement | null;
-  if (!img) {
-    while (host.firstChild) host.removeChild(host.firstChild);
-    host.classList.remove('is-missing');
-    mountSprite(host, name, fallback);
-    return;
-  }
-  host.dataset.sprite = name;
-  host.classList.remove('is-missing');
-  const url = spriteUrl(name);
-  // Keep the previous frame visible; cached same-origin sprites usually complete sync.
-  const onLoad = () => {
-    img.hidden = false;
-    host.querySelector(':scope > .hud-fb')?.remove();
-  };
-  img.onload = onLoad;
-  img.onerror = () => {
-    img.remove();
-    host.classList.add('is-missing');
-    let text = host.querySelector(':scope > .hud-fb') as HTMLElement | null;
-    if (!text) {
-      text = document.createElement('span');
-      text.className = 'hud-fb';
-      host.append(text);
-    }
-    text.textContent = fallback;
-    text.hidden = fallback.length === 0;
-  };
-  // 同步解码：换图的那一帧就画新数字。async 时浏览器会先保留旧帧，跳转时多位同时换图会看到慢一拍。
-  img.decoding = 'sync';
-  img.src = url;
-  if (img.complete && img.naturalWidth > 0) onLoad();
-}
-
-/**
- * 实时数字贴图常驻：预取并解码后保留引用，跳转时换图不必再下载 / 解码。
- * 含 combo / 分数数字精灵，以及 AP 継続 描边与底光用作 CSS 蒙版 / 背景的贴图。
- */
-const warmSpriteRefs: HTMLImageElement[] = [];
-function warmImages(urls: string[]): void {
-  for (const url of urls) {
-    const img = new Image();
-    img.src = url;
-    void img.decode().catch(() => {});
-    warmSpriteRefs.push(img);
-  }
-}
-
 /** 所有 AutoPlay 判定时刻 ≤ time（升序），与 countHeads 同口径。 */
 function judgementTimesUpTo(chart: Chart, time: number): number[] {
   const out: number[] = [];
@@ -300,82 +222,81 @@ export function formatTechnicalScore(percent: number): { whole: string; frac: st
 }
 
 
-/** Face on top + outline clone underneath. Stroke on the underlayer only (2× outlinePx)
- *  so the face keeps Rodin weight while the visible ring matches TMP band width. */
-function mountOutlinedText(host: HTMLElement, text: string, asHtml = false): void {
-  const ol = document.createElement('span');
-  ol.className = 'hud-ol';
-  ol.setAttribute('aria-hidden', 'true');
-  const face = document.createElement('span');
-  face.className = 'hud-face';
-  if (asHtml) {
-    ol.innerHTML = text;
-    face.innerHTML = text;
-  } else {
-    ol.textContent = text;
-    face.textContent = text;
-  }
-  host.replaceChildren(ol, face);
+/** 数字 1 的描边蒙版（着色器窄字形采样，见 comboEffectOutlineBox）；其余数字用整张图。 */
+const COMBO_EFFECT_SHEET_TEX = '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect.png';
+const COMBO_EFFECT_DIGIT1_TEX = '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png';
+const COMBO_GLOW_UPPER_TEX = '/rg/fx/tex/sc2_effect_combo_glow_002.png';
+const COMBO_GLOW_LOWER_TEX = '/rg/fx/tex/sc2_effect_combo_glow_002_alpha_lower.png';
+/** 描边颜色 = ColorModule rgb (0.04245, 0.58693, 1)。 */
+const COMBO_EFFECT_COLOR = 'rgb(11,150,255)';
+/** 上层底光颜色 (0.4575, 0.7675, 1)。 */
+const COMBO_GLOW_UPPER_COLOR = 'rgb(117,196,255)';
+const AP_RATE_ROOT_TEX = '/rg/fx/tex/APRate_OutlineEffect.png';
+
+const PINK = 'rgb(255,58,153)';
+const TEAL = 'rgb(0,189,182)';
+
+/** HUD 画到的视口：舞台 CSS 尺寸与设备像素比。 */
+export type HudView = { cssW: number; cssH: number; dpr: number };
+
+/** AP 継続特效一层的逐帧状态（combo = 0 表示整层隐藏）。 */
+interface ComboFxLayerState {
+  combo: number;
+  /** 整层绕 360×120 框中心的缩放（ComboRectTween / SpriteUpperRoot）。 */
+  layerScale: number;
+  /** 单颗粒子不透明度。 */
+  opacity: number;
+  /** 每槽粒子自身缩放（抵消 / 叠加层缩放）。 */
+  partScale: number[];
 }
 
-/** 数字 1 的描边蒙版（着色器窄字形采样，见 comboEffectOutlineBox）；其余数字用 CSS 里的整张图。 */
-const COMBO_EFFECT_DIGIT1_MASK = 'url(/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png)';
-/** AP 継続 四层用到的全部贴图（与 style.css 中 .hud-combo-fx-* 一致），用于预解码。 */
-const COMBO_FX_TEXTURES = [
-  '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect.png',
-  '/rg/fx/tex/ui_sc2_ingame_num_combo_Effect_1.png',
-  '/rg/fx/tex/sc2_effect_combo_glow_002.png',
-  '/rg/fx/tex/sc2_effect_combo_glow_002_alpha_lower.png',
-];
+const EMPTY_FX: ComboFxLayerState = { combo: 0, layerScale: 1, opacity: 0, partScale: [1, 1, 1, 1] };
 
-/** AP 継続特效的四层（见 LiveHud.comboFx）。 */
-type ComboFxLayerKey = 'lowerOutline' | 'upperOutline' | 'lowerGlow' | 'upperGlow';
-interface ComboFxLayer {
-  el: HTMLElement;
-  kind: 'outline' | 'glow';
-  /** [0]=个位 … [3]=千位；parts = 同簇粒子副本；digit = 当前已铺的数字（-1 未铺）。 */
-  slots: { el: HTMLElement; parts: HTMLElement[]; digit: number }[];
+/** 第 i 个数字槽（[0]=个位，row-reverse、槽 90 宽、间距 −13）在 360 宽框内的左缘。 */
+export function comboSlotLeft(visible: number, i: number): number {
+  const total = visible * 90 - Math.max(0, visible - 1) * 13;
+  return (360 + total) / 2 - 90 - i * 77;
+}
+
+/** combo 数字（<10 视为 0）拆成槽位数字，[0]=个位；空槽不计。 */
+function comboSlotDigits(combo: number): number[] {
+  const out: number[] = [];
+  let n = combo < 10 ? 0 : combo;
+  while (n > 0 && out.length < COMBO_DIGIT_SLOTS) {
+    out.push(n % 10);
+    n = Math.trunc(n * 0.1);
+  }
+  return out;
+}
+
+/** 与 paintComboFxLayer 同一槽规则（剩余值 m > 0 才开槽），不做 <10 掩码。 */
+function fxSlotDigits(combo: number): number[] {
+  const out: number[] = [];
+  let m = combo;
+  while (m > 0 && out.length < COMBO_DIGIT_SLOTS) {
+    out.push(m % 10);
+    m = Math.trunc(m * 0.1);
+  }
+  return out;
 }
 
 export class LiveHud {
-  private readonly stage: HTMLElement;
-  private readonly root: HTMLElement;
-  private readonly logic: HTMLElement;
-  private readonly comboRow: HTMLElement;
-  private readonly comboDigits: HTMLElement[] = [];
-  private readonly comboLabel: HTMLElement;
-  private readonly apRateBadge: HTMLElement;
-  private readonly apRateValue: HTMLElement;
-  private apValueEl: HTMLElement | null = null;
-  private voltageValueEl: HTMLElement | null = null;
-  private apGageEl: HTMLElement | null = null;
-  private voltageGageEl: HTMLElement | null = null;
-  private readonly techRoot: HTMLElement;
-  private readonly scoreDigits: HTMLElement[] = [];
-  private readonly scoreCommas: HTMLElement[] = [];
-  private gaugeFillEl: HTMLElement | null = null;
   private readonly scoreEngine = new ScoreEngine(DEFAULT_SCORE_CONFIG);
   private techDisplayMode: 0 | 1 | 2 = 0;
   private rankManual = false;
-  private rankColorEl: HTMLElement | null = null;
-  private rankNameEl: HTMLElement | null = null;
-  private rankGrayEl: HTMLElement | null = null;
-  private readonly judge: HTMLElement;
-  private readonly observer: ResizeObserver;
+  private rank: 'none' | 'D' | 'C' | 'B' | 'A' | 'S' = 'none';
   private chart: Chart | null = null;
   private previousTime = 0;
   private combo = 0;
   private apRate = 0;
   private judgeAt = -1;
   private conditionAt = -1;
-  private conditionEl: HTMLElement | null = null;
   private enablePerfectPlus: boolean = RG_OPTION_DEFAULTS.enablePerfectPlus;
   private judgementYOpt = RG_OPTION_DEFAULTS.judgementY;
   private fastSlowYOpt = RG_OPTION_DEFAULTS.fastSlowY;
   private enableFeverDisplay: boolean = RG_OPTION_DEFAULTS.enableFeverDisplay;
   private enableApContinue: boolean = RG_OPTION_DEFAULTS.enableApContinue;
   private feverWindow: FeverWindow | null = null;
-  private judgePop: HTMLElement | null = null;
   private judgementOutput: JudgementOutputOption = RG_OPTION_DEFAULTS.judgementOutput;
   private fastSlowThreshold: FastSlowOption = RG_OPTION_DEFAULTS.fastSlowThreshold;
   private lastJudgeType: NoteJudgementType = 4;
@@ -391,14 +312,6 @@ export class LiveHud {
    * `add` 每次判定 `&= (type & 0xFE) == 4`；`Clear` / 重开重置为 true。
    */
   private isApContinue = true;
-  /**
-   * AP 継続特效四层（每层 4 个数字槽，与数字行同矩形同布局）：
-   * - lowerOutline：SpriteRoot/Sprite0~3/ComboEffectOutLine_02（循环，4 颗加法叠加）
-   * - upperOutline：SpriteUpperRoot/Sprite0~3/ComboEffectOutLine_01（跨百单次，5 颗加法叠加）
-   * - lowerGlow：OutLine_02 下的 ComboEffectBG_01（循环，Alpha 混合，sortingOrder 10 ⇒ 最上）
-   * - upperGlow：OutLine_01 下的 ComboEffectBG_01（单次，加法，sortingOrder 1 ⇒ 在数字后面）
-   */
-  private comboFx: Record<ComboFxLayerKey, ComboFxLayer> | null = null;
   /** 下层（描边 + 底光）循环的时间基：开局 / Clear 起算，isRefreshLoop（combo 位数变化）时重启。 */
   private comboFxLowerAt = 0;
   /** 上层时间基 = DoEffectCombo（跨百）时刻；-1 = 未在播。 */
@@ -406,9 +319,6 @@ export class LiveHud {
   /** DoEffectCombo 写入上层的未掩码 combo，以及当时的 isApContinue（决定渲染器开关）。 */
   private comboFxUpperCombo = 0;
   private comboFxUpperOn = false;
-  /** ComboRectTween 当前缩放（下层粒子只随它展开槽位，尺寸不变）。 */
-  private comboRectScale = 1;
-  private comboRectTransform = '';
   private apRateFlashAt = -1;
   private prevComboForFlash = 0;
   private lastPaintedApRate = -1;
@@ -418,12 +328,6 @@ export class LiveHud {
   private voltageValuePopAt = -1;
   private apValueFlashAt = -1;
   private voltageValueFlashAt = -1;
-  private apValueUpperEl: HTMLElement | null = null;
-  private voltageValueUpperEl: HTMLElement | null = null;
-  private apRateUpperEl: HTMLElement | null = null;
-  private comboFlashEl: HTMLElement | null = null;
-  private comboFlashDigits: HTMLElement | null = null;
-  private apRateBurstEl: HTMLElement | null = null;
   /** APRateEffect #229 Particle / #228 ClossParticle 的粒子（出生时按原包参数取定）。 */
   private apRateBurstSparks: ApRateSpark[] = [];
   /** 两种火花贴图拆成的 R/G/B 单通道图（预乘），用于按顶点色逐通道加色。 */
@@ -432,48 +336,74 @@ export class LiveHud {
   private apRateCoreTex: { w: number; h: number; px: Uint8ClampedArray } | null = null;
   /** 爆发是否已建好（区别于 `apRateFlashAt` 的动画时基）。 */
   private apRateBurstLive = false;
-  private addScoreEl: HTMLElement | null = null;
   private addScoreAt = -1;
+  private addScoreText = '+0';
 
+  // ── 逐帧绘制状态（sync 算出，draw 只读）─────────────────────────
+  private judgeSprite = 'ui_sc2_ingame_hantei_perfect';
+  private judgeW = 340;
+  private judgeScale: number | null = null;
+  private conditionSpriteName: string | null = 'ui_sc2_ingame_hantei_slow';
+  private conditionScale: number | null = null;
+  /** ComboRectTween 当前缩放（下层粒子只随它展开槽位，尺寸不变）。 */
+  private comboRectScale = 1;
+  private comboFlashDigits: number[] = [];
+  private comboFlash: { s: number; a: number } | null = null;
+  private fx: Record<'lowerOutline' | 'upperOutline' | 'lowerGlow' | 'upperGlow', ComboFxLayerState> = {
+    lowerOutline: EMPTY_FX, upperOutline: EMPTY_FX, lowerGlow: EMPTY_FX, upperGlow: EMPTY_FX,
+  };
+  private apRateUpper: { s: number; a: number } | null = null;
+  private burst: { age: number; s: number; rootAlpha: number } | null = null;
+  private rankCache: { key: string; canvas: HTMLCanvasElement; x: number; y: number } | null = null;
+  private addScore: { dx: number; a: number } | null = null;
+  private apText = '0';
+  private voltageText = '0';
+  private apUpperText = '0';
+  private voltageUpperText = '0';
+  private apValueScale = 0.92;
+  private voltageValueScale = 0.92;
+  private apUpper: { s: number; a: number } | null = null;
+  private voltageUpper: { s: number; a: number } | null = null;
+  private apFill = 0;
+  private voltageFill = 0;
+  private techText = formatTechnicalScore(0);
 
-  constructor(stage: HTMLElement) {
-    this.stage = stage;
-    this.root = document.createElement('div');
-    this.root.className = 'hud';
-    this.root.setAttribute('aria-hidden', 'true');
-    this.logic = document.createElement('div');
-    this.logic.className = 'hud-logic';
-    const safe = document.createElement('div');
-    safe.className = 'hud-safe';
-    this.logic.append(safe);
-    this.root.append(this.logic);
-    stage.append(this.root);
+  /** 火花层（sortingOrder −1）与 Bg_core 压暗 / 加亮层的离屏画布。 */
+  private readonly sparksCanvas: HTMLCanvasElement | null;
+  private readonly coreShade: HTMLCanvasElement | null;
+  private readonly coreLight: HTMLCanvasElement | null;
+  private lastView: HudView = { cssW: 1920, cssH: 1080, dpr: 1 };
+  /** 爆发随机种子（按触发时刻与档位派生，保证拖动 / 导出同一时刻结果一致）。 */
+  private burstSeed = 0;
 
-    this.buildScore(safe);
-    this.judge = this.buildJudge(safe);
-    const combo = this.buildCombo(safe);
-    warmImages([
-      ...[
-        ...Array.from({ length: 10 }, (_, d) => `ui_sc2_ingame_num_combo_${d}`),
-        ...Array.from({ length: 10 }, (_, d) => `ui_sc2_ingame_num_score_${d}`),
-        SCORE_DIM_ZERO, SCORE_DIM_COMMA, SCORE_COMMA,
-      ].map(spriteUrl),
-      ...COMBO_FX_TEXTURES,
-    ]);
-    this.comboRow = combo.row;
-    this.comboLabel = combo.label;
-    this.apRateBadge = combo.apRate;
-    this.apRateValue = combo.apRateValue;
-    this.buildAp(safe);
-    this.buildMental(safe);
-    this.buildPause(safe);
-    this.techRoot = this.buildTechnicalScore(safe);
-
-    this.observer = new ResizeObserver(() => this.layout());
-    this.observer.observe(stage);
-    this.layout();
+  constructor() {
+    const mk = () => (typeof document === 'undefined' ? null : document.createElement('canvas'));
+    this.sparksCanvas = mk();
+    if (this.sparksCanvas) {
+      this.sparksCanvas.width = AP_RATE_SPARK_CANVAS.w * AP_RATE_SPARK_DPR;
+      this.sparksCanvas.height = AP_RATE_SPARK_CANVAS.h * AP_RATE_SPARK_DPR;
+    }
+    this.coreShade = mk();
+    this.coreLight = mk();
+    void preloadImages(LiveHud.textureUrls());
+    this.loadApRateTextures();
     this.paintApRate();
     this.paintApVoltage();
+  }
+
+  /** HUD 用到的全部贴图（预载；导出前等它们就绪）。 */
+  static textureUrls(): string[] {
+    return [
+      ...Array.from({ length: 10 }, (_, d) => spriteUrl(`ui_sc2_ingame_num_combo_${d}`)),
+      ...Array.from({ length: 10 }, (_, d) => spriteUrl(`ui_sc2_ingame_num_score_${d}`)),
+      ...[SCORE_DIM_ZERO, SCORE_DIM_COMMA, SCORE_COMMA, 'ui_sc2_ingame_combo', 'ui_sc2_ingame_hantei_perfect',
+        'ui_sc2_ingame_hantei_perfect_plus', 'ui_sc2_ingame_hantei_slow', 'ui_sc2_ingame_hantei_fast',
+        'ui_sc2_ingame_rank_base', 'ui_sc2_button_rank', 'ui_sc2_button_rank_shine', 'ui_sc2_button_rank_deco_01',
+        'ui_sc2_button_rank_deco_02', 'ui_sc2_button_shine', 'ui_sc2_button_dot', 'ui_sc2_ingame_ap_base',
+        'ui_sc2_ingame_voltage_base', 'ui_sc2_ingame_gage_base_02', 'ui_sc2_ingame_gage_ap', 'ui_sc2_ingame_gage_voltage',
+      ].map(spriteUrl),
+      COMBO_EFFECT_SHEET_TEX, COMBO_EFFECT_DIGIT1_TEX, COMBO_GLOW_UPPER_TEX, COMBO_GLOW_LOWER_TEX, AP_RATE_ROOT_TEX,
+    ];
   }
 
   setSe(se: SeResolver | null): void {
@@ -526,17 +456,14 @@ export class LiveHud {
   }
 
   dispose(): void {
-    this.observer.disconnect();
-    this.root.remove();
+    this.apRateBurstSparks = [];
   }
 
   /**
    * TechnicalScoreDisplay: 0 off / 1 realtime / 2 estimate remaining as all Perfect+.
-   * Preview has no scoring engine: mode 1 shows 0.0000%, mode 2 shows 101.0000% (all-PP ceiling).
    */
   setTechnicalScoreDisplay(mode: 0 | 1 | 2): void {
     this.techDisplayMode = mode;
-    this.techRoot.hidden = mode === 0;
     this.paintTechnicalFromEngine();
   }
 
@@ -550,27 +477,14 @@ export class LiveHud {
     }
     this.combo = this.scoreEngine.combo;
     this.apRate = this.scoreEngine.apRate;
-    this.paintScore();
-    this.paintGauge();
     if (!this.rankManual) this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
     this.paintTechnicalFromEngine();
   }
 
   private paintTechnicalFromEngine(): void {
-    if (this.techDisplayMode === 0) {
-      this.techRoot.hidden = true;
-      return;
-    }
-    this.techRoot.hidden = false;
+    if (this.techDisplayMode === 0) return;
     const push = this.scoreEngine.technicalPush(this.techDisplayMode);
-    this.paintTechnicalScore(technicalPercent(push));
-  }
-
-  private paintTechnicalScore(percent: number): void {
-    const { whole, frac } = formatTechnicalScore(percent);
-    const value = this.techRoot.querySelector('.hud-tech-value');
-    if (!value) return;
-    value.innerHTML = `<span class="is-big">${whole}</span><span class="is-small">${frac}</span>`;
+    this.techText = formatTechnicalScore(technicalPercent(push));
   }
 
   /** 一批同刻判定（AutoPlay 恒为同一判定类型）：计分 + 触发判定字 / 闪光等特效。 */
@@ -581,12 +495,9 @@ export class LiveHud {
     this.scoreEngine.addMany(jType, hits);
     this.combo = this.scoreEngine.combo;
     this.apRate = this.scoreEngine.apRate;
-    this.paintCombo();
     this.paintApRate();
-    this.paintScore();
     if (this.scoreEngine.lastAdd > 0) this.triggerAddScore(this.scoreEngine.lastAdd, time);
     this.paintApVoltage();
-    this.paintGauge();
     this.paintTechnicalFromEngine();
     if (!this.rankManual) {
       this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
@@ -643,10 +554,7 @@ export class LiveHud {
     this.previousTime = time;
     this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
     if (!full && times.length) {
-      this.paintCombo();
       this.paintApRate();
-      this.paintScore();
-      this.paintGauge();
       this.paintApVoltage();
       this.paintTechnicalFromEngine();
       if (!this.rankManual) this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
@@ -670,16 +578,9 @@ export class LiveHud {
     this.addScoreAt = -1;
     this.prevComboForFlash = 0;
     this.lastPaintedApRate = -1;
-    if (this.comboFlashEl) {
-      this.comboFlashEl.classList.remove('is-on');
-      this.comboFlashEl.style.opacity = '0';
-    }
-    if (this.addScoreEl) {
-      this.addScoreEl.style.visibility = 'hidden';
-      this.addScoreEl.style.opacity = '0';
-      this.addScoreEl.style.transform = '';
-    }
-    this.comboRow.style.transform = '';
+    this.comboFlash = null;
+    this.addScore = null;
+    this.comboRectScale = 1;
     this.rankManual = false;
     this.lastApDisplay = -1;
     this.lastVoltageDisplay = -1;
@@ -687,103 +588,41 @@ export class LiveHud {
     this.voltageValuePopAt = -1;
     this.apValueFlashAt = -1;
     this.voltageValueFlashAt = -1;
-    if (this.apValueUpperEl) {
-      this.apValueUpperEl.classList.remove('is-on');
-      this.apValueUpperEl.style.opacity = '0';
-      this.apValueUpperEl.style.transform = '';
-    }
-    if (this.voltageValueUpperEl) {
-      this.voltageValueUpperEl.classList.remove('is-on');
-      this.voltageValueUpperEl.style.opacity = '0';
-      this.voltageValueUpperEl.style.transform = '';
-    }
-    if (this.apRateUpperEl) {
-      this.apRateUpperEl.classList.remove('is-on');
-      this.apRateUpperEl.style.opacity = '0';
-      this.apRateUpperEl.style.transform = '';
-    }
+    this.apUpper = null;
+    this.voltageUpper = null;
+    this.apRateUpper = null;
     this.clearApRateBurst();
-    this.paintCombo();
     this.paintApRate();
-    this.paintScore();
-    this.paintGauge();
     this.paintApVoltage();
     this.setRank('none');
     this.paintTechnicalFromEngine();
     this.paintJudge(time);
   }
 
-  private layout(): void {
-    const w = this.stage.clientWidth;
-    const h = this.stage.clientHeight;
-    if (w < 1 || h < 1) return;
-    const scale = hudScale(w, h);
-    // Logical canvas is stage pixels / scale. SafeArea is 1920 wide, centered,
-    // and as tall as that logical canvas (stageHeight / scale).
-    this.logic.style.width = `${w / scale}px`;
-    this.logic.style.height = `${h / scale}px`;
-    this.logic.style.transform = `translate(-50%, -50%) scale(${scale})`;
-  }
-
-  private paintCombo(): void {
-    // UpdateCombo(SpriteRenderer[], int) @0x49A426C — Unity keeps 4 fixed slots.
-    // combo < 10 ⇒ treat as 0 (all inactive). [0]=units; inactive children do not layout.
-    let n = this.combo < 10 ? 0 : this.combo;
-    for (let i = 0; i < this.comboDigits.length; i++) {
-      const slot = this.comboDigits[i];
-      if (n > 0) {
-        const d = n % 10;
-        slot.hidden = false;
-        setSprite(slot, `ui_sc2_ingame_num_combo_${d}`, String(d));
-        n = Math.trunc(n * 0.1);
-      } else {
-        slot.hidden = true;
-      }
-    }
-  }
-
   private paintApRate(): void {
-    // UpdateApRate: apRate >= 1 ⇒ COMBO label on + badge text; else both hidden / alpha 0.
-    // ApRateFlash (APRateUpper) restart is gated in onComboAdvanced (only when apRate changes).
-    const on = this.apRate >= 1;
-    this.comboLabel.hidden = !on;
-    this.apRateBadge.hidden = !on;
-    const label = on ? `AP増加 ×1.${this.apRate}` : '';
-    this.apRateValue.textContent = label;
-    if (this.apRateUpperEl) {
-      const uv = this.apRateUpperEl.querySelector('.hud-aprate-value');
-      if (uv) uv.textContent = label;
-    }
-    if (on) {
-      this.apRateBadge.style.background = 'rgb(255,58,153)'; // (1, 0.2275, 0.6)
-    }
+    // UpdateApRate: apRate >= 1 ⇒ COMBO label on + badge text; else both hidden / alpha 0（draw 里按 apRate 判定）。
   }
 
   private paintJudge(time: number): void {
     if (this.judgeAt < 0) {
-      this.judge.style.visibility = 'hidden';
-      this.judge.style.transform = '';
+      this.judgeScale = null;
       return;
     }
     const age = time - this.judgeAt;
     if (age < 0 || age >= JUDGE_LIFE) {
-      this.judge.style.visibility = 'hidden';
-      this.judge.style.transform = '';
+      this.judgeScale = null;
       this.judgeAt = -1;
       return;
     }
-    this.judge.style.visibility = 'visible';
     // JudgementRectTween: u = min(age, 0.1)*10; scale = 0.5 + u - 0.5*u*u (0.5 → 1.0).
     const u = Math.min(age, JUDGE_TWEEN) * (1 / JUDGE_TWEEN);
-    const scale = 0.5 + u - 0.5 * u * u;
-    this.judge.style.transform = `scale(${scale})`;
+    this.judgeScale = 0.5 + u - 0.5 * u * u;
   }
-
 
   private onComboAdvanced(prevCombo: number, time: number): void {
     if (shouldComboHundredFlash(prevCombo, this.combo)) {
       this.comboFlashAt = time;
-      this.rebuildComboFlashDigits();
+      this.comboFlashDigits = comboSlotDigits(this.combo);
       // DoEffectCombo：上层按未掩码 combo 设数字、isRefreshLoop=true；渲染器开关取此刻的 isApContinue。
       this.comboFxUpperAt = time;
       this.comboFxUpperCombo = this.combo;
@@ -796,43 +635,17 @@ export class LiveHud {
     if (this.apRate !== this.lastPaintedApRate) {
       if (this.apRate >= 1) {
         this.apRateFlashAt = time;
-        this.spawnApRateBurst();
+        this.spawnApRateBurst(time);
       } else {
         this.apRateFlashAt = -1;
         this.clearApRateBurst();
-        if (this.apRateUpperEl) {
-          this.apRateUpperEl.classList.remove('is-on');
-          this.apRateUpperEl.style.opacity = '0';
-          this.apRateUpperEl.style.transform = '';
-        }
+        this.apRateUpper = null;
       }
       this.lastPaintedApRate = this.apRate;
     }
   }
 
-  private rebuildComboFlashDigits(): void {
-    if (!this.comboFlashDigits) return;
-    // Mirror UpdateCombo slots: 4 fixed, [0]=units, row-reverse — same as paintCombo.
-    let n = this.combo < 10 ? 0 : this.combo;
-    this.comboFlashDigits.replaceChildren();
-    for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'hud-cdigit';
-      if (n > 0) {
-        const d = n % 10;
-        mountSprite(slot, `ui_sc2_ingame_num_combo_${d}`, String(d));
-        n = Math.trunc(n * 0.1);
-      } else {
-        slot.hidden = true;
-        mountSprite(slot, 'ui_sc2_ingame_num_combo_0', '0');
-      }
-      this.comboFlashDigits.append(slot);
-    }
-  }
-
   private paintComboEffect(time: number): void {
-    const fx = this.comboFx;
-    if (!fx) return;
     // 下层（SpriteRoot）：UpdateCombo 每次按掩码后的 combo（<10 视为 0）与 isApContinue 开关渲染器；
     //   粒子模拟不因渲染器关闭而停，只有 isRefreshLoop（位数变化）才 Stop+Play ⇒ 相位取 comboFxLowerAt。
     //   描边与底光同一次 withChildren 重启，共用相位。
@@ -841,16 +654,15 @@ export class LiveHud {
     const lowerAge = Math.max(0, time - this.comboFxLowerAt);
     // 粒子 scalingMode = Local：ComboRectTween 只把槽位展开，粒子本身不放大 ⇒ 子元素反向缩放。
     const invRect = 1 / this.comboRectScale;
-    this.paintComboFxLayer(
-      fx.lowerOutline, lowerCombo, this.comboRectTransform,
-      comboEffectLowerAlpha(lowerAge) * COMBO_EFFECT_LOWER_START_A,
-      () => invRect,
-    );
-    this.paintComboFxLayer(
-      fx.lowerGlow, lowerCombo, this.comboRectTransform,
-      comboGlowLowerCurve(lowerAge) * COMBO_GLOW_LOWER_ALPHA,
-      () => invRect,
-    );
+    const inv4 = [invRect, invRect, invRect, invRect];
+    this.fx.lowerOutline = {
+      combo: lowerCombo, layerScale: this.comboRectScale,
+      opacity: comboEffectLowerAlpha(lowerAge) * COMBO_EFFECT_LOWER_START_A, partScale: inv4,
+    };
+    this.fx.lowerGlow = {
+      combo: lowerCombo, layerScale: this.comboRectScale,
+      opacity: comboGlowLowerCurve(lowerAge) * COMBO_GLOW_LOWER_ALPHA, partScale: inv4,
+    };
 
     // 上层（SpriteUpperRoot）：DoEffectCombo 时写入未掩码 combo，0.1167s 激活后开播；
     //   描边寿命 0.25s、底光 0.8s。位置随 SpriteUpperRoot 缩放展开，
@@ -870,120 +682,45 @@ export class LiveHud {
         rootS = comboFlashScale(animAge);
       }
     }
-    const rootT = upperCombo > 0 ? `scale(${rootS})` : '';
-    this.paintComboFxLayer(
-      fx.upperOutline, upperAge < COMBO_EFFECT_UPPER_LIFE ? upperCombo : 0, rootT,
-      comboEffectUpperAlpha(upperAge) * COMBO_EFFECT_UPPER_START_A,
-      (slot) => comboEffectUpperOutlineScale(slot, animAge) / rootS,
-    );
-    this.paintComboFxLayer(
-      fx.upperGlow, upperCombo, rootT,
-      comboGlowUpperCurve(upperAge) * COMBO_GLOW_UPPER_ALPHA,
-      () => 1 / rootS,
-    );
-  }
-
-  /**
-   * 按 UpdateCombo 的槽位规则铺一层：[0]=个位，剩余值 m > 0 才打开该槽，m = trunc(m × 0.1)。
-   * `opacity` 是**单颗**粒子的不透明度；同簇的加法副本各自带同一值，由 plus-lighter 叠加。
-   */
-  private paintComboFxLayer(
-    layer: ComboFxLayer,
-    combo: number,
-    layerTransform: string,
-    opacity: number,
-    partScale: (slot: number) => number,
-  ): void {
-    const on = combo > 0;
-    layer.el.hidden = !on;
-    if (!on) return;
-    layer.el.style.transform = layerTransform;
-    const isGlow = layer.kind === 'glow';
-    const op = String(opacity);
-    let m = combo;
-    for (let i = 0; i < layer.slots.length; i++) {
-      const s = layer.slots[i];
-      if (m <= 0) {
-        s.el.hidden = true;
-        continue;
-      }
-      const d = m % 10;
-      s.el.hidden = false;
-      if (!isGlow && s.digit !== d) {
-        const b = comboEffectOutlineBox(d);
-        const size = `${b.maskW}px ${b.maskH}px`;
-        const pos = `${b.maskX}px 0px`;
-        const img = b.image === 'digit1' ? COMBO_EFFECT_DIGIT1_MASK : '';
-        for (const p of s.parts) {
-          p.style.maskImage = img;
-          p.style.webkitMaskImage = img;
-          p.style.left = `${b.left}px`;
-          p.style.top = `${b.top}px`;
-          p.style.width = `${b.width}px`;
-          p.style.height = `${b.height}px`;
-          p.style.maskSize = size;
-          p.style.webkitMaskSize = size;
-          p.style.maskPosition = pos;
-          p.style.webkitMaskPosition = pos;
-        }
-        s.digit = d;
-      }
-      const k = partScale(i);
-      const tf = isGlow ? `translate(-50%,-50%) scale(${k})` : `scale(${k})`;
-      for (const p of s.parts) {
-        p.style.opacity = op;
-        p.style.transform = tf;
-      }
-      m = Math.trunc(m * 0.1);
-    }
+    const layerS = upperCombo > 0 ? rootS : 1;
+    this.fx.upperOutline = {
+      combo: upperAge < COMBO_EFFECT_UPPER_LIFE ? upperCombo : 0, layerScale: layerS,
+      opacity: comboEffectUpperAlpha(upperAge) * COMBO_EFFECT_UPPER_START_A,
+      partScale: [0, 1, 2, 3].map((slot) => comboEffectUpperOutlineScale(slot, animAge) / rootS),
+    };
+    this.fx.upperGlow = {
+      combo: upperCombo, layerScale: layerS,
+      opacity: comboGlowUpperCurve(upperAge) * COMBO_GLOW_UPPER_ALPHA,
+      partScale: [1 / rootS, 1 / rootS, 1 / rootS, 1 / rootS],
+    };
   }
 
   private paintComboFlash(time: number): void {
-    const el = this.comboFlashEl;
-    if (!el) return;
     if (this.comboFlashAt < 0) {
-      el.classList.remove('is-on');
-      el.style.opacity = '0';
+      this.comboFlash = null;
       return;
     }
     const age = time - this.comboFlashAt;
     if (age < 0 || age >= COMBO_FLASH_DURATION) {
       this.comboFlashAt = -1;
-      el.classList.remove('is-on');
-      el.style.opacity = '0';
+      this.comboFlash = null;
       return;
     }
-    const s = comboFlashScale(age);
-    const a = comboFlashAlpha(age);
-    el.classList.add('is-on');
-    el.style.setProperty('--flash-s', String(s));
-    el.style.setProperty('--flash-a', String(a));
-    el.style.opacity = String(a);
-    el.style.transform = `scale(${s})`;
+    this.comboFlash = { s: comboFlashScale(age), a: comboFlashAlpha(age) };
   }
 
   private paintApRateFlash(time: number): void {
-    const upper = this.apRateUpperEl;
-    if (!upper) return;
     if (this.apRateFlashAt < 0) {
-      upper.classList.remove('is-on');
-      upper.style.opacity = '0';
-      upper.style.transform = '';
+      this.apRateUpper = null;
       return;
     }
     const age = time - this.apRateFlashAt;
     if (age < 0 || age >= AP_RATE_FLASH_DURATION) {
       this.apRateFlashAt = -1;
-      upper.classList.remove('is-on');
-      upper.style.opacity = '0';
-      upper.style.transform = '';
+      this.apRateUpper = null;
       return;
     }
-    const s = apRateFlashScale(age);
-    const a = apRateFlashAlpha(age);
-    upper.classList.add('is-on');
-    upper.style.opacity = String(a);
-    upper.style.transform = `scale(${s})`;
+    this.apRateUpper = { s: apRateFlashScale(age), a: apRateFlashAlpha(age) };
   }
 
   /**
@@ -1028,50 +765,27 @@ export class LiveHud {
     });
   }
 
+  /** APRateEffect 的像素贴图是否都已就绪（导出前等待）。 */
+  get texturesReady(): boolean {
+    return this.apRateCoreTex !== null && this.apRateTexChannels.size === 2;
+  }
+
   /**
    * APRateEffect — level56 `ComboRoot/APRateUpper/APRateEffect` #227 及三个子发射器。
    * 参数全部取原包序列化值（见 hudFxMath 的 AP_RATE_*）；1 世界单位 = 100 px。
-   * 随机数用 `Math.random`，与 Unity 的 RNG 序列不同，只保证分布一致。
+   * 随机数用按触发时刻派生种子的确定性序列（与 Unity 的 RNG 序列不同，只保证分布一致，
+   * 且同一时刻的爆发在预览拖动与视频导出里完全相同）。
    */
-  private spawnApRateBurst(): void {
-    const host = this.apRateBurstEl;
-    if (!host) return;
-    host.replaceChildren();
-    const mkCanvas = (cls: string, w: number, h: number, cssW: number, cssH: number) => {
-      const c = document.createElement('canvas');
-      c.className = cls;
-      c.width = w;
-      c.height = h;
-      c.style.width = `${cssW}px`;
-      c.style.height = `${cssH}px`;
-      return c;
-    };
-    // sortingOrder −1：两层火花共用一张加色画布。
-    const sparks = mkCanvas('burst-sparks',
-      AP_RATE_SPARK_CANVAS.w * AP_RATE_SPARK_DPR, AP_RATE_SPARK_CANVAS.h * AP_RATE_SPARK_DPR,
-      AP_RATE_SPARK_CANVAS.w, AP_RATE_SPARK_CANVAS.h);
-    // sortingOrder +1：#227 Root（Additive）与 #41 Bg_core（Premultiply ⇒ 压暗层 + 加亮层）。
-    const root = document.createElement('div');
-    root.className = 'burst-root';
-    root.style.width = `${AP_RATE_BURST_ROOT.w}px`;
-    root.style.height = `${AP_RATE_BURST_ROOT.h}px`;
-    const img = document.createElement('img');
-    img.alt = '';
-    img.draggable = false;
-    img.src = '/rg/fx/tex/APRate_OutlineEffect.png';
-    root.append(img);
-    const tw = this.apRateCoreTex?.w ?? 64, th = this.apRateCoreTex?.h ?? 64;
-    const shade = mkCanvas('burst-core-shade', tw, th, AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
-    const light = mkCanvas('burst-core-light', tw, th, AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
-    host.append(sparks, root, shade, light);
-
+  private spawnApRateBurst(time: number): void {
+    this.burstSeed = mixSeed(Math.round(time * 1000), this.apRate, 0x41505241);
+    const rnd = lcg(this.burstSeed);
     const list: ApRateSpark[] = [];
     for (const spec of [AP_RATE_PARTICLE, AP_RATE_CLOSS]) {
       // startDelay 是主模块属性：整个系统一次取值。
-      const delay = lerpRange(spec.delay, Math.random());
+      const delay = lerpRange(spec.delay, rnd());
       for (let i = 0; i < spec.count; i++) {
-        const sp = apRateBurstSpawn(Math.random(), Math.random());
-        const speed = lerpRange(spec.speed, Math.random()) * 100;
+        const sp = apRateBurstSpawn(rnd(), rnd());
+        const speed = lerpRange(spec.speed, rnd()) * 100;
         list.push({
           tex: spec.tex,
           delay,
@@ -1079,11 +793,11 @@ export class LiveHud {
           y: sp.y * 100,
           vx: sp.dx * speed,
           vy: sp.dy * speed,
-          life: lerpRange(spec.life, Math.random()),
-          size: lerpRange(spec.size, Math.random()) * 100,
-          spin: spec.spin ? lerpRange(spec.spin, Math.random()) : 0,
-          colorRand: Math.random(),
-          limit: lerpRange(spec.limit, Math.random()) * 100,
+          life: lerpRange(spec.life, rnd()),
+          size: lerpRange(spec.size, rnd()) * 100,
+          spin: spec.spin ? lerpRange(spec.spin, rnd()) : 0,
+          colorRand: rnd(),
+          limit: lerpRange(spec.limit, rnd()) * 100,
           dampen: spec.dampen,
         });
       }
@@ -1092,53 +806,46 @@ export class LiveHud {
     this.apRateBurstLive = true;
   }
 
-  /** 清空 APRateEffect 的节点（寿命结束、重播或换谱时调用）。 */
+  /** 清空 APRateEffect（寿命结束、重播或换谱时调用）。 */
   private clearApRateBurst(): void {
+    this.burst = null;
     if (!this.apRateBurstLive && !this.apRateBurstSparks.length) return;
     this.apRateBurstLive = false;
     this.apRateBurstSparks = [];
-    this.apRateBurstEl?.replaceChildren();
   }
 
   /** 逐帧驱动 APRateEffect；clip #94 在 t=1/60s 才 SetActive(true)。 */
   private paintApRateBurst(time: number): void {
-    const host = this.apRateBurstEl;
-    if (!host) return;
     if (this.apRateFlashAt < 0) {
       this.clearApRateBurst();
       return;
     }
     const age = time - this.apRateFlashAt - AP_RATE_BURST_ACTIVATE_DELAY;
-    if (age < 0) return; // 延迟窗口内尚未激活
+    if (age < 0) { this.burst = null; return; } // 延迟窗口内尚未激活
     if (age >= AP_RATE_BURST_DURATION) {
       this.clearApRateBurst();
       return;
     }
     // Root / Bg_core 共用尺寸曲线，从中心放大。
     const s = apRateBurstScale(age);
-    const root = host.querySelector<HTMLElement>('.burst-root');
-    if (root) {
-      root.style.opacity = String(apRateBurstRootAlpha(age));
-      root.style.transform = `translate(-50%,-50%) scale(${s})`;
-    }
-    const shade = host.querySelector<HTMLCanvasElement>('.burst-core-shade');
-    const light = host.querySelector<HTMLCanvasElement>('.burst-core-light');
-    if (shade && light) this.paintApRateCore(shade, light, age, s);
-    const canvas = host.querySelector<HTMLCanvasElement>('.burst-sparks');
-    if (canvas) this.paintApRateSparks(canvas, age);
+    this.burst = { age, s, rootAlpha: apRateBurstRootAlpha(age) };
+    this.paintApRateCore(age);
+    this.paintApRateSparks(age);
   }
 
   /**
    * #41 Bg_core：`Legacy Shaders/Particles/Alpha Blended Premultiply`
    * （`Blend One OneMinusSrcAlpha`，片元 = `col × tex × col.a`）。
    * 帧缓冲结果 `P + dst·(1 − A)`，其中 `P = col.rgb·tex.rgb·col.a`、`A = col.a²·tex.a`；
-   * 拆成压暗层 `(0,0,0,A)`（普通合成）与加亮层 `P`（plus-lighter）两张画布。
+   * 拆成压暗层 `(0,0,0,A)`（普通合成）与加亮层 `P`（加色）两张画布。
    */
-  private paintApRateCore(shade: HTMLCanvasElement, light: HTMLCanvasElement, age: number, s: number): void {
+  private paintApRateCore(age: number): void {
     const tex = this.apRateCoreTex;
+    const shade = this.coreShade, light = this.coreLight;
+    if (!tex || !shade || !light) return;
     const sctx = shade.getContext('2d');
     const lctx = light.getContext('2d');
-    if (!tex || !sctx || !lctx) return;
+    if (!sctx || !lctx) return;
     if (shade.width !== tex.w || shade.height !== tex.h) {
       shade.width = light.width = tex.w;
       shade.height = light.height = tex.h;
@@ -1162,18 +869,16 @@ export class LiveHud {
     }
     sctx.putImageData(sh, 0, 0);
     lctx.putImageData(li, 0, 0);
-    const tf = `translate(-50%,-50%) scale(${s})`;
-    shade.style.transform = tf;
-    light.style.transform = tf;
   }
 
   /**
    * #229 Particle / #228 ClossParticle：`Mobile/Particles/Additive`（`Blend SrcAlpha One`，
    * 片元 = `tex × col`）。每颗按 R/G/B 单通道图以 `col.c × col.a` 为 globalAlpha 叠加。
    */
-  private paintApRateSparks(canvas: HTMLCanvasElement, age: number): void {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  private paintApRateSparks(age: number): void {
+    const canvas = this.sparksCanvas;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
     const D = AP_RATE_SPARK_DPR;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1204,183 +909,21 @@ export class LiveHud {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
-  /**
-   * ComboRectTween 的缩放：数字行直接缩放；AP 継続下层同步展开槽位，
-   * 粒子尺寸不随之放大（scalingMode = Local），由 paintComboEffect 反向缩放子元素。
-   */
-  private applyComboScale(scale: number | null): void {
-    const t = scale === null ? '' : `scale(${scale})`;
-    this.comboRow.style.transform = t;
-    this.comboRectTransform = t;
-    this.comboRectScale = scale === null ? 1 : scale;
-  }
-
   private paintComboBounce(time: number): void {
     if (this.comboBounceAt < 0) {
-      this.applyComboScale(null);
+      this.comboRectScale = 1;
       return;
     }
     const age = time - this.comboBounceAt;
     if (age < 0 || age >= COMBO_TWEEN) {
-      this.applyComboScale(null);
+      this.comboRectScale = 1;
       this.comboBounceAt = -1;
       return;
     }
     // ComboRectTween: scale = 0.8 + 0.4*u - 0.2*u*u (0.8 → 1.0).
+    // 描边层在原包里是数字槽的子节点，会跟着 ComboRectTween 一起缩放。
     const u = Math.min(age, COMBO_TWEEN) * (1 / COMBO_TWEEN);
-    const scale = 0.8 + 0.4 * u - 0.2 * u * u;
-    // 描边层在原包里是数字槽的子节点，会跟着 ComboRectTween 一起缩放；
-    // 这里是兄弟节点，必须显式同步，否则弹跳期间会与数字错开。
-    this.applyComboScale(scale);
-  }
-
-  private buildScore(safe: HTMLElement): void {
-    const root = document.createElement('div');
-    root.className = 'hud-score';
-    const label = document.createElement('div');
-    label.className = 'hud-score-label';
-    mountOutlinedText(label, 'SCORE');
-    place(label, 512, 160, 0.5, 0.5, 0.5, 0.5, -80, 20, 120, 40);
-    const strip = document.createElement('div');
-    strip.className = 'hud-score-strip';
-    place(strip, 512, 160, 0.5, 0.5, 0.5, 0.5, 45.8, -47, 300, 40);
-    // Clear()/UpdateScore(0): all twelve digits = num_score_11, commas = num_score_12. No opacity dimming.
-    const score = 0;
-    this.scoreDigits.length = 0;
-    this.scoreCommas.length = 0;
-    for (let i = 0; i < SCORE_DIGIT_X.length; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'hud-sdigit';
-      place(slot, 300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_DIGIT_X[i], 0, 32, 40);
-      mountSprite(slot, scoreDigitSprite(score, i), '0');
-      this.scoreDigits.push(slot);
-      strip.append(slot);
-    }
-    for (let i = 0; i < SCORE_COMMA_X.length; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'hud-scomma';
-      place(slot, 300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_COMMA_X[i], 0, 32, 40);
-      mountSprite(slot, scoreCommaSprite(score, i), ',');
-      this.scoreCommas.push(slot);
-      strip.append(slot);
-    }
-    this.buildGauge(root);
-    this.buildRankLabels(root);
-    this.buildRankRoot(root);
-    const addScore = document.createElement('div');
-    addScore.className = 'hud-add-score';
-    // level56 AddScore (305.8,−52) 200×40 pivot .5; TMP 24 left align charSpacing 4 IngameScorePink.
-    place(addScore, 512, 160, 0.5, 0.5, 0.5, 0.5, 305.8, -52, 200, 40);
-    mountOutlinedText(addScore, '+0');
-    addScore.style.visibility = 'hidden';
-    addScore.style.opacity = '0';
-    this.addScoreEl = addScore;
-    root.append(label, addScore, strip);
-    safe.append(root);
-  }
-
-  private buildGauge(scoreRoot: HTMLElement): void {
-    const gauge = document.createElement('div');
-    gauge.className = 'hud-gauge';
-    place(gauge, 512, 160, 0.5, 0.5, 0.5, 0.5, 34, -12, 400, 48);
-    const slider = document.createElement('div');
-    slider.className = 'hud-gauge-slider';
-    place(slider, 400, 48, 0.5, 0.5, 0.5, 0.5, 15, 0, 330, 16);
-    const fill = document.createElement('div');
-    fill.className = 'hud-gauge-fill';
-    // score 0 ⇒ fill 0 (Clear). Live width from scoreGaugeFill piecewise map.
-    fill.style.width = '0%';
-    this.gaugeFillEl = fill;
-    slider.append(fill);
-    gauge.append(slider);
-    scoreRoot.append(gauge);
-  }
-
-  private buildRankLabels(scoreRoot: HTMLElement): void {
-    // Dump RankLabels xs (level56); ~2px off pure fill-knot math — keep dump.
-    const xs = [17, 76, 137, 183];
-    const letters = ['C', 'B', 'A', 'S'];
-    for (let i = 0; i < xs.length; i++) {
-      const line = document.createElement('div');
-      line.className = 'hud-rank-line';
-      place(line, 512, 160, 0.5, 0.5, 0.5, 0.5, xs[i], -5, 4, 30);
-      const letter = document.createElement('div');
-      letter.className = 'hud-rank-letter';
-      mountOutlinedText(letter, letters[i]);
-      place(letter, 512, 160, 0.5, 0.5, 0.5, 0.5, xs[i], 16, 60, 40);
-      scoreRoot.append(line, letter);
-    }
-  }
-
-  private buildRankRoot(scoreRoot: HTMLElement): void {
-    // RankRoot: rank_base 110x121 @ (-170,-13).
-    // ScoreRankIcon 156x181 scale .55: rim button_rank RGB(155,145,174) a.8
-    //   -> White(-6) -> Gray(-6) / RankColor(-6) -> Shine a.2, Deco01/02 a.8, RankName EB 80.
-    // SetRankNotActive: RankColor off -> gray only (no letter). Preview via setRank().
-    const root = document.createElement('div');
-    root.className = 'hud-rank';
-    place(root, 512, 160, 0.5, 0.5, 0.5, 0.5, -170, -13, 110, 121);
-    mountSprite(root, 'ui_sc2_ingame_rank_base', '');
-
-    const icon = document.createElement('div');
-    icon.className = 'hud-rank-icon';
-    place(icon, 110, 121, 0.5, 0.5, 0.5, 0.5, 0, 0, 156, 181);
-    icon.style.transform = 'scale(0.55)';
-
-    const rim = document.createElement('div');
-    rim.className = 'hud-rank-rim';
-    rim.style.cssText = 'position:absolute;inset:0';
-    mountSprite(rim, 'ui_sc2_button_rank', '');
-
-    // White sizeDelta -6 on 156x181 -> inset 3px -> 150x175.
-    const white = document.createElement('div');
-    white.className = 'hud-rank-white';
-    white.style.cssText = 'position:absolute;inset:3px';
-    mountSprite(white, 'ui_sc2_button_rank', '');
-
-    // Gray / RankColor sizeDelta -6 on White -> inset 3px -> 144x169.
-    const gray = document.createElement('div');
-    gray.className = 'hud-rank-fill hud-rank-gray';
-    gray.style.cssText = 'position:absolute;inset:3px';
-    mountSprite(gray, 'ui_sc2_button_rank', '');
-    this.rankGrayEl = gray;
-
-    const color = document.createElement('div');
-    color.className = 'hud-rank-fill hud-rank-color';
-    color.style.cssText = 'position:absolute;inset:3px';
-    color.hidden = true; // SetRankNotActive
-    mountSprite(color, 'ui_sc2_button_rank', '');
-    this.rankColorEl = color;
-
-    const colorW = 144;
-    const colorH = 169;
-
-    const shine = document.createElement('div');
-    shine.className = 'hud-rank-shine';
-    place(shine, colorW, colorH, 1, 0, 1, 0, 1, 1, 145, 126);
-    mountSprite(shine, 'ui_sc2_button_rank_shine', '');
-
-    const deco1 = document.createElement('div');
-    deco1.className = 'hud-rank-deco';
-    place(deco1, colorW, colorH, 0.5, 0.5, 0.5, 0.5, -21.5, 51, 103, 69);
-    mountSprite(deco1, 'ui_sc2_button_rank_deco_01', '');
-
-    const deco2 = document.createElement('div');
-    deco2.className = 'hud-rank-deco';
-    place(deco2, colorW, colorH, 0.5, 0.5, 0.5, 0.5, 52, -36, 41, 57);
-    mountSprite(deco2, 'ui_sc2_button_rank_deco_02', '');
-
-    const name = document.createElement('div');
-    name.className = 'hud-rank-name';
-    place(name, colorW, colorH, 0.5, 0.5, 0.5, 0.5, 0, 2, 120, 120);
-    name.textContent = '';
-    this.rankNameEl = name;
-
-    color.append(shine, deco1, deco2, name);
-    white.append(gray, color);
-    icon.append(rim, white);
-    root.append(icon);
-    scoreRoot.append(root);
+    this.comboRectScale = 0.8 + 0.4 * u - 0.2 * u * u;
   }
 
   /**
@@ -1394,82 +937,8 @@ export class LiveHud {
   }
 
   setRank(rank: 'none' | 'D' | 'C' | 'B' | 'A' | 'S'): void {
-    const color = this.rankColorEl;
-    const name = this.rankNameEl;
-    if (!color || !name) return;
-    if (rank === 'none') {
-      color.hidden = true;
-      name.textContent = '';
-      color.style.background = '';
-      return;
-    }
-    color.hidden = false;
-    name.textContent = rank;
-    const tints: Record<string, string> = {
-      D: 'rgb(133,150,208)',
-      C: 'rgb(54,215,225)',
-      B: 'rgb(30,196,167)',
-      A: 'rgb(253,91,145)',
-      S: 'linear-gradient(90deg,rgb(177,147,203),rgb(96,228,222))',
-    };
-    color.style.background = tints[rank] ?? '';
+    this.rank = rank;
   }
-
-
-  private buildPause(safe: HTMLElement): void {
-    // SafeArea aMin/aMax (1,1), pivot (0.5,0.5), pos (−100,−90), 120×120.
-    // Pattern sprites live under SelectUI: shine α.349, dot α.298 (ColorImage is Mask).
-    const root = document.createElement('div');
-    root.className = 'hud-pause';
-    const bg = document.createElement('div');
-    bg.className = 'hud-pause-bg';
-    const face = document.createElement('div');
-    face.className = 'hud-pause-face';
-    const color = document.createElement('div');
-    color.className = 'hud-pause-color';
-    // ColorImage content size after sizeDelta −16 on 120 → 104×104.
-    const shine = document.createElement('div');
-    shine.className = 'hud-pause-pattern is-shine';
-    place(shine, 104, 104, 0.5, 1, 0.5, 1, 2.6, 2.8865, 184.6514, 54.887);
-    mountSprite(shine, 'ui_sc2_button_shine', '');
-    const dot = document.createElement('div');
-    dot.className = 'hud-pause-pattern is-dot';
-    place(dot, 104, 104, 1, 0, 1, 0, 26.8076, -18.4075, 157.6151, 157.6151);
-    mountSprite(dot, 'ui_sc2_button_dot', '');
-    const icon = document.createElement('div');
-    icon.className = 'hud-pause-icon';
-    for (let i = 0; i < 2; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'hud-pause-bar';
-      const inner = document.createElement('div');
-      inner.className = 'hud-pause-bar-inner';
-      bar.append(inner);
-      icon.append(bar);
-    }
-    color.append(shine, dot, icon);
-    face.append(color);
-    bg.append(face);
-    root.append(bg);
-    safe.append(root);
-  }
-
-  private buildTechnicalScore(safe: HTMLElement): HTMLElement {
-    // SafeArea (1,1)/(1,1) pos (−56,−158) 394×80. Gated by setTechnicalScoreVisible (TechnicalScoreDisplay).
-    const root = document.createElement('div');
-    root.className = 'hud-tech';
-    root.hidden = true;
-    const label = document.createElement('div');
-    label.className = 'hud-tech-label';
-    mountOutlinedText(label, 'TECHNICAL<br>SCORE', true);
-    const value = document.createElement('div');
-    value.className = 'hud-tech-value';
-    const formatted = formatTechnicalScore(0);
-    value.innerHTML = `<span class="is-big">${formatted.whole}</span><span class="is-small">${formatted.frac}</span>`;
-    root.append(label, value);
-    safe.append(root);
-    return root;
-  }
-
 
   setEnablePerfectPlus(on: boolean): void {
     this.enablePerfectPlus = on;
@@ -1492,14 +961,10 @@ export class LiveHud {
 
   setJudgementY(opt: number): void {
     this.judgementYOpt = opt;
-    this.repositionJudge();
-    // Condition 与判定字同档时贴在判定字上方（OverlapOffsetY），故一并重排。
-    this.repositionCondition();
   }
 
   setFastSlowY(opt: number): void {
     this.fastSlowYOpt = opt;
-    this.repositionCondition();
   }
 
   setEnableFeverDisplay(on: boolean): void {
@@ -1523,56 +988,26 @@ export class LiveHud {
     return this.feverWindow?.start ?? 0;
   }
 
-  private repositionJudge(): void {
-    const y = judgementLayoutY(this.judgementYOpt);
-    if (this.judge) {
-      const w = this.judge.style.width ? parseFloat(this.judge.style.width) : 340;
-      place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, Number.isFinite(w) ? w : 340, 80);
-    }
-    if (this.judgePop) {
-      place(this.judgePop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 340, 80);
-    }
-  }
-
-  private repositionCondition(): void {
-    if (!this.conditionEl) return;
-    const y = fastSlowLayoutY(this.judgementYOpt, this.fastSlowYOpt);
-    place(this.conditionEl, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 180, 64);
-  }
-
   private applyConditionSprite(condition: NoteConditionType): void {
-    if (!this.conditionEl) return;
     const spr = conditionSprite(condition);
-    if (!spr) {
-      this.conditionEl.style.visibility = 'hidden';
-      return;
-    }
-    // 原地换图：每次判定都 mountSprite 会不断追加 <img>，多个 SLOW 纵向叠成一串。
-    setSprite(this.conditionEl, spr.name, spr.fallback);
+    this.conditionSpriteName = spr ? spr.name : null;
   }
 
   private paintCondition(time: number): void {
-    if (!this.conditionEl) return;
     if (this.conditionAt < 0) {
-      this.conditionEl.style.visibility = 'hidden';
-      this.conditionEl.style.transform = '';
+      this.conditionScale = null;
       return;
     }
     const age = time - this.conditionAt;
     if (age < 0 || age >= JUDGE_LIFE) {
-      this.conditionEl.style.visibility = 'hidden';
-      this.conditionEl.style.transform = '';
+      this.conditionScale = null;
       this.conditionAt = -1;
       return;
     }
-    this.conditionEl.style.visibility = 'visible';
     // Same JudgementRectTween as Judge (0.5 → 1.0 over 0.1 s).
     const u = Math.min(age, JUDGE_TWEEN) * (1 / JUDGE_TWEEN);
-    const scale = 0.5 + u - 0.5 * u * u;
-    this.conditionEl.style.transform = `scale(${scale})`;
+    this.conditionScale = 0.5 + u - 0.5 * u * u;
   }
-
-
 
   getFastSlowThreshold(): FastSlowOption {
     return this.fastSlowThreshold;
@@ -1580,307 +1015,54 @@ export class LiveHud {
 
   private applyJudgeSprite(type: NoteJudgementType): void {
     this.lastJudgeType = type;
-    const { name, fallback } = judgementSprite(type, this.enablePerfectPlus);
-    while (this.judge.firstChild) this.judge.removeChild(this.judge.firstChild);
-    const w = name.includes('perfect_plus') ? 386 : 340;
-    this.judge.style.width = `${w}px`;
-    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt), w, 80);
-    mountSprite(this.judge, name, fallback);
-  }
-
-
-  private paintScore(): void {
-    const score = this.scoreEngine.score;
-    for (let i = 0; i < this.scoreDigits.length; i++) {
-      setSprite(this.scoreDigits[i], scoreDigitSprite(score, i), '0');
-    }
-    for (let i = 0; i < this.scoreCommas.length; i++) {
-      setSprite(this.scoreCommas[i], scoreCommaSprite(score, i), ',');
-    }
+    const { name } = judgementSprite(type, this.enablePerfectPlus);
+    this.judgeSprite = name;
+    this.judgeW = name.includes('perfect_plus') ? 386 : 340;
   }
 
   /** ScoreResolver Add → scoreAddText "+"N + ScoreAddTween @0x486177C. */
   private triggerAddScore(delta: number, time: number): void {
-    const el = this.addScoreEl;
-    if (!el || delta <= 0) return;
-    const text = `+${delta}`;
-    const ol = el.querySelector('.hud-ol');
-    const face = el.querySelector('.hud-face');
-    if (ol) ol.textContent = text;
-    if (face) face.textContent = text;
+    if (delta <= 0) return;
+    this.addScoreText = `+${delta}`;
     this.addScoreAt = time;
-    el.style.visibility = 'visible';
   }
 
   private paintAddScore(time: number): void {
-    const el = this.addScoreEl;
-    if (!el) return;
     if (this.addScoreAt < 0) {
-      el.style.visibility = 'hidden';
-      el.style.opacity = '0';
-      el.style.transform = '';
+      this.addScore = null;
       return;
     }
     const age = time - this.addScoreAt;
     // Process: tween while active; hide when scoreAddHideTime < t (life 0.7).
     if (age < 0 || age >= SCORE_ADD_LIFE) {
       this.addScoreAt = -1;
-      el.style.visibility = 'hidden';
-      el.style.opacity = '0';
-      el.style.transform = '';
+      this.addScore = null;
       return;
     }
-    const x = scoreAddTweenX(age);
-    const alpha = scoreAddTweenAlpha(age);
-    el.style.visibility = 'visible';
-    el.style.opacity = String(alpha);
-    el.style.transform = `translate(${x - SCORE_ADD_REST_X}px, 0)`;
-  }
-
-  private paintGauge(): void {
-    if (!this.gaugeFillEl) return;
-    const fill = this.scoreEngine.gaugeFill();
-    this.gaugeFillEl.style.width = `${Math.max(0, Math.min(1, fill)) * 100}%`;
-  }
-
-  private buildJudge(safe: HTMLElement): HTMLElement {
-    const root = document.createElement('div');
-    root.className = 'hud-judge';
-    const pop = document.createElement('div');
-    pop.className = 'hud-perfect';
-    // level56 Judge prefab (0, -270) + JudgementY×70 (ScoreResolver.Inject) ⇒ default 5 → (0, +80).
-    // Sprite size: perfect 340x80 / perfect_plus 386x80.
-    this.judgePop = pop;
-    place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt), 340, 80);
-    mountSprite(pop, 'ui_sc2_ingame_hantei_perfect', 'PERFECT');
-    pop.style.visibility = 'hidden';
-    // JudgeRoot/Condition prefab (0, -210) 180×64; +FastSlowY×70 (or judge+60 when same step) ⇒ default (0, +140).
-    // Gated by FastSlowThreshold.
-    const cond = document.createElement('div');
-    cond.className = 'hud-condition';
-    this.conditionEl = cond;
-    place(cond, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, fastSlowLayoutY(this.judgementYOpt, this.fastSlowYOpt), 180, 64);
-    mountSprite(cond, 'ui_sc2_ingame_hantei_slow', 'SLOW');
-    cond.style.visibility = 'hidden';
-    root.append(pop, cond);
-    safe.append(root);
-    return pop;
-  }
-
-  private buildCombo(safe: HTMLElement): {
-    row: HTMLElement;
-    label: HTMLElement;
-    apRate: HTMLElement;
-    apRateValue: HTMLElement;
-  } {
-    const root = document.createElement('div');
-    root.className = 'hud-combo';
-    const row = document.createElement('div');
-    row.className = 'hud-combo-digits';
-    // SpriteRoot / SpriteUpperRoot 的 anchoredPosition.x = −44（Label/APRate 才是 −40）。
-    place(row, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
-    this.comboDigits.length = 0;
-    for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
-      const slot = document.createElement('div');
-      // Prefab sizeDelta 90×120; HLG spacing −13. Slot [0]=units (row-reverse ⇒ rightmost).
-      slot.className = 'hud-cdigit';
-      slot.hidden = true;
-      mountSprite(slot, 'ui_sc2_ingame_num_combo_0', '0');
-      this.comboDigits.push(slot);
-      row.append(slot);
-    }
-    const label = document.createElement('div');
-    label.className = 'hud-combo-label';
-    place(label, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -30, 244, 65);
-    mountSprite(label, 'ui_sc2_ingame_combo', 'COMBO');
-    label.hidden = true;
-    const apRate = document.createElement('div');
-    apRate.className = 'hud-aprate';
-    place(apRate, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 240, 40);
-    apRate.hidden = true;
-    const apRateValue = document.createElement('div');
-    apRateValue.className = 'hud-aprate-value';
-    apRate.append(apRateValue);
-    // APRateUpper: flash copy (scale+fade); base badge stays opaque (PLAN §46).
-    const apRateUpper = document.createElement('div');
-    apRateUpper.className = 'hud-aprate-upper';
-    place(apRateUpper, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 240, 40);
-    apRateUpper.style.opacity = '0';
-    const apRateUpperValue = document.createElement('div');
-    apRateUpperValue.className = 'hud-aprate-value';
-    apRateUpper.append(apRateUpperValue);
-    this.apRateUpperEl = apRateUpper;
-    // Flash overlay sits on the same rect as SpriteRoot (not whole ComboRoot),
-    // so ComboAnimation scale grows from the digit center — avoids left drift.
-    const flash = document.createElement('div');
-    flash.className = 'hud-combo-flash';
-    flash.style.opacity = '0';
-    place(flash, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
-    const flashDigits = document.createElement('div');
-    flashDigits.className = 'hud-combo-flash-digits';
-    flash.append(flashDigits);
-    const burst = document.createElement('div');
-    burst.className = 'hud-aprate-burst';
-    place(burst, 400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 280, 280);
-    // AP 継続特效四层：与 SpriteRoot / SpriteUpperRoot 同矩形（360×120 @ -44,54），
-    // 槽位与 .hud-combo-digits 一致（row-reverse + −13 间距）。每槽的子元素是同簇粒子副本。
-    const mkFxLayer = (cls: string, kind: 'outline' | 'glow', parts: number): ComboFxLayer => {
-      const el = document.createElement('div');
-      el.className = `hud-combo-fx ${cls}`;
-      el.hidden = true;
-      place(el, 400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
-      const slots: ComboFxLayer['slots'] = [];
-      for (let i = 0; i < COMBO_DIGIT_SLOTS; i++) {
-        const slot = document.createElement('div');
-        slot.className = 'hud-combo-fx-slot';
-        slot.hidden = true;
-        const ps: HTMLElement[] = [];
-        for (let k = 0; k < parts; k++) {
-          const p = document.createElement('div');
-          p.className = kind === 'outline' ? 'hud-combo-fx-outline' : 'hud-combo-fx-glow';
-          slot.append(p);
-          ps.push(p);
-        }
-        el.append(slot);
-        slots.push({ el: slot, parts: ps, digit: -1 });
-      }
-      return { el, kind, slots };
-    };
-    const fx: Record<ComboFxLayerKey, ComboFxLayer> = {
-      // 描边：加法混合，4 / 5 颗同位粒子 ⇒ 4 / 5 个 plus-lighter 副本。
-      lowerOutline: mkFxLayer('is-lower-outline', 'outline', COMBO_EFFECT_LOWER_BURST),
-      upperOutline: mkFxLayer('is-upper-outline', 'outline', COMBO_EFFECT_UPPER_BURST),
-      // 下层底光：Alpha 混合的 2 颗同位粒子 ⇒ 2 个普通合成的副本（逐像素 1 − (1 − a)²）。
-      lowerGlow: mkFxLayer('is-lower-glow', 'glow', COMBO_GLOW_BURST),
-      // 上层底光：加法混合 2 颗 ⇒ 2 个 plus-lighter 副本。
-      upperGlow: mkFxLayer('is-upper-glow', 'glow', COMBO_GLOW_BURST),
-    };
-    root.append(
-      fx.upperGlow.el, row, label, apRate, apRateUpper, flash,
-      fx.lowerOutline.el, fx.upperOutline.el, fx.lowerGlow.el, burst,
-    );
-    this.comboFlashEl = flash;
-    this.comboFlashDigits = flashDigits;
-    this.comboFx = fx;
-    this.apRateBurstEl = burst;
-    this.loadApRateTextures();
-    safe.append(root);
-    return { row, label, apRate, apRateValue };
-  }
-
-  private buildAp(safe: HTMLElement): void {
-    const root = document.createElement('div');
-    root.className = 'hud-ap';
-    // Gauges are children of the 138 bases (pos 0,0), not siblings of APVoltageRoot.
-    // Value/upper nest inside the disc so TMP stays centered on the ring (level56 same anchor).
-    const meter = (
-      base: string,
-      gage: string,
-      x: number,
-      valueClass: string,
-      upperClass: string,
-    ): { fill: HTMLElement; value: HTMLElement; upper: HTMLElement } => {
-      const slot = document.createElement('div');
-      slot.className = 'hud-disc';
-      place(slot, 320, 160, 0.5, 0.5, 0.5, 0.5, x, -8, 138, 138);
-      mountSprite(slot, base, '');
-      const ring = document.createElement('div');
-      ring.className = 'hud-base02';
-      place(ring, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 0, 94, 94);
-      mountSprite(ring, 'ui_sc2_ingame_gage_base_02', '');
-      const fill = document.createElement('div');
-      fill.className = 'hud-gage';
-      place(fill, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 0, 90, 90);
-      // level56: Filled Radial360, fillOrigin Top, fillClockwise=false; CSS conic from 0deg (=top).
-      mountSprite(fill, gage, '');
-      fill.style.setProperty('--fill', '0');
-      const value = document.createElement('div');
-      value.className = valueClass;
-      mountOutlinedText(value, '0');
-      // level56 APValue/VoltageValue (0,0) relative to EffectBase stretch; disc-local center.
-      // Optical baseline nudge (+Y) so Rodin digits sit centered in the ring.
-      place(value, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 2, 80, 40);
-      const upper = document.createElement('div');
-      upper.className = upperClass;
-      mountOutlinedText(upper, '0');
-      place(upper, 138, 138, 0.5, 0.5, 0.5, 0.5, 0, 2, 80, 40);
-      upper.style.opacity = '0';
-      slot.append(ring, fill, value, upper);
-      root.append(slot);
-      return { fill, value, upper };
-    };
-    const ap = meter(
-      'ui_sc2_ingame_ap_base',
-      'ui_sc2_ingame_gage_ap',
-      -60,
-      'hud-ap-value is-ap',
-      'hud-ap-value-upper is-ap',
-    );
-    const vo = meter(
-      'ui_sc2_ingame_voltage_base',
-      'ui_sc2_ingame_gage_voltage',
-      80,
-      'hud-ap-value is-vo',
-      'hud-ap-value-upper is-vo',
-    );
-    this.apGageEl = ap.fill;
-    this.voltageGageEl = vo.fill;
-    this.apValueEl = ap.value;
-    this.voltageValueEl = vo.value;
-    this.apValueUpperEl = ap.upper;
-    this.voltageValueUpperEl = vo.upper;
-    const label = (text: string, x: number, y: number, w: number, className: string) => {
-      const node = document.createElement('div');
-      node.className = className;
-      mountOutlinedText(node, text);
-      place(node, 320, 160, 0.5, 0.5, 0.5, 0.5, x, y, w, 40);
-      root.append(node);
-      return node;
-    };
-    label('AP', -60, 53, 80, 'hud-ap-label is-ap');
-    label('VOLTAGE', 80, 53, 120, 'hud-ap-label is-vo');
-    safe.append(root);
+    this.addScore = { dx: scoreAddTweenX(age) - SCORE_ADD_REST_X, a: scoreAddTweenAlpha(age) };
   }
 
   private paintApVoltage(): void {
-    const setOutlined = (host: HTMLElement | null, text: string) => {
-      if (!host) return;
-      const ol = host.querySelector('.hud-ol');
-      const face = host.querySelector('.hud-face');
-      if (ol) ol.textContent = text;
-      if (face) face.textContent = text;
-      if (!ol && !face) host.textContent = text;
-    };
     const apInt = this.scoreEngine.apDisplayValue;
     const voInt = this.scoreEngine.voltageLevel;
-    setOutlined(this.apValueEl, String(apInt));
-    setOutlined(this.voltageValueEl, String(voInt));
+    this.apText = String(apInt);
+    this.voltageText = String(voInt);
     // ParamViewResolver.UpdateAp/UpdateVoltage: value change → upper SetCharArray +
     // Animator.CrossFade + JudgementRectTween(baseRect, 0.1s). Not ComboRectTween.
     if (this.lastApDisplay >= 0 && apInt !== this.lastApDisplay) {
-      setOutlined(this.apValueUpperEl, String(apInt));
+      this.apUpperText = String(apInt);
       this.apValuePopAt = this.previousTime;
       this.apValueFlashAt = this.previousTime;
     }
     if (this.lastVoltageDisplay >= 0 && voInt !== this.lastVoltageDisplay) {
-      setOutlined(this.voltageValueUpperEl, String(voInt));
+      this.voltageUpperText = String(voInt);
       this.voltageValuePopAt = this.previousTime;
       this.voltageValueFlashAt = this.previousTime;
     }
     this.lastApDisplay = apInt;
     this.lastVoltageDisplay = voInt;
-    const apFill = this.scoreEngine.apGauge;
-    const voFill = this.scoreEngine.voltageGauge;
-    if (this.apGageEl) {
-      this.apGageEl.style.setProperty('--fill', String(apFill));
-      this.apGageEl.classList.toggle('is-empty', apFill <= 0);
-      this.apGageEl.dataset.fill = apFill <= 0 ? '0' : '1';
-    }
-    if (this.voltageGageEl) {
-      this.voltageGageEl.style.setProperty('--fill', String(voFill));
-      this.voltageGageEl.classList.toggle('is-empty', voFill <= 0);
-      this.voltageGageEl.dataset.fill = voFill <= 0 ? '0' : '1';
-    }
+    this.apFill = this.scoreEngine.apGauge;
+    this.voltageFill = this.scoreEngine.voltageGauge;
   }
 
   /**
@@ -1888,79 +1070,622 @@ export class LiveHud {
    * APEffectBase→ApGageIncreaseAnimation / VoltageEffectBase→VoltageIncreaseAnimation (0.6s).
    */
   private paintApVoltageFx(time: number): void {
-    const popBase = (el: HTMLElement | null, at: number, clear: () => void) => {
-      if (!el) return;
-      if (at < 0) {
-        el.style.transform = '';
-        return;
-      }
+    // 基础数值的宿主常驻 scale(0.92)；弹跳时为 0.92 × JudgementRectTween。
+    const pop = (at: number, clear: () => void): number => {
+      if (at < 0) return 0.92;
       const age = time - at;
       if (age < 0 || age >= JUDGE_TWEEN) {
-        el.style.transform = '';
         clear();
-        return;
+        return 0.92;
       }
-      // JudgementRectTween: u=min(age,0.1)*10; scale=0.5+u-0.5*u*u
       const u = Math.min(age, JUDGE_TWEEN) * (1 / JUDGE_TWEEN);
-      const scale = 0.5 + u - 0.5 * u * u;
-      el.style.transform = `scale(${0.92 * scale})`;
+      return 0.92 * (0.5 + u - 0.5 * u * u);
     };
-    popBase(this.apValueEl, this.apValuePopAt, () => { this.apValuePopAt = -1; });
-    popBase(this.voltageValueEl, this.voltageValuePopAt, () => { this.voltageValuePopAt = -1; });
+    this.apValueScale = pop(this.apValuePopAt, () => { this.apValuePopAt = -1; });
+    this.voltageValueScale = pop(this.voltageValuePopAt, () => { this.voltageValuePopAt = -1; });
 
-    const flashUpper = (el: HTMLElement | null, at: number, clear: () => void) => {
-      if (!el) return;
-      if (at < 0) {
-        el.classList.remove('is-on');
-        el.style.opacity = '0';
-        el.style.transform = '';
-        return;
-      }
+    const flash = (at: number, clear: () => void): { s: number; a: number } | null => {
+      if (at < 0) return null;
       const age = time - at;
       if (age < 0 || age >= AP_GAGE_FLASH_DURATION) {
         clear();
-        el.classList.remove('is-on');
-        el.style.opacity = '0';
-        el.style.transform = '';
-        return;
+        return null;
       }
       // ApGageIncreaseAnimation / VoltageIncreaseAnimation @ sharedassets56.
-      const s = apGageFlashScale(age);
-      const a = apGageFlashAlpha(age);
-      el.classList.add('is-on');
-      el.style.opacity = String(a);
-      el.style.transform = `scale(${0.92 * s})`;
+      return { s: 0.92 * apGageFlashScale(age), a: apGageFlashAlpha(age) };
     };
-    flashUpper(this.apValueUpperEl, this.apValueFlashAt, () => { this.apValueFlashAt = -1; });
-    flashUpper(this.voltageValueUpperEl, this.voltageValueFlashAt, () => { this.voltageValueFlashAt = -1; });
+    this.apUpper = flash(this.apValueFlashAt, () => { this.apValueFlashAt = -1; });
+    this.voltageUpper = flash(this.voltageValueFlashAt, () => { this.voltageValueFlashAt = -1; });
   }
 
-  private buildMental(safe: HTMLElement): void {
-    const root = document.createElement('div');
-    root.className = 'hud-mental';
-    const text = (content: string, className: string, x: number, w: number) => {
-      const node = document.createElement('div');
-      node.className = className;
-      if (className.includes('hud-mental-label')) mountOutlinedText(node, content);
-      else node.textContent = content;
-      place(node, 400, 80, 0.5, 0.5, 0.5, 0.5, x, 16, w, 40);
-      root.append(node);
+  // ── 绘制 ───────────────────────────────────────────────────────
+  /**
+   * 把 HUD 画到 ctx（整块 HUD 已是透明底的独立图层；调用方再以普通 alpha 合成到画面上，
+   * 对应原 .hud 的层叠上下文——HUD 内的加色只与 HUD 自身内容相加）。
+   * 坐标：逻辑画布 = 舞台 / hudScale，SafeArea 1920 宽居中（与原 DOM 布局同一公式）。
+   */
+  draw(ctx: Ctx, view: HudView): void {
+    this.lastView = view;
+    const L = hudLayout(view.cssW, view.cssH);
+    if (!(L.scale > 0)) return;
+    const k = L.scale * view.dpr;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const at = (x: number, y: number) => ctx.setTransform(k, 0, 0, k, (L.safeOffsetX + x) * k, y * k);
+    const midY = L.logicH / 2;
+    at(0, 0);
+    this.drawScore(ctx);
+    at(760, midY - 200);
+    this.drawJudge(ctx);
+    at(1520, midY - 320);
+    this.drawCombo(ctx);
+    at(0, midY - 386);
+    this.drawAp(ctx);
+    at(1420, 50);
+    this.drawMental(ctx);
+    at(1760, 30);
+    this.drawPause(ctx);
+    if (this.techDisplayMode !== 0) {
+      at(1470, 158);
+      this.drawTech(ctx);
+    }
+    ctx.restore();
+  }
+
+  private drawScore(ctx: Ctx): void {
+    // z0：Gauge（圆角底 + 内描边）与 Slider（外描边 + 底 + 渐变填充）
+    const g = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, 34, -12, 400, 48);
+    fillRoundRect(ctx, g.x, g.y, g.w, g.h, 24, 'rgba(77,49,63,.702)');
+    insetRing(ctx, g.x, g.y, g.w, g.h, 24, 2, PINK);
+    const sl = placeRect(400, 48, 0.5, 0.5, 0.5, 0.5, 15, 0, 330, 16);
+    const sx = g.x + sl.x, sy = g.y + sl.y;
+    outerRing(ctx, sx, sy, 330, 16, 8, 2, '#4e444b');
+    fillRoundRect(ctx, sx, sy, 330, 16, 8, '#191418');
+    const fill = Math.max(0, Math.min(1, this.scoreEngine.gaugeFill())) * 330;
+    if (fill > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(sx, sy, 330, 16, 8);
+      ctx.clip();
+      const grad = ctx.createLinearGradient(sx, 0, sx + fill, 0);
+      grad.addColorStop(0, 'rgb(71,244,242)');
+      grad.addColorStop(1, 'rgb(223,93,251)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx, sy, fill, 16);
+      ctx.restore();
+    }
+    // z1：RankLabels（竖线 + 字母，按 DOM 顺序交替）与 RankRoot
+    const xs = [17, 76, 137, 183];
+    const letters = ['C', 'B', 'A', 'S'];
+    for (let i = 0; i < xs.length; i++) {
+      const r = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, xs[i]!, -5, 4, 30);
+      outerRing(ctx, r.x, r.y, r.w, r.h, 1, 1, PINK);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, 1);
+      ctx.clip();
+      ctx.fillStyle = '#4e444b';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(r.x + 1, r.y, 2, r.h);
+      ctx.restore();
+      const t = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, xs[i]!, 16, 60, 40);
+      ctx.save();
+      scaleAbout(ctx, t.x + t.w / 2, t.y + t.h / 2, 0.92);
+      drawOutlinedText(ctx, letters[i]!, { size: 28, weight: 700 }, { color: PINK, width: 2.8 }, '#fff', t.x, t.y, t.w, t.h);
+      ctx.restore();
+    }
+    this.drawRank(ctx);
+    // z2：AddScore 飘字
+    if (this.addScore && this.addScore.a > 0) {
+      const r = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, 305.8, -52, 200, 40);
+      const dx = this.addScore.dx;
+      drawGroup(ctx, { alpha: this.addScore.a, bounds: { x: r.x + dx - 20, y: r.y - 10, w: r.w + 200, h: r.h + 20 } }, (gc) => {
+        drawOutlinedText(gc, this.addScoreText, { size: 24, weight: 700, align: 'left', letterSpacing: 0.96 },
+          { color: PINK, width: 2.4 }, '#fff', r.x + dx, r.y, r.w, r.h);
+      });
+    }
+    // z3：SCORE 标签与分数数字
+    const lb = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, -80, 20, 120, 40);
+    ctx.save();
+    scaleAbout(ctx, lb.x + lb.w / 2, lb.y + lb.h / 2, 0.92);
+    drawOutlinedText(ctx, 'SCORE', { size: 20, weight: 700 }, { color: PINK, width: 2 }, '#fff', lb.x, lb.y, lb.w, lb.h);
+    ctx.restore();
+    const strip = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, 45.8, -47, 300, 40);
+    const score = this.scoreEngine.score;
+    for (let i = 0; i < SCORE_DIGIT_X.length; i++) {
+      const d = placeRect(300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_DIGIT_X[i]!, 0, 32, 40);
+      drawSprite(ctx, spriteUrl(scoreDigitSprite(score, i)), strip.x + d.x, strip.y + d.y, d.w, d.h);
+    }
+    for (let i = 0; i < SCORE_COMMA_X.length; i++) {
+      const d = placeRect(300, 40, 0.5, 0.5, 0.5, 0.5, SCORE_COMMA_X[i]!, 0, 32, 40);
+      drawSprite(ctx, spriteUrl(scoreCommaSprite(score, i)), strip.x + d.x, strip.y + d.y, d.w, d.h);
+    }
+  }
+
+  /**
+   * RankRoot: rank_base 110×121 @ (−170,−13)。
+   * ScoreRankIcon 156×181 scale .55，整体以 button_rank 为遮罩：
+   * rim（底色 RGB(155,145,174) × 贴图 multiply .8）→ White（inset 3，贴图自遮罩）→
+   * Gray / RankColor（再 inset 3，底色 × 贴图 multiply）→ Shine .2 / Deco .8 / RankName。
+   */
+  private drawRank(ctx: Ctx): void {
+    const r = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, -170, -13, 110, 121);
+    drawSprite(ctx, spriteUrl('ui_sc2_ingame_rank_base'), r.x, r.y, r.w, r.h);
+    const mask = image(spriteUrl('ui_sc2_button_rank'));
+    if (!mask) return;
+    const ix = r.x - 23, iy = r.y - 30; // 156×181 居中于 110×121
+    ctx.save();
+    scaleAbout(ctx, ix + 78, iy + 90.5, 0.55);
+    // 图标只随段位 / 贴图就绪 / 变换变化：按设备像素缓存（嵌套遮罩逐帧重画很贵）。
+    const m = ctx.getTransform();
+    const loaded = ['ui_sc2_button_rank_shine', 'ui_sc2_button_rank_deco_01', 'ui_sc2_button_rank_deco_02']
+      .map((n) => (image(spriteUrl(n)) ? 1 : 0)).join('');
+    const key = [this.rank, loaded, m.a, m.b, m.c, m.d, m.e, m.f].join('|');
+    if (this.rankCache?.key !== key) {
+      const corners = [[ix, iy], [ix + 156, iy], [ix, iy + 181], [ix + 156, iy + 181]].map(([x, y]) => m.transformPoint(new DOMPoint(x, y)));
+      const bx = Math.floor(Math.min(...corners.map((p) => p.x))) - 2, by = Math.floor(Math.min(...corners.map((p) => p.y))) - 2;
+      const bw = Math.ceil(Math.max(...corners.map((p) => p.x))) + 2 - bx, bh = Math.ceil(Math.max(...corners.map((p) => p.y))) + 2 - by;
+      const canvas = this.rankCache?.canvas ?? document.createElement('canvas');
+      canvas.width = Math.max(1, bw); canvas.height = Math.max(1, bh);
+      const cc = canvas.getContext('2d')!;
+      cc.setTransform(m.a, m.b, m.c, m.d, m.e - bx, m.f - by);
+      cc.imageSmoothingEnabled = true;
+      cc.imageSmoothingQuality = ctx.imageSmoothingQuality;
+      this.paintRankIcon(cc, mask, ix, iy);
+      this.rankCache = { key, canvas, x: bx, y: by };
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.rankCache.canvas, this.rankCache.x, this.rankCache.y);
+    ctx.restore();
+  }
+
+  private paintRankIcon(ctx: Ctx, mask: HTMLImageElement, ix: number, iy: number): void {
+    const masked = (x: number, y: number, w: number, h: number, draw: (g: Ctx) => void) =>
+      (g: Ctx) => drawGroup(g, { bounds: { x, y, w, h }, mask: (m) => m.drawImage(mask, x, y, w, h) }, draw);
+    const fillBox = (x: number, y: number, w: number, h: number, bg: string | CanvasGradient) => (g: Ctx) => {
+      g.fillStyle = bg;
+      g.fillRect(x, y, w, h);
+      g.globalCompositeOperation = 'multiply';
+      g.drawImage(mask, x, y, w, h);
+      g.globalCompositeOperation = 'source-over';
     };
-    // MentalResolver ctor: value = maxValue = TotalMental (full HP). Preview is forever-alive
-    // (no Bad/Miss drain); preview default TotalMental 1000 as the chrome figure.
-    const full = 1000;
-    text('MENTAL', 'hud-mental-label', -108, 120);
-    text(String(full), 'hud-mental-now', -16, 88);
-    text('/', 'hud-mental-sep', 41, 32);
-    text(String(full), 'hud-mental-max', 80, 80);
-    const track = document.createElement('div');
-    track.className = 'hud-mental-track';
-    place(track, 400, 80, 0.5, 0.5, 0, 0.5, -160, -16, 280, 16);
-    const fill = document.createElement('div');
-    fill.className = 'hud-mental-fill';
-    fill.style.width = '100%';
-    track.append(fill);
-    root.append(track);
-    safe.append(root);
+    masked(ix, iy, 156, 181, (g) => {
+      // rim：底色 + 贴图 multiply（img opacity .8）
+      masked(ix, iy, 156, 181, (h) => {
+        h.fillStyle = 'rgb(155,145,174)';
+        h.fillRect(ix, iy, 156, 181);
+        h.globalAlpha = 0.8;
+        h.globalCompositeOperation = 'multiply';
+        h.drawImage(mask, ix, iy, 156, 181);
+        h.globalAlpha = 1;
+        h.globalCompositeOperation = 'source-over';
+      })(g);
+      // White：inset 3（150×175），贴图自身作遮罩
+      const wx = ix + 3, wy = iy + 3;
+      masked(wx, wy, 150, 175, (h) => {
+        h.drawImage(mask, wx, wy, 150, 175);
+        const cx = wx + 3, cy = wy + 3;
+        masked(cx, cy, 144, 169, fillBox(cx, cy, 144, 169, 'rgb(176,172,184)'))(h);
+        if (this.rank !== 'none') {
+          masked(cx, cy, 144, 169, (c) => {
+            let bg: string | CanvasGradient;
+            if (this.rank === 'S') {
+              const grad = c.createLinearGradient(cx, 0, cx + 144, 0);
+              grad.addColorStop(0, 'rgb(177,147,203)');
+              grad.addColorStop(1, 'rgb(96,228,222)');
+              bg = grad;
+            } else {
+              bg = ({ D: 'rgb(133,150,208)', C: 'rgb(54,215,225)', B: 'rgb(30,196,167)', A: 'rgb(253,91,145)' } as const)[this.rank as 'D'];
+            }
+            fillBox(cx, cy, 144, 169, bg)(c);
+            const sh = placeRect(144, 169, 1, 0, 1, 0, 1, 1, 145, 126);
+            const shine = image(spriteUrl('ui_sc2_button_rank_shine'));
+            if (shine) { c.globalAlpha = 0.2; c.drawImage(shine, cx + sh.x, cy + sh.y, sh.w, sh.h); }
+            c.globalAlpha = 0.8;
+            const d1 = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, -21.5, 51, 103, 69);
+            const d2 = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, 52, -36, 41, 57);
+            drawSprite(c, spriteUrl('ui_sc2_button_rank_deco_01'), cx + d1.x, cy + d1.y, d1.w, d1.h, 'fill');
+            drawSprite(c, spriteUrl('ui_sc2_button_rank_deco_02'), cx + d2.x, cy + d2.y, d2.w, d2.h, 'fill');
+            c.globalAlpha = 1;
+            const nm = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, 0, 2, 120, 120);
+            drawText(c, this.rank, { size: 80, weight: 800, color: '#fff', shadow: { dy: 2, color: 'rgba(0,0,0,.302)' } },
+              cx + nm.x, cy + nm.y, nm.w, nm.h);
+          })(h);
+        }
+      })(g);
+    })(ctx);
+  }
+
+  private drawJudge(ctx: Ctx): void {
+    if (this.judgeScale !== null) {
+      const r = placeRect(400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt), this.judgeW, 80);
+      ctx.save();
+      scaleAbout(ctx, r.x + r.w / 2, r.y + r.h / 2, this.judgeScale);
+      drawSprite(ctx, spriteUrl(this.judgeSprite), r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
+    if (this.conditionScale !== null && this.conditionSpriteName) {
+      const r = placeRect(400, 400, 0.5, 0.5, 0.5, 0.5, 0, fastSlowLayoutY(this.judgementYOpt, this.fastSlowYOpt), 180, 64);
+      ctx.save();
+      scaleAbout(ctx, r.x + r.w / 2, r.y + r.h / 2, this.conditionScale);
+      drawSprite(ctx, spriteUrl(this.conditionSpriteName), r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * ComboRoot（400×320，自成层叠上下文，所以整块先画到隔离组再合成：组内的加色只与组内相加）。
+   * 层序：上底光 → 数字行 → COMBO → AP増加徽章(3) → 爆发(4) → 徽章闪光 / 跨百闪光(5) → 下描边 / 上描边 / 下底光(6)。
+   */
+  private drawCombo(ctx: Ctx): void {
+    drawGroup(ctx, { bounds: { x: -400, y: -300, w: 1200, h: 920 } }, (g) => {
+      g.imageSmoothingQuality = 'high';
+      const row = placeRect(400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
+      this.drawFxGlow(g, row, this.fx.upperGlow, 'upper');
+      // 数字行
+      const digits = comboSlotDigits(this.combo);
+      g.save();
+      scaleAbout(g, row.x + 180, row.y + 60, this.comboRectScale);
+      digits.forEach((d, i) => {
+        drawSprite(g, spriteUrl(`ui_sc2_ingame_num_combo_${d}`), row.x + comboSlotLeft(digits.length, i), row.y, 90, 120);
+      });
+      g.restore();
+      const on = this.apRate >= 1;
+      if (on) {
+        const lb = placeRect(400, 320, 0.5, 0.5, 0.5, 0.5, -40, -30, 244, 65);
+        drawSprite(g, spriteUrl('ui_sc2_ingame_combo'), lb.x, lb.y, lb.w, lb.h);
+      }
+      const badge = placeRect(400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 240, 40);
+      const label = on ? `AP増加 ×1.${this.apRate}` : '';
+      if (on) this.drawApRateBadge(g, badge, label, 10, 'rgba(255,58,153,.55)');
+      // 爆发（z4）
+      if (this.burst) this.drawBurst(g, badge.x + 120, badge.y + 20);
+      // 徽章闪光副本（z5）
+      if (this.apRateUpper && this.apRateUpper.a > 0) {
+        const u = this.apRateUpper;
+        g.save();
+        scaleAbout(g, badge.x + 120, badge.y + 20, u.s);
+        drawGroup(g, { alpha: u.a, bounds: { x: badge.x - 30, y: badge.y - 30, w: 300, h: 100 } }, (h) => {
+          this.drawApRateBadge(h, badge, label, 14, 'rgba(255,58,153,.7)');
+        });
+        g.restore();
+      }
+      // 跨百闪光（z5）：数字副本 + drop-shadow，整层淡出放大
+      if (this.comboFlash && this.comboFlash.a > 0) {
+        const f = this.comboFlash;
+        const digitsF = this.comboFlashDigits;
+        g.save();
+        scaleAbout(g, row.x + 180, row.y + 60, f.s);
+        const blur = 10 * deviceScale(g);
+        drawGroup(g, { alpha: f.a, filter: `drop-shadow(0px 0px ${blur}px rgba(10,150,255,.55))`, bounds: { x: row.x - 40, y: row.y - 40, w: 440, h: 200 } }, (h) => {
+          digitsF.forEach((d, i) => {
+            drawSprite(h, spriteUrl(`ui_sc2_ingame_num_combo_${d}`), row.x + comboSlotLeft(digitsF.length, i), row.y, 90, 120);
+          });
+        });
+        g.restore();
+      }
+      // z6：下描边、上描边（加色）、下底光（普通）
+      this.drawFxOutline(g, row, this.fx.lowerOutline);
+      this.drawFxOutline(g, row, this.fx.upperOutline);
+      this.drawFxGlow(g, row, this.fx.lowerGlow, 'lower');
+    });
+  }
+
+  private drawApRateBadge(g: Ctx, b: Rect, label: string, blur: number, shadow: string): void {
+    outerBlurShadow(g, b.x, b.y, b.w, b.h, 20, blur, shadow);
+    g.save();
+    g.beginPath();
+    g.roundRect(b.x, b.y, b.w, b.h, 20);
+    g.fillStyle = PINK;
+    g.fill();
+    g.clip();
+    drawText(g, label, { size: 28, weight: 700, color: '#fff' }, b.x, b.y, b.w, b.h);
+    g.restore();
+  }
+
+  /** APRateEffect：火花（加色）→ Root（加色）→ Bg_core 压暗（普通）/ 加亮（加色），以徽章中心为原点。 */
+  private drawBurst(g: Ctx, cx: number, cy: number): void {
+    const b = this.burst!;
+    const sp = this.sparksCanvas;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    if (sp) g.drawImage(sp, cx - AP_RATE_SPARK_CANVAS.w / 2, cy - AP_RATE_SPARK_CANVAS.h / 2, AP_RATE_SPARK_CANVAS.w, AP_RATE_SPARK_CANVAS.h);
+    const root = image(AP_RATE_ROOT_TEX);
+    if (root && b.rootAlpha > 0) {
+      const w = AP_RATE_BURST_ROOT.w * b.s, h = AP_RATE_BURST_ROOT.h * b.s;
+      g.globalAlpha = Math.min(1, b.rootAlpha);
+      g.drawImage(root, cx - w / 2, cy - h / 2, w, h);
+      g.globalAlpha = 1;
+    }
+    if (this.apRateCoreTex && this.coreShade && this.coreLight) {
+      const w = AP_RATE_BURST_CORE.w * b.s, h = AP_RATE_BURST_CORE.h * b.s;
+      g.globalCompositeOperation = 'source-over';
+      g.drawImage(this.coreShade, cx - w / 2, cy - h / 2, w, h);
+      g.globalCompositeOperation = 'lighter';
+      g.drawImage(this.coreLight, cx - w / 2, cy - h / 2, w, h);
+    }
+    g.restore();
+  }
+
+  /** AP 継続描边（加色）：每槽 4 / 5 颗同位粒子 = 同一面片以 lighter 叠 N 次。 */
+  private drawFxOutline(g: Ctx, row: Rect, st: ComboFxLayerState): void {
+    if (st.combo <= 0 || st.opacity <= 0) return;
+    const count = st === this.fx.upperOutline ? COMBO_EFFECT_UPPER_BURST : COMBO_EFFECT_LOWER_BURST;
+    const digits = fxSlotDigits(st.combo);
+    g.save();
+    scaleAbout(g, row.x + 180, row.y + 60, st.layerScale);
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = Math.min(1, st.opacity);
+    digits.forEach((d, i) => {
+      const b = comboEffectOutlineBox(d);
+      const tex = tintedMask(b.image === 'digit1' ? COMBO_EFFECT_DIGIT1_TEX : COMBO_EFFECT_SHEET_TEX, COMBO_EFFECT_COLOR);
+      if (!tex) return;
+      const px = row.x + comboSlotLeft(digits.length, i) + b.left, py = row.y + b.top;
+      g.save();
+      scaleAbout(g, px + b.width / 2, py + b.height / 2, st.partScale[i] ?? 1);
+      g.beginPath();
+      g.rect(px, py, b.width, b.height);
+      g.clip();
+      for (let n = 0; n < count; n++) g.drawImage(tex, px + b.maskX, py, b.maskW, b.maskH);
+      g.restore();
+    });
+    g.restore();
+  }
+
+  /** AP 継続底光：上层加色（着色蒙版 200×250）、下层普通合成（预乘贴图 230×280），每槽 2 颗。 */
+  private drawFxGlow(g: Ctx, row: Rect, st: ComboFxLayerState, kind: 'upper' | 'lower'): void {
+    if (st.combo <= 0 || st.opacity <= 0) return;
+    const tex = kind === 'upper' ? tintedMask(COMBO_GLOW_UPPER_TEX, COMBO_GLOW_UPPER_COLOR) : image(COMBO_GLOW_LOWER_TEX);
+    if (!tex) return;
+    const w = kind === 'upper' ? 200 : 230, h = kind === 'upper' ? 250 : 280;
+    const digits = fxSlotDigits(st.combo);
+    g.save();
+    scaleAbout(g, row.x + 180, row.y + 60, st.layerScale);
+    g.globalCompositeOperation = kind === 'upper' ? 'lighter' : 'source-over';
+    g.globalAlpha = Math.min(1, st.opacity);
+    digits.forEach((_, i) => {
+      const cx = row.x + comboSlotLeft(digits.length, i) + 45, cy = row.y + 60;
+      g.save();
+      scaleAbout(g, cx, cy, st.partScale[i] ?? 1);
+      for (let n = 0; n < COMBO_GLOW_BURST; n++) g.drawImage(tex, cx - w / 2, cy - h / 2, w, h);
+      g.restore();
+    });
+    g.restore();
+  }
+
+  /** AP / VOLTAGE 圆盘（.hud-ap 自成层叠上下文）。层序：底盘 → 环(1) → 进度 / 数值 / 标签(2) → 闪光数值(3)。 */
+  private drawAp(ctx: Ctx): void {
+    const meters = [
+      { x: -60, base: 'ui_sc2_ingame_ap_base', gage: 'ui_sc2_ingame_gage_ap', fill: this.apFill, text: this.apText,
+        scale: this.apValueScale, upper: this.apUpper, upperText: this.apUpperText, color: '#0084ff' },
+      { x: 80, base: 'ui_sc2_ingame_voltage_base', gage: 'ui_sc2_ingame_gage_voltage', fill: this.voltageFill, text: this.voltageText,
+        scale: this.voltageValueScale, upper: this.voltageUpper, upperText: this.voltageUpperText, color: '#ff574c' },
+    ].map((m) => ({ ...m, d: placeRect(320, 160, 0.5, 0.5, 0.5, 0.5, m.x, -8, 138, 138) }));
+    for (const m of meters) drawSprite(ctx, spriteUrl(m.base), m.d.x, m.d.y, 138, 138);
+    for (const m of meters) drawSprite(ctx, spriteUrl('ui_sc2_ingame_gage_base_02'), m.d.x + 22, m.d.y + 22, 94, 94);
+    const valueRect = (d: Rect) => {
+      const v = placeRect(138, 138, 0.5, 0.5, 0.5, 0.5, 0, 2, 80, 40);
+      return { x: d.x + v.x, y: d.y + v.y, w: v.w, h: v.h };
+    };
+    const valueText = (g: Ctx, text: string, color: string, r: Rect) =>
+      drawOutlinedText(g, text, { size: 32, weight: 700 }, { color: '#fff', width: 2.6 }, color, r.x, r.y, r.w, r.h);
+    for (const m of meters) {
+      // Image.Type.Filled / Radial360 / fillOrigin Top / fillClockwise=false：
+      // 可见扇区 = 从正上方逆时针 fill×360°（原 CSS conic-gradient 遮罩）。
+      const img = image(spriteUrl(m.gage));
+      if (img && m.fill > 0) {
+        const fx = m.d.x + 24, fy = m.d.y + 24;
+        drawGroup(ctx, {
+          bounds: { x: fx, y: fy, w: 90, h: 90 },
+          mask: (g) => {
+            const grad = g.createConicGradient(-Math.PI / 2, fx + 45, fy + 45);
+            const cut = Math.max(0, Math.min(1, 1 - m.fill));
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(cut, 'rgba(255,255,255,0)');
+            grad.addColorStop(cut, '#fff');
+            grad.addColorStop(1, '#fff');
+            g.fillStyle = grad;
+            g.fillRect(fx, fy, 90, 90);
+          },
+        }, (g) => {
+          g.beginPath();
+          g.rect(fx, fy, 90, 90);
+          g.clip();
+          g.drawImage(img, fx, fy, 90, 90);
+        });
+      }
+      const r = valueRect(m.d);
+      ctx.save();
+      scaleAbout(ctx, r.x + r.w / 2, r.y + r.h / 2, m.scale);
+      valueText(ctx, m.text, m.color, r);
+      ctx.restore();
+    }
+    const label = (text: string, x: number, w: number, color: string) => {
+      const r = placeRect(320, 160, 0.5, 0.5, 0.5, 0.5, x, 53, w, 40);
+      ctx.save();
+      scaleAbout(ctx, r.x + r.w / 2, r.y + r.h / 2, 0.92);
+      drawOutlinedText(ctx, text, { size: 20, weight: 700 }, { color, width: 2 }, '#fff', r.x, r.y, r.w, r.h);
+      ctx.restore();
+    };
+    label('AP', -60, 80, 'rgb(0,132,255)');
+    label('VOLTAGE', 80, 120, 'rgb(255,87,76)');
+    for (const m of meters) {
+      if (!m.upper || m.upper.a <= 0) continue;
+      const r = valueRect(m.d);
+      const up = m.upper;
+      ctx.save();
+      scaleAbout(ctx, r.x + r.w / 2, r.y + r.h / 2, up.s);
+      drawGroup(ctx, { alpha: up.a, bounds: { x: r.x - 20, y: r.y - 10, w: r.w + 40, h: r.h + 20 } }, (g) => valueText(g, m.upperText, m.color, r));
+      ctx.restore();
+    }
+  }
+
+  /** MENTAL 框：满血常驻（预览不扣血）。 */
+  private drawMental(ctx: Ctx): void {
+    fillRoundRect(ctx, 0, 0, 400, 80, 40, 'rgba(0,0,0,.302)');
+    insetRing(ctx, 0, 0, 400, 80, 40, 2, '#1debc7');
+    const box = (x: number, w: number) => placeRect(400, 80, 0.5, 0.5, 0.5, 0.5, x, 16, w, 40);
+    const lb = box(-108, 120);
+    ctx.save();
+    scaleAbout(ctx, lb.x + lb.w / 2, lb.y + lb.h / 2, 0.92);
+    drawOutlinedText(ctx, 'MENTAL', { size: 24, weight: 700 }, { color: TEAL, width: 2.4 }, '#fff', lb.x, lb.y, lb.w, lb.h);
+    ctx.restore();
+    const full = '1000';
+    const now = box(-16, 88), sep = box(41, 32), max = box(80, 80);
+    drawText(ctx, full, { size: 24, weight: 700, color: '#fff', align: 'right' }, now.x, now.y, now.w, now.h);
+    drawText(ctx, '/', { size: 24, weight: 700, color: '#fff' }, sep.x, sep.y, sep.w, sep.h);
+    drawText(ctx, full, { size: 24, weight: 700, color: '#fff', align: 'right' }, max.x, max.y, max.w, max.h);
+    const tr = placeRect(400, 80, 0.5, 0.5, 0, 0.5, -160, -16, 280, 16);
+    outerRing(ctx, tr.x, tr.y, tr.w, tr.h, 8, 2, 'rgb(78,68,75)');
+    fillRoundRect(ctx, tr.x, tr.y, tr.w, tr.h, 8, 'rgb(25,20,24)');
+    // GradientColor level56 #1546 × white Fill（满血）
+    const grad = ctx.createLinearGradient(tr.x, 0, tr.x + tr.w, 0);
+    grad.addColorStop(0, 'rgb(29,235,199)');
+    grad.addColorStop(1, 'rgb(118,240,224)');
+    fillRoundRect(ctx, tr.x, tr.y, tr.w, tr.h, 8, grad);
+  }
+
+  /** 暂停按钮（SafeArea 右上，120×120）。 */
+  private drawPause(ctx: Ctx): void {
+    fillRoundRect(ctx, 0, 0, 120, 120, 60, 'rgb(105,99,101)');
+    fillRoundRect(ctx, 8, 8, 104, 104, 52, 'rgb(248,244,241)');
+    const cx = 16, cy = 16;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(cx, cy, 88, 88, 44);
+    ctx.fillStyle = 'rgb(231,217,206)';
+    ctx.fill();
+    ctx.clip();
+    // ColorImage 内的花纹（按原 104×104 父框算位置）
+    const shine = image(spriteUrl('ui_sc2_button_shine'));
+    if (shine) {
+      ctx.globalAlpha = 0.349;
+      drawContain(ctx, shine, cx - 37.7257, cy - 2.8865, 184.6514, 54.887);
+    }
+    const dot = image(spriteUrl('ui_sc2_button_dot'));
+    if (dot) {
+      ctx.globalAlpha = 0.298;
+      drawContain(ctx, dot, cx - 26.8075, cy - 35.2076, 157.6151, 157.6151);
+    }
+    ctx.globalAlpha = 1;
+    // 图标：两根横条（46×16 白 / 40×10 灰），整体转 90°
+    const ix = cx + 25, iy = cy + 21;
+    ctx.translate(ix + 19, iy + 23);
+    ctx.rotate(Math.PI / 2);
+    ctx.translate(-(ix + 19), -(iy + 23));
+    for (let i = 0; i < 2; i++) {
+      const bx = ix - 4, by = iy + 4 + i * 22;
+      fillRoundRect(ctx, bx, by, 46, 16, 4, '#fff');
+      fillRoundRect(ctx, bx + 3, by + 3, 40, 10, 3, 'rgb(105,99,101)');
+    }
+    ctx.restore();
+  }
+
+  /** TECHNICAL SCORE 框（TechnicalScoreDisplay ≠ 0 时显示）。 */
+  private drawTech(ctx: Ctx): void {
+    fillRoundRect(ctx, 0, 0, 394, 80, 40, 'rgba(0,0,0,.302)');
+    insetRing(ctx, 0, 0, 394, 80, 40, 2, '#1debc7');
+    // 标签：两行，line-height .85，左对齐，垂直居中后 scale .92
+    const lh = 24 * 0.85;
+    const top = 40 - lh;
+    ctx.save();
+    scaleAbout(ctx, 40.9 + 73, 40, 0.92);
+    ['TECHNICAL', 'SCORE'].forEach((line, i) => {
+      drawOutlinedText(ctx, line, { size: 24, weight: 700, align: 'left' }, { color: TEAL, width: 2.4 }, '#fff', 40.9, top + i * lh, 146, lh);
+    });
+    ctx.restore();
+    // 数值：大字 36 EB + 小字 24 B 同基线，右缘 = 394 − 21
+    const big = { size: 36, weight: 800, color: '#fff', align: 'left' as const };
+    const small = { size: 24, weight: 700, color: '#fff', align: 'left' as const };
+    setTextStyle(ctx, big);
+    const e36 = fontExtents(ctx, ctx.font);
+    const wBig = ctx.measureText(this.techText.whole).width;
+    setTextStyle(ctx, small);
+    const wSmall = ctx.measureText(this.techText.frac).width;
+    const h = e36.asc + e36.desc;
+    const baseline = (80 - h) / 2 + e36.asc;
+    const x0 = 373 - (wBig + wSmall);
+    setTextStyle(ctx, big);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(this.techText.whole, x0, baseline);
+    setTextStyle(ctx, small);
+    ctx.fillText(this.techText.frac, x0 + wBig, baseline);
+  }
+
+  // ── 检查接口（自动化测试 / 调试用）────────────────────────────────
+  /**
+   * 按最近一次 draw 的视口，返回各元素在舞台 CSS 像素里的几何与状态。
+   * 与绘制共用同一组布局函数，测试据此核对原 DOM 版本的布局契约。
+   */
+  inspect() {
+    const v = this.lastView;
+    const L = hudLayout(v.cssW, v.cssH);
+    const s = L.scale;
+    const comboX = L.safeOffsetX + 1520, comboY = L.logicH / 2 - 320;
+    const toStage = (x: number, y: number, w: number, h: number) => ({ x: (comboX + x) * s, y: (comboY + y) * s, w: w * s, h: h * s });
+    const row = placeRect(400, 320, 0.5, 0.5, 0.5, 0.5, -44, 54, 360, 120);
+    const badge = placeRect(400, 320, 0.5, 0.5, 0.5, 0.5, -40, -84, 240, 40);
+    const digits = comboSlotDigits(this.combo);
+    const slotCenter = (n: number, i: number, scale: number) => {
+      const c = row.x + comboSlotLeft(n, i) + 45;
+      const cx = row.x + 180;
+      return (comboX + cx + (c - cx) * scale) * s;
+    };
+    const layer = (name: keyof LiveHud['fx']) => {
+      const st = this.fx[name];
+      const ds = fxSlotDigits(st.combo);
+      const outline = name === 'lowerOutline' || name === 'upperOutline';
+      return {
+        visible: st.combo > 0,
+        layerScale: st.layerScale,
+        opacity: st.opacity,
+        partsPerSlot: outline ? (name === 'upperOutline' ? COMBO_EFFECT_UPPER_BURST : COMBO_EFFECT_LOWER_BURST) : COMBO_GLOW_BURST,
+        composite: name === 'lowerGlow' ? 'source-over' : 'lighter',
+        slotCenters: ds.map((_, i) => slotCenter(ds.length, i, st.layerScale)),
+        parts: outline ? ds.map((d) => {
+          const b = comboEffectOutlineBox(d);
+          return { w: b.width, h: b.height, l: b.left, t: b.top, mx: b.maskX, op: st.opacity, img: b.image === 'digit1' ? COMBO_EFFECT_DIGIT1_TEX : COMBO_EFFECT_SHEET_TEX };
+        }) : [],
+        glow: outline ? [] : ds.map((_, i) => ({ w: name === 'upperGlow' ? 200 : 230, op: st.opacity, scale: st.partScale[i] ?? 1 })),
+      };
+    };
+    const b = this.burst;
+    const rootImg = image(AP_RATE_ROOT_TEX);
+    return {
+      view: v,
+      scale: s,
+      combo: {
+        value: this.combo,
+        sprites: digits.map((d) => `ui_sc2_ingame_num_combo_${d}`),
+        slotCenters: digits.map((_, i) => slotCenter(digits.length, i, this.comboRectScale)),
+        rowScale: this.comboRectScale,
+      },
+      score: { value: this.scoreEngine.score, sprites: SCORE_DIGIT_X.map((_, i) => scoreDigitSprite(this.scoreEngine.score, i)) },
+      judge: { visible: this.judgeScale !== null, sprite: this.judgeSprite, scale: this.judgeScale },
+      condition: { visible: this.conditionScale !== null, sprite: this.conditionSpriteName },
+      fx: {
+        order: ['upperGlow', 'row', 'label', 'badge', 'burst', 'badgeFlash', 'comboFlash', 'lowerOutline', 'upperOutline', 'lowerGlow'],
+        lowerOutline: layer('lowerOutline'), upperOutline: layer('upperOutline'),
+        lowerGlow: layer('lowerGlow'), upperGlow: layer('upperGlow'),
+      },
+      apRate: { value: this.apRate, visible: this.apRate >= 1, badge: toStage(badge.x, badge.y, badge.w, badge.h), badgeCssW: badge.w },
+      burst: {
+        active: b !== null,
+        scale: b?.s ?? 0,
+        root: b ? toStage(badge.x + 120 - AP_RATE_BURST_ROOT.w * b.s / 2, badge.y + 20 - AP_RATE_BURST_ROOT.h * b.s / 2,
+          AP_RATE_BURST_ROOT.w * b.s, AP_RATE_BURST_ROOT.h * b.s) : null,
+        rootSrc: AP_RATE_ROOT_TEX,
+        rootLoaded: rootImg !== null,
+        hasCore: this.apRateCoreTex !== null && this.coreShade !== null && this.coreLight !== null,
+        sparksCssW: AP_RATE_SPARK_CANVAS.w,
+      },
+      sparksCanvas: this.sparksCanvas,
+      coreLightCanvas: this.coreLight,
+      ap: { text: this.apText, voltage: this.voltageText, apFill: this.apFill, voltageFill: this.voltageFill },
+      rank: this.rank,
+      tech: this.techDisplayMode === 0 ? null : `${this.techText.whole}${this.techText.frac}`,
+    };
   }
 }
