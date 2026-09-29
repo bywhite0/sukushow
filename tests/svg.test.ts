@@ -5,6 +5,7 @@ import { deflateRawSync } from 'node:zlib';
 import { decodeChartBytes } from '../src/chart';
 import { defaultLayout, timeY } from '../src/layout';
 import { type SpriteLibrary, renderSvg } from '../src/svg';
+import { feverWindow, isFeverAt } from '../src/fever';
 
 /** 与渲染器同一口径的数字格式（去掉浮点噪声、最多三位小数）。 */
 const n3 = (v: number) => {
@@ -323,5 +324,110 @@ describe('分列', () => {
     // 时间范围标注。
     expect(svg).toContain('0s – ');
     expect(svg).toContain(`– ${n3(chart.duration)}s`);
+  });
+});
+
+describe('Combo 与 Fever', () => {
+  it('MaxCombo：非 Hold 各 1，Hold 只算链首（1 + 判定航点）', () => {
+    // 两个瞬时音符（各 1）+ 一条单段 Hold（1 + 2 个航点）= 2 + 3 = 5。
+    const chart = chartOf([
+      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) },
+      { Uid: 2, just: '2.0', holds: [], Flags: flags(0, 20, 22) },
+      { Uid: 3, just: '3.0', holds: ['4.0', '5.0'], Flags: flags(1, 30, 32, 30, 32) },
+    ]);
+    expect(chart.maxCombo).toBe(5);
+  });
+
+  it('MaxCombo：多段链按半拍重采样，不用 JSON 的航点', () => {
+    // 120 BPM → 半拍 0.25 秒。两段链从 1s 连到 2s：链首 1 + 重采样 4 点 = 5。
+    // 若误用 JSON 航点（每段各 1 个）会得到 1 + 2 = 3。
+    const chart = chartOf([
+      { Uid: 1, just: '1.0', holds: ['1.5'], Flags: flags(1, 10, 20, 10, 20) },
+      { Uid: 2, just: '1.5', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
+    ]);
+    expect(chart.maxCombo).toBe(5);
+  });
+
+  it('Fever 窗口：分段表 = [0, ...边界, 曲末]，取第 N 段', () => {
+    // 表头 + 四个边界 + 曲末，共 5 段。
+    const csv = [
+      'song_time,key_type',
+      '18228,20',
+      '42532,20',
+      '66835,20',
+      '91139,20',
+      '136709,99',
+    ].join('\n');
+    expect(feverWindow(csv, 5)).toEqual({ start: 91.139, end: 136.709 });
+    expect(feverWindow(csv, 1)).toEqual({ start: 0, end: 18.228 });
+    expect(isFeverAt(100, { start: 91.139, end: 136.709 })).toBe(true);
+    // 左闭右开。
+    expect(isFeverAt(136.709, { start: 91.139, end: 136.709 })).toBe(false);
+    expect(isFeverAt(50, { start: 91.139, end: 136.709 })).toBe(false);
+    expect(isFeverAt(50, null)).toBe(false);
+  });
+
+  it('Fever 段号越界时报错', () => {
+    const csv = ['song_time,key_type', '18228,20', '42532,20', '66835,20', '91139,20', '136709,99'].join('\n');
+    expect(() => feverWindow(csv, 0)).toThrow();
+    expect(() => feverWindow(csv, 6)).toThrow();
+  });
+
+  it('侧栏：画 Fever 带与各标注', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const { svg, stats } = renderSvg(chart, lib(), opts({
+      aspect: 0,
+      side: { barNumbers: true, bpm: true, beats: true, fever: { start: 0.5, end: 3 } },
+    }));
+    expect(stats.fever).toBe(true);
+    expect(count(svg, 'fever-band')).toBe(1);
+    expect(count(svg, 'side-fever')).toBe(1);
+    expect(svg).toContain('>FEVER</text>');
+    expect(count(svg, 'side-bpm')).toBe(1);
+    expect(svg).toContain('BPM 120');
+    // 侧栏占位后轨道右移。
+    expect(svg).toContain(`width="${992 + 96}"`);
+  });
+
+  it('侧栏：关掉时不占宽度', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const { svg } = renderSvg(chart, lib(), opts({ aspect: 0 }));
+    expect(count(svg, 'side-bg')).toBe(0);
+    expect(svg).toContain('width="992"');
+  });
+});
+
+describe('底部信息区', () => {
+  it('封面与两行文字画在谱面下方，画布随之变高', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const plain = renderSvg(chart, lib(), opts({ aspect: 0 })).stats;
+    const { svg, stats } = renderSvg(chart, lib(), opts({
+      aspect: 0,
+      meta: { title: '抱きしめる花びら', subtitle: 'MASTER · Lv.27', jacket: 'data:image/png;base64,x', size: 192 },
+    }));
+    // 总高 = 原高 + 封面边长 + 上下各一份 padX。
+    expect(stats.columnHeight).toBeCloseTo(plain.columnHeight + 192 + 16 * 2, 3);
+    expect(count(svg, 'meta')).toBe(1);
+    expect(svg).toContain('抱きしめる花びら');
+    expect(svg).toContain('MASTER · Lv.27');
+    expect(svg).toContain('data:image/png;base64,x');
+    // 信息区在谱面之下。
+    const metaY = Number(svg.match(/<rect class="meta" x="0" y="([\d.]+)"/)![1]);
+    const rootH = Number(svg.match(/height="([\d.]+)"/)![1]);
+    expect(metaY).toBeLessThan(rootH);
+    expect(metaY).toBeGreaterThan(plain.columnHeight - 1);
+  });
+
+  it('不给封面时只画文字', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const { svg } = renderSvg(chart, lib(), opts({ aspect: 0, meta: { title: 'T' } }));
+    expect(svg).toContain('>T</text>');
+    expect(svg).not.toContain('<image xlink:href="data:image');
+  });
+
+  it('不传 meta 时底部不留白', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const { svg } = renderSvg(chart, lib(), opts({ aspect: 0 }));
+    expect(count(svg, 'meta')).toBe(0);
   });
 });

@@ -19,11 +19,17 @@
 这边同此思路——整谱默认按**目标长宽比**反推列数（`--aspect`，默认 2.4），铺成横版。
 想要一张长图用 `--single-column`，只看某一段用 `--from/--to`（局部图默认不切列）。
 
+底部信息区（`--meta`）也照那边的版式：图片**底部**一条横带，左边方形封面、右边曲名与难度。
+
 口径来源见 [`docs/evidence.md`](docs/evidence.md)。
 
 ![整谱分列渲染示例](docs/shots/columns.png)
 
-*上例：抱きしめる花びら MASTER 整谱，`--px-per-sec 220` 铺成 9 列横版（8992×3659）。*
+*上例：抱きしめる花びら MASTER 整谱，铺成横版。*
+
+![侧栏与 Fever 示例](docs/shots/side-fever.png)
+
+*上例：`--side` 的左侧栏（小节号 / BPM / 拍号 / Fever）与 `--meta` 的底部信息区。*
 
 ![局部渲染示例](docs/shots/heart.png)
 
@@ -46,7 +52,7 @@ pnpm render <谱面.bytes|.json> -o <输出.svg> [选项]
 | 选项 | 说明 |
 |---|---|
 | `--lane-px <n>` | 每格轨道宽度（默认 16） |
-| `--px-per-sec <n>` | 每秒纵向像素（默认 220） |
+| `--px-per-sec <n>` | 每秒纵向像素（默认 340，对齐参考仓库的等效密度） |
 | `--pad <n>` | 上下左右留白（默认 16） |
 | `--from <秒>` / `--to <秒>` | 只渲染这一段（长曲出局部图，文件小很多） |
 | `--aspect <n>` | 目标长宽比（宽/高），按它定列数（默认 2.4） |
@@ -54,6 +60,13 @@ pnpm render <谱面.bytes|.json> -o <输出.svg> [选项]
 | `--single-column` | 不切列，出一张长图 |
 | `--column-gap <px>` | 列间距（默认 8） |
 | `--no-col-labels` | 不标列号与时间范围 |
+| `--side` | 左侧栏：小节号 / BPM / 拍号 / Fever |
+| `--side-width <px>` | 侧栏宽度（默认 96） |
+| `--no-side-bars` / `--no-side-bpm` / `--no-side-beats` / `--no-fever` | 侧栏关掉对应项 |
+| `--meta` | 底部信息区：封面 + 曲名 + 难度 |
+| `--meta-size <px>` | 封面边长（默认 192，同参考仓库的 `meta_size`） |
+| `--masterdata <dir>` | `MusicScores.yaml` / `Musics.yaml` 所在目录 |
+| `--jacket-dir <dir>` | 曲绘目录（`<曲目Id>.png`） |
 | `--mirror` | 左右镜像 |
 | `--no-grid` / `--no-measures` / `--no-beats` / `--no-simul` | 关掉对应层 |
 | `--bar-numbers` | 标小节号 |

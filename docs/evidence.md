@@ -106,6 +106,46 @@ SVG 用 `linearGradient` + `gradientUnits="userSpaceOnUse"`，端点即这对投
 - 余弦脉动呼吸光不实现。
 - 串链**允许汇合**（两个节点可指向同一后继），故顺链遍历按 Uid 去重，否则汇合点会画两遍。
 
+## 侧栏标注与 Fever
+
+轨道左侧的侧栏（`--side`）画小节号、BPM、拍号与 Fever 区。BPM 与拍号**只在变化处标**，
+否则整屏重复同一个数字。参考仓库 `pjsekai-scores-rs` 把这类标注竖排在轨道两侧，本仓库只留左侧。
+
+**Fever 窗口不在谱面文件里**（谱面顶层只有 `Notes` / `Bpms` / `Offset` / `Beats`）。
+它来自两处主数据：
+
+- `masterdata/Musics.yaml` 的 `FeverSectionNo`（1～5）指明第几段
+- `cache/plain/musicscore_<id>.csv` 的 `key_type=20` 行给出分段边界（毫秒），`key_type=99` 给出曲末
+
+段表 = `[0, ...边界, 曲末]`，窗口 = `[段表[N−1], 段表[N]]`。口径与 llll-preview-web 的
+`feverFromMusicScore` 一致。抱花（`203117`）的边界是 18228 / 42532 / 66835 / 91139 ms，
+曲末 136709 ms，`FeverSectionNo = 5` → 窗口 **91.139s → 136.709s**。
+
+注意「曲末」取 CSV 原始顺序里**最后一个** `key_type=99`，不是时间最大的那个。
+
+## Combo
+
+`chart.maxCombo` 的口径同 llll-preview-web 的 `chartAllNoteSize`：非 Hold 每个算 1；
+Hold **只算链首**，链首本身 1 + 判定航点数——单段 Hold 用 JSON 的 `holds`，多段链用
+`getHolds` 按**半拍**重采样（链中节点不计，它们由链首的航点覆盖）。
+
+`getHolds` 的末端容差取 `2e-4`——RE 文档给的是 `(long)(|Δ|×10000) <= 1`。全量 616 张实测
+与 `MusicScores.yaml` 的 `MaxCombo` 命中 **614**；用 `1e-4` 只命中 610，去掉容差也是 610。
+
+差的两张（`204103_04` 差 1、`405138_04` 差 2）出在**变速段**：`405138_04` 在 84.6s 有
+190→38→380→760→1140→190 的连续变速，半拍网格在那里步长骤变，原版 float32 累加与这里的
+double 累加会分岔。这是实现细节差异，不是口径错误。故**标注优先用主数据的权威 `MaxCombo`**，
+自算值只作兜底。
+
+## 底部信息区
+
+照参考仓库 `pjsekai-scores-rs` 的版式：信息区在图片**底部**一条横带，左边方形封面
+（`meta_size = 192` 见方，左边距 `lane_padding×2`），右边曲名与副标题。本仓库沿用同样的
+相对关系，画布总高相应增加 `封面边长 + padX×2`。
+
+封面即曲绘，源包是 `cache/plain/image_music_thumbnail_<id>.assetbundle`，需解包后取 PNG；
+对照仓库 llll-preview-web 已解好一批在 `public/assets/jacket/`。
+
 ## 谱面数据格式
 
 deflate-raw 压缩的 JSON，含 `Notes`、`Bpms`、可选 `Beats`：

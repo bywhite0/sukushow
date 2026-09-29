@@ -14,6 +14,7 @@
  */
 
 import type { Chart, Note } from './chart';
+import type { FeverWindow } from './fever';
 import {
   type Layout, LANES, canvasWidth, edgeX, measures, noteSpan, timeY, trackWidth,
 } from './layout';
@@ -87,6 +88,58 @@ export interface SvgOptions {
    * 不标出来读谱时会误以为是两个音符。默认开。
    */
   showColumnLabels?: boolean;
+  /**
+   * 轨道左侧的侧栏：小节号、BPM、拍号、Fever 区。
+   *
+   * 参考仓库 `pjsekai-scores-rs` 就把这些竖排在轨道两侧。侧栏宽由 `sideWidth` 定，
+   * 关掉时成图宽度不变（侧栏本来就画在留白里），所以默认开。
+   */
+  side?: SidePanel;
+  /**
+   * 底部信息区（封面 + 曲名 + 难度）。
+   *
+   * 参考仓库把它放在图片**底部**，不是侧栏里——见 `MetaPanel`。
+   */
+  meta?: MetaPanel;
+}
+
+/** 侧栏内容。全部为可选——缺哪项就不画哪项。 */
+export interface SidePanel {
+  /** 侧栏宽度（像素）。默认 96。 */
+  width?: number;
+  /** 每小节标 `#序号`（1 起）。 */
+  barNumbers?: boolean;
+  /** BPM 变化处标 `BPM n`。 */
+  bpm?: boolean;
+  /** 拍号变化处标 `n/4`。 */
+  beats?: boolean;
+  /** Fever 时段：底色带 + `FEVER` 文字。 */
+  fever?: FeverWindow | null;
+  /** 谱面标题等信息，画在侧栏顶部的信息块里。 */
+  info?: string[];
+}
+
+/**
+ * 底部信息区——照参考仓库 `pjsekai-scores-rs` 的做法：**图片底部一条横带**，
+ * 左边一张方形封面，右边两行文字（曲名 / 难度与等级）。
+ *
+ * 参考仓库的算法（`drawing.rs`）：画布总高 = 谱面段高 + `time_padding×2` + `meta_size`
+ * + `time_padding×2`，其中 `meta_size = 192`；封面是 `meta_size` 见方，左上角落在
+ * `(lane_padding×2, max_height + time_padding×3)`。
+ */
+export interface MetaPanel {
+  /** 曲名（第一行）。 */
+  title?: string;
+  /** 副标题（第二行，通常放难度与等级）。 */
+  subtitle?: string;
+  /**
+   * 封面图（data URI 或链接）。
+   *
+   * 曲绘源包是 `image_music_thumbnail_<id>.assetbundle`，需解包后取 PNG。
+   */
+  jacket?: string;
+  /** 封面边长（像素），默认 192（同参考仓库的 `meta_size`）。 */
+  size?: number;
 }
 
 /** 渲染统计，便于脚本与测试自检。 */
@@ -105,6 +158,8 @@ export interface RenderStats {
   simultaneous: number;
   /** 用了兜底配色的音符数（贴图缺失）。 */
   fallback: number;
+  /** 是否画出了 Fever 区。 */
+  fever: boolean;
   /** 列数。 */
   columns: number;
   /** 列宽（像素）。 */
@@ -140,9 +195,33 @@ const DEFAULT_CSS = [
   '.bar-text{font:11px/1 "Segoe UI",system-ui,sans-serif;fill:#ed5eaa;fill-opacity:.8}',
   '.col-text{font:bold 15px/1 "Segoe UI",system-ui,sans-serif;fill:#dbe1ec;fill-opacity:.85}',
   '.col-sub{font:11px/1 "Segoe UI",system-ui,sans-serif;fill:#dbe1ec;fill-opacity:.5}',
+  // 侧栏
+  '.side-bg{fill:#121a2c}',
+  '.side-bar{font:10px/1 "Segoe UI",system-ui,sans-serif;fill:#8fa3c0}',
+  '.side-bpm{font:bold 11px/1 "Segoe UI",system-ui,sans-serif;fill:#ffd166}',
+  '.side-beat{font:10px/1 "Segoe UI",system-ui,sans-serif;fill:#8fa3c0;fill-opacity:.75}',
+  '.side-fever{font:bold 11px/1 "Segoe UI",system-ui,sans-serif;fill:#ff6bd6}',
+  '.fever-band{fill:#ff3fb4;fill-opacity:.16}',
+  '.fever-edge{stroke:#ff6bd6;stroke-opacity:.75;stroke-width:1.5;stroke-dasharray:4 3}',
+  '.side-tick{stroke:#8fa3c0;stroke-opacity:.5;stroke-width:1}',
+  // 底部信息区（照参考仓库：meta 底色 + 分隔线 + 曲名 / 副标题）
+  '.meta{fill:#0f1626}',
+  '.meta-line{stroke:#2a3a55;stroke-width:1}',
+  '.meta-title{font:bold 26px/1 "Segoe UI",system-ui,sans-serif;fill:#e8eefc}',
+  '.meta-sub{font:15px/1 "Segoe UI",system-ui,sans-serif;fill:#9fb0cc}',
+  '.meta-frame{fill:none;stroke:#2a3a55;stroke-width:1}',
 ].join('\n');
 
 export interface Column { from: number; to: number }
+
+/**
+ * 切列的最小门槛：内容高不到「列宽 × 这个系数」就不切。
+ *
+ * 横版的目标比例是 2.4:1，按 `N = √(aspect·H/W)` 算，`H < 2.4·W` 时 N 会落到 1.5 以下、
+ * 四舍五入成 2——把一张 3 秒的短谱拆成两栏，每栏才一个音符。这种「短谱」本来就不该切，
+ * 系数取 2.4 与目标比例一致。
+ */
+const MIN_SPLIT_FACTOR = 2.4;
 
 /**
  * 切列方式。
@@ -194,6 +273,9 @@ export function splitColumns(
   }
 
   if (!(totalH > 0)) return [{ from, to }];
+  // 短谱不切列：单列本来就不是细高条，切了反而把 3 秒的谱拆成两栏。
+  // 判据取「内容高是否达到列宽的数倍」——达不到就说明整谱一张图放得下。
+  if (totalH < colW * MIN_SPLIT_FACTOR) return [{ from, to }];
   // 上限指「最终图片高」，故扣掉每列上下各一份 padY。
   const maxTime = mode.kind === 'height'
     ? Math.max(1e-6, (mode.maxHeight - lay.padY * 2) / lay.pxPerSec)
@@ -247,11 +329,16 @@ export function splitColumns(
 /** 生成一张谱面 SVG。 */
 export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { svg: string; stats: RenderStats } {
   // 时长以谱面为准：时间轴靠它把 0 秒锚在内容底部，让调用方另行同步是个脚枪。
-  const lay: Layout = { ...opt.layout, duration: chart.duration };
+  const sideOn = !!opt.side;
+  const lay: Layout = {
+    ...opt.layout,
+    duration: chart.duration,
+    sideWidth: sideOn ? (opt.side?.width ?? 96) : 0,
+  };
   const colW = canvasWidth(lay);
 
   const stats: RenderStats = {
-    notes: 0, instants: 0, holds: 0, bars: 0, beats: 0, simultaneous: 0, fallback: 0,
+    notes: 0, instants: 0, holds: 0, bars: 0, beats: 0, simultaneous: 0, fallback: 0, fever: false,
     columns: 0, columnWidth: colW, columnHeight: 0,
   };
   // 音符数按 Uid 去重：跨列的长带会被画两次，但「谱面里有多少音符」不该跟着翻倍。
@@ -307,7 +394,23 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
 
     // 背景与轨道栏。
     if (opt.background) body.push(`<rect class="bg" x="0" y="${n(yTop)}" width="${n(colW)}" height="${n(h)}"/>`);
-    body.push(`<rect class="lane" x="${n(lay.padX)}" y="${n(yTop)}" width="${n(trackW)}" height="${n(h)}"/>`);
+    body.push(`<rect class="lane" x="${n(lay.padX + lay.sideWidth)}" y="${n(yTop)}" width="${n(trackW)}" height="${n(h)}"/>`);
+
+    // Fever 底色带——画在音符之下，只铺轨道栏，免得盖住侧栏文字。
+    const fv = opt.side?.fever;
+    if (fv && fv.end > fv.start) {
+      const yA = timeY(fv.end, lay), yB = timeY(fv.start, lay);
+      if (overlaps(yA, yB)) {
+        const top = Math.max(yA, yTop), bot = Math.min(yB, yBottom);
+        body.push(`<rect class="fever-band" x="${n(lay.padX + lay.sideWidth)}" y="${n(top)}" width="${n(trackW)}" height="${n(bot - top)}"/>`);
+        // 上下两条虚线边，让区间端点看得见。
+        for (const y of [yA, yB]) {
+          if (!visible(y)) continue;
+          body.push(`<line class="fever-edge" x1="${n(lay.padX + lay.sideWidth)}" y1="${n(y)}" x2="${n(lay.padX + lay.sideWidth + trackW)}" y2="${n(y)}"/>`);
+        }
+        stats.fever = true;
+      }
+    }
 
     // 轨道格线。
     if (opt.showGrid) {
@@ -327,7 +430,7 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
       for (const m of bars) {
         const y = timeY(m.time, lay);
         if (!visible(y)) continue;
-        body.push(`<line class="bar-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
+        body.push(`<line class="bar-line" x1="${n(lay.padX + lay.sideWidth)}" y1="${n(y)}" x2="${n(lay.padX + lay.sideWidth + trackW)}" y2="${n(y)}"/>`);
         stats.bars++;
       }
     }
@@ -335,7 +438,7 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
       for (let i = 0; i < bars.length; i++) {
         const y = timeY(bars[i].time, lay);
         if (!visible(y)) continue;
-        body.push(`<text class="bar-text" x="${n(lay.padX + 3)}" y="${n(y - 3)}">${i + 1}</text>`);
+        body.push(`<text class="bar-text" x="${n(lay.padX + lay.sideWidth + 3)}" y="${n(y - 3)}">${i + 1}</text>`);
       }
     }
     if (opt.showBeats) {
@@ -348,11 +451,14 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
         for (let b = 1; b < per; b++) {
           const y = timeY(t0 + (span / per) * b, lay);
           if (!visible(y)) continue;
-          body.push(`<line class="beat-line" x1="${n(lay.padX)}" y1="${n(y)}" x2="${n(lay.padX + trackW)}" y2="${n(y)}"/>`);
+          body.push(`<line class="beat-line" x1="${n(lay.padX + lay.sideWidth)}" y1="${n(y)}" x2="${n(lay.padX + lay.sideWidth + trackW)}" y2="${n(y)}"/>`);
           stats.beats++;
         }
       }
     }
+
+    // ── 侧栏：小节号 / BPM / 拍号 / Fever ────────────────────────────────
+    if (sideOn) body.push(sidePanel(opt.side!, chart, bars, lay, yTop, yBottom, rendered.length === 0));
 
     // 同时押连线。
     if (opt.showSimultaneous) {
@@ -464,6 +570,11 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
     );
   }
 
+  // 底部信息区：参考仓库把它放在谱面**下方**，画布总高随之增加。
+  const metaH = opt.meta ? (opt.meta.size ?? 192) + lay.padX * 2 : 0;
+  if (opt.meta) parts.push(metaPanel(opt.meta, totalW, bodyTop + maxH, lay.padX));
+  stats.columnHeight = maxH + headerH + metaH;
+
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"`,
     ` width="${n(totalW)}" height="${n(stats.columnHeight)}" viewBox="0 0 ${n(totalW)} ${n(stats.columnHeight)}">`,
@@ -475,6 +586,38 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
   return { svg, stats };
 }
 
+/**
+ * 底部信息区 —— 照参考仓库 `pjsekai-scores-rs`：封面 + 曲名 + 副标题，横带贴在图底。
+ *
+ * 参考仓库的排布（`drawing.rs` 的 meta 段）：封面 `meta_size` 见方，左边距
+ * `lane_padding×2`；文字块在封面右侧，曲名基线比封面底高 16px，副标题再往下。
+ * 本仓库沿用同样的相对关系，尺寸按本仓的留白习惯缩到 192。
+ */
+function metaPanel(meta: MetaPanel, totalW: number, yTop: number, padX: number): string {
+  const size = meta.size ?? 192;
+  const pad = padX * 2;
+  const out: string[] = [];
+  const h = size + padX * 2;
+  out.push(`<rect class="meta" x="0" y="${n(yTop)}" width="${n(totalW)}" height="${n(h)}"/>`);
+  out.push(`<line class="meta-line" x1="0" y1="${n(yTop)}" x2="${n(totalW)}" y2="${n(yTop)}"/>`);
+  const imgY = yTop + padX;
+  if (meta.jacket) {
+    out.push(
+      `<image xlink:href="${esc(meta.jacket)}" x="${n(pad)}" y="${n(imgY)}"`
+      + ` width="${n(size)}" height="${n(size)}" preserveAspectRatio="xMidYMid slice"/>`,
+    );
+    out.push(`<rect class="meta-frame" x="${n(pad)}" y="${n(imgY)}" width="${n(size)}" height="${n(size)}"/>`);
+  }
+  const textX = pad + (meta.jacket ? size + padX * 2 : 0);
+  if (meta.title) {
+    out.push(`<text class="meta-title" x="${n(textX)}" y="${n(imgY + size - 16)}">${esc(meta.title)}</text>`);
+  }
+  if (meta.subtitle) {
+    out.push(`<text class="meta-sub" x="${n(textX)}" y="${n(imgY + size - 16 + 24)}">${esc(meta.subtitle)}</text>`);
+  }
+  return out.join('');
+}
+
 /** 取某时刻所在小节的拍数（拍号分子）。 */
 function beatsPerBar(chart: Chart, time: number): number {
   let num = 4;
@@ -483,6 +626,80 @@ function beatsPerBar(chart: Chart, time: number): number {
     else break;
   }
   return Math.max(1, Math.round(num));
+}
+
+/**
+ * 侧栏——轨道左侧的竖排信息条。
+ *
+ * 参考仓库 `pjsekai-scores-rs` 把小节号、BPM、事件名贴在轨道两侧；本仓库只留左侧，
+ * 且**不占列顶表头**（表头留给列号与时间范围）。
+ *
+ * 各项都是「变化点才标」：BPM 与拍号只在取值改变处出现，否则整屏重复同一个数字。
+ * Fever 段用底色带 + 竖排 `FEVER` 标出。
+ */
+function sidePanel(
+  side: SidePanel, chart: Chart, bars: { time: number }[], lay: Layout,
+  yTop: number, yBottom: number, showInfo: boolean,
+): string {
+  const w = lay.sideWidth;
+  const out: string[] = [];
+  const visible = (y: number) => y >= yTop - 40 && y <= yBottom + 40;
+  // 侧栏底色：整列一条，压在轨道左边。
+  out.push(`<rect class="side-bg" x="0" y="${n(yTop)}" width="${n(w)}" height="${n(yBottom - yTop)}"/>`);
+  // 右边界线，与轨道分开。
+  out.push(`<line class="edge" x1="${n(w)}" y1="${n(yTop)}" x2="${n(w)}" y2="${n(yBottom)}"/>`);
+
+  // 小节号：每小节一条短横线 + `#序号`。
+  if (side.barNumbers) {
+    for (let i = 0; i < bars.length; i++) {
+      const y = timeY(bars[i].time, lay);
+      if (!visible(y)) continue;
+      out.push(`<line class="side-tick" x1="${n(w - 8)}" y1="${n(y)}" x2="${n(w)}" y2="${n(y)}"/>`);
+      out.push(`<text class="side-bar" x="${n(w - 12)}" y="${n(y - 3)}" text-anchor="end">#${i + 1}</text>`);
+    }
+  }
+
+  // BPM：只在变化处标。
+  if (side.bpm) {
+    for (let i = 0; i < chart.bpms.length; i++) {
+      const y = timeY(chart.bpms[i].time, lay);
+      if (!visible(y)) continue;
+      out.push(`<text class="side-bpm" x="4" y="${n(y - 3)}">BPM ${n(chart.bpms[i].bpm)}</text>`);
+    }
+  }
+
+  // 拍号：只在变化处标。
+  if (side.beats) {
+    for (const b of chart.beats) {
+      const y = timeY(b.time, lay);
+      if (!visible(y)) continue;
+      out.push(`<text class="side-beat" x="4" y="${n(y + 9)}">${b.numerator}/${b.denominator}</text>`);
+    }
+  }
+
+  // Fever：竖排 `FEVER`，贴在段中。
+  const fv = side.fever;
+  if (fv && fv.end > fv.start) {
+    const yMid = timeY((fv.start + fv.end) / 2, lay);
+    if (visible(yMid)) {
+      out.push(
+        `<text class="side-fever" x="4" y="${n(yMid)}" transform="rotate(-90 4 ${n(yMid)})">FEVER</text>`,
+      );
+    }
+  }
+
+  // 顶部信息块：曲名 / 难度 / 等级 / MaxCombo。
+  // 只画在第一列——每列都重复一遍同一行字就成了噪声。
+  // 起点留 20px：第一行正好压着列顶会被裁掉半截。
+  if (showInfo && side.info?.length) {
+    let ty = yTop + 24;
+    for (const line of side.info) {
+      out.push(`<text class="side-bpm" x="4" y="${n(ty)}">${esc(line)}</text>`);
+      ty += 14;
+    }
+  }
+
+  return out.join('');
 }
 
 /**

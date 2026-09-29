@@ -45,6 +45,16 @@ export interface Chart {
   offset: number;
   /** 谱面总时长（秒），末音符终点 + 2 秒余量。 */
   duration: number;
+  /**
+   * 最大连击数——口径同 llll-preview-web 的 `chartAllNoteSize`。
+   *
+   * 非 Hold 每个算 1；Hold **只算链首**，链首本身 1 + 判定航点数：单段 Hold 用 JSON
+   * 的 `holds`，多段链用 `getHolds` 按半拍重采样。链中节点不计（它们由链首的航点覆盖）。
+   *
+   * 全量 616 张实测与 `MusicScores.yaml` 的 `MaxCombo` 命中 **614**；差的两张出在
+   * 变速段（见 `getHolds` 注释）。标注用权威 `MaxCombo` 更稳妥，此值供无主数据时兜底。
+   */
+  maxCombo: number;
 }
 
 const MAX_BYTES = 16 * 1024 * 1024;
@@ -105,6 +115,15 @@ const HOLD_LINK_EPSILON = Math.fround(0.0001);
 /** 同时押分组容差：4 ms。 */
 export const SIMULTANEOUS_WINDOW = 0.004;
 
+/**
+ * Hold 航点重采样的末端容差。
+ *
+ * RE 文档的 `(long)(|end−last| × 10000) <= 1` 即 `|Δ| < 2e-4`。原版在 C# float 域比较，
+ * 这个值比 `1e-4` 宽——用 `1e-4` 会让末端刚好差几个 ulp 的链少算一点
+ * （全量 616 张实测：`1e-4` 命中 610，`2e-4` 命中 614）。
+ */
+export const END_TOLERANCE = 2e-4;
+
 export function parseChart(input: unknown): Chart {
   const data = object(input);
   if (!Array.isArray(data.Notes) || !Array.isArray(data.Bpms)) throw new Error('需要 Notes 和 Bpms 数组');
@@ -162,7 +181,16 @@ export function parseChart(input: unknown): Chart {
   }
   const lines = groups.filter(g => g.points.length > 1 && g.points.every(p => p.note.uid !== 0));
 
-  return { notes, roots, lines, bpms, beats, offset, duration: Math.max(1, ...notes.map(n => n.end + 2)) };
+  // 最大连击：非 Hold 各 1；Hold 只算链首（1 + 判定航点），链中节点不计。
+  let maxCombo = 0;
+  for (const root of roots) {
+    if (root.type !== 1) { maxCombo++; continue; }
+    let tail = root;
+    while (tail.next) tail = tail.next;
+    maxCombo += 1 + (tail === root ? root.holds.length : getHolds(root.time, tail.end, bpms).length);
+  }
+
+  return { notes, roots, lines, bpms, beats, offset, duration: Math.max(1, ...notes.map(n => n.end + 2)), maxCombo };
 }
 
 /** 解 raw-deflate（Node 原生 zlib）或已是 JSON 文本的谱面。 */
@@ -171,6 +199,66 @@ export function decodeChartBytes(bytes: Uint8Array): Chart {
   const head = new TextDecoder().decode(bytes.subarray(0, 256)).trimStart();
   const text = head.startsWith('{') ? new TextDecoder().decode(bytes) : inflateRaw(bytes);
   return parseChart(JSON.parse(text.replace(/^\ufeff/, '')));
+}
+
+/**
+ * 单段 Hold 的判定点（不含起点）——口径同 llll-preview-web 的 `getHolds`。
+ *
+ * 原版按 **半拍** 推进航点，末端判定用「越过终点」或「贴近终点」。
+ * **容差取 `2e-4`**——RE 文档给的是 `(long)(|end−last| × 10000) <= 1`，即 `|Δ| < 2e-4`。
+ * 全量 616 张实测命中数：`1e-4` → 610、`2e-4` → **614**、去掉容差 → 610。
+ *
+ * 剩余 2 张（`204103_04` 差 1、`405138_04` 差 2）出在**变速段**：`405138_04` 在 84.6s
+ * 有 190→38→380→760→1140→190 的连续变速，半拍网格在那里步长骤变，原版 float32
+ * 累加与这里的 double 累加会分岔。这是实现细节差异，不是口径错误。
+ *
+ * 多段链（有后继）的航点由这里重算，而不是直接用 JSON 里的 `holds`——
+ * 原版 Pass2 只对多段链头重采样，单段 Hold 保留 JSON 端点。
+ */
+export function getHolds(start: number, end: number, bpms: Bpm[]): number[] {
+  const out: number[] = [];
+  let t = start;
+  for (let guard = 0; guard < 100_000; guard++) {
+    t += (60 / bpmAt(bpms, t)) * 0.5;
+    if (t > end) break;
+    if (Math.abs(t - end) < END_TOLERANCE) break;
+    out.push(t);
+    if (t >= end) break;
+  }
+  // (long)(|end−last| * 10000) <= 1  ⇒  |Δ| < 2e-4
+  if (out.length && Math.abs(end - out[out.length - 1]) * 10_000 <= 1) out.pop();
+  out.push(end);
+  return out;
+}
+
+/**
+ * 一个链首贡献的判定点数（含起点）。
+ *
+ * 链中节点（有 `prev`）不计——判定点只按链首算，这正是原版 Prepare Pass2 的语义。
+ * 单段 Hold 用 JSON 里的 `holds`；多段链用 `getHolds(起点, 链尾终点)` 重算。
+ */
+export function noteJudgementTimes(note: Note, bpms: Bpm[]): number[] {
+  if (note.prev) return [];
+  if (note.type !== 1) return [note.time];
+  let tail = note;
+  while (tail.next) tail = tail.next;
+  if (tail === note) return [note.time, ...note.holds];
+  const end = tail.holds.length ? tail.holds[tail.holds.length - 1] : tail.end;
+  return [note.time, ...getHolds(note.time, end, bpms)];
+}
+
+/**
+ * 全谱判定点总数 == **最大连击数**（max combo）。
+ *
+ * 口径同 llll-preview-web 的 `chartAllNoteSize`。实测对全量 616 张谱面与主数据
+ * `MusicScores.yaml` 的 `*MaxCombo` 比对：610 张精确一致，余下差 1～18（原版浮点边界）。
+ * 出图时若要显示 combo，**优先用主数据的 `*MaxCombo`**（那是权威值），
+ * 这个函数用于谱面内逐点计数与校验。
+ */
+export function chartMaxCombo(chart: Chart): number {
+  let n = 0;
+  for (const root of chart.roots) n += noteJudgementTimes(root, chart.bpms).length;
+  return Math.max(1, n);
 }
 
 function inflateRaw(bytes: Uint8Array): string {

@@ -26,15 +26,23 @@ export interface Layout {
   mirror: boolean;
   /** 谱面总时长（秒）。时间轴向上，靠它把 0 秒锚在内容底部。 */
   duration: number;
+  /**
+   * 轨道**左侧**侧栏宽度（像素）。
+   *
+   * 参考仓库 `pjsekai-scores-rs` 把小节号、BPM、事件名竖排在轨道两侧；本仓库只留左侧。
+   * 为 0 时不占位，成图宽度与不带侧栏时一致。
+   */
+  sideWidth: number;
 }
 
 export const defaultLayout = (): Layout => ({
-  lanePx: 16, pxPerSec: 220, padX: 16, padY: 16, mirror: false, duration: 0,
+  lanePx: 16, pxPerSec: 340, padX: 16, padY: 16, mirror: false, duration: 0, sideWidth: 0,
 });
 
-/** 格线 x 坐标：edge ∈ 0…60，为 lane−1 与 lane 的分界。 */
+/** 格线 x 坐标：edge ∈ 0…60，为 lane−1 与 lane 的分界。侧栏占位在轨道左侧。 */
 export function edgeX(edge: number, lay: Layout): number {
-  return lay.padX + (lay.mirror ? LANES - edge : edge) * lay.lanePx;
+  const base = lay.padX + lay.sideWidth;
+  return base + (lay.mirror ? LANES - edge : edge) * lay.lanePx;
 }
 
 /** 时间 → 画布 y。时间向上：0 秒在内容底部，`duration` 在顶部。 */
@@ -54,7 +62,7 @@ export function trackWidth(lay: Layout): number {
 
 /** 成图总宽（像素）。 */
 export function canvasWidth(lay: Layout): number {
-  return trackWidth(lay) + lay.padX * 2;
+  return trackWidth(lay) + lay.sideWidth + lay.padX * 2;
 }
 
 /** 成图总高（像素）。 */
