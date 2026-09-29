@@ -109,7 +109,11 @@ export function sliceCaps(meta: SpriteMeta | undefined, worldW: number): SliceCa
 export interface BandHalf {
   /** 四角，顺序：头排近列、头排远列、尾排远列、尾排近列。 */
   corners: [number, number][];
-  /** 渐变起点与终点（两列在头尾两排的中点）。 */
+  /**
+   * 渐变轴的两个端点。原版的顶点色**沿带长恒定**（左列恒 Side、中列恒 Center、
+   * 右列恒 Side），色场只随「垂直于带身的距离」变化，所以渐变轴必须垂直于带轴，
+   * 否则斜置的带子会沿长度漂色。
+   */
   gradFrom: [number, number];
   gradTo: [number, number];
   /** 起点与终点各自的颜色（含 alpha）。 */
@@ -139,15 +143,45 @@ export function bandHalves(note: Note, lay: Layout, active = false): BandHalf[] 
   for (const [a, b] of [[0, 1], [1, 2]] as const) {
     // 带宽退化（Width ≤ 2）时该半边没有面积，原版会画出一条反向窄带，此处跳过。
     if (Math.abs(hx[b] - hx[a]) < 0.01 && Math.abs(tx[b] - tx[a]) < 0.01) continue;
+    const corners: [number, number][] = [[hx[a], y0], [hx[b], y0], [tx[b], y1], [tx[a], y1]];
     out.push({
-      corners: [[hx[a], y0], [hx[b], y0], [tx[b], y1], [tx[a], y1]],
-      gradFrom: [(hx[a] + tx[a]) / 2, (y0 + y1) / 2],
-      gradTo: [(hx[b] + tx[b]) / 2, (y0 + y1) / 2],
+      corners,
+      ...gradientAxis(corners),
       fromColor: a === 0 ? side : center,
       toColor: b === 2 ? side : center,
     });
   }
   return out;
+}
+
+/**
+ * 把渐变轴摆到「垂直于带轴」的方向上。
+ *
+ * 直接取两列中点连线会得到一条水平轴，斜置带子据此上色就会沿长度漂色。
+ * 这里把两列中点投影到过形心的带法线方向，得到真正的横向色场。
+ */
+function gradientAxis(c: [number, number][]): { gradFrom: [number, number]; gradTo: [number, number] } {
+  const [ha, hb, tb, ta] = c;
+  const headMid: [number, number] = [(ha[0] + hb[0]) / 2, (ha[1] + hb[1]) / 2];
+  const tailMid: [number, number] = [(ta[0] + tb[0]) / 2, (ta[1] + tb[1]) / 2];
+  const cx = (ha[0] + hb[0] + tb[0] + ta[0]) / 4;
+  const cy = (ha[1] + hb[1] + tb[1] + ta[1]) / 4;
+  // 带轴方向与其法线；带轴退化为点时退回水平。
+  let dx = tailMid[0] - headMid[0], dy = tailMid[1] - headMid[1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) { dx = 0; dy = 1; }
+  const nx = -dy / Math.max(len, 1e-9), ny = dx / Math.max(len, 1e-9);
+  // 两列中点各自沿法线投影到过形心的直线。
+  const proj = (p: [number, number]): [number, number] => {
+    const t = (p[0] - cx) * nx + (p[1] - cy) * ny;
+    return [cx + nx * t, cy + ny * t];
+  };
+  const aMid: [number, number] = [(ha[0] + ta[0]) / 2, (ha[1] + ta[1]) / 2];
+  const bMid: [number, number] = [(hb[0] + tb[0]) / 2, (hb[1] + tb[1]) / 2];
+  const pa = proj(aMid), pb = proj(bMid);
+  // 法线取反时保证起点仍是 a 列一侧。
+  const forward = (pb[0] - pa[0]) * (bMid[0] - aMid[0]) + (pb[1] - pa[1]) * (bMid[1] - aMid[1]) >= 0;
+  return forward ? { gradFrom: pa, gradTo: pb } : { gradFrom: pb, gradTo: pa };
 }
 
 /** 连续轨道坐标 → 画布 x（含镜像）。 */

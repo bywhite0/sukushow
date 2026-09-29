@@ -121,6 +121,79 @@ test('音符贴图载入后就位', async ({ page }) => {
   expect(missing.keys).toBe(4);
 });
 
+test('音符端头是圆角，中段不拉伸端头', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  // 1.0 s 处的 Single（轨道 10–12，3 格宽）。端头贴图单侧就宽于该音符，
+  // 因此整条由两个端头拼成，剖面应呈「亮边—平台—平台—亮边」。
+  const prof = await page.locator('#canvas').evaluate(el => {
+    const c = el as HTMLCanvasElement;
+    const ctx = c.getContext('2d')!;
+    const dpr = c.width / c.clientWidth;
+    const y = Math.round((16 + 1.0 * 90) * dpr);
+    const { data, width } = ctx.getImageData(0, y, c.width, 1);
+    // 背景 #0f1622 = (15,22,34)：明显偏离即内容（音符是品红系，不能用青色滤镜）。
+    // 轨道边框也是内容，故按连通段取最长的那一段 = 音符本体。
+    const groups: number[][] = [];
+    let cur: number[] = [];
+    let lastX = -10;
+    for (let x = 0; x < width; x++) {
+      const r = data[x * 4], g = data[x * 4 + 1], b = data[x * 4 + 2];
+      const content = Math.abs(r - 15) + Math.abs(g - 22) + Math.abs(b - 34) > 60;
+      if (content) {
+        if (x - lastX > 2) { if (cur.length) groups.push(cur); cur = []; }
+        cur.push(g); lastX = x;
+      }
+    }
+    if (cur.length) groups.push(cur);
+    return groups.sort((a, b) => b.length - a.length)[0] ?? [];
+  });
+  expect(prof.length).toBeGreaterThan(20);
+  const peak = Math.max(...prof);
+  // 圆角端头贴图在两端是渐入的（实测剖面 46 74 122 148 204 235 … 243 平台），
+  // 直角实心块则会一上来就是满亮度。这就是「端头没被中段拉伸」的判据。
+  expect(peak).toBeGreaterThan(200);
+  expect(prof[0]).toBeLessThan(peak - 80);
+  expect(prof[prof.length - 1]).toBeLessThan(peak - 80);
+});
+
+test('斜置 Hold 沿带长不漂色', async ({ page }) => {
+  // 头 10–20 → 尾 40–50 的斜带；若渐变轴是水平的，颜色会沿带长漂移。
+  const SLANT = {
+    Offset: 0,
+    Bpms: [{ Time: 0, Bpm: 120 }],
+    Beats: [{ Numerator: 4, Denominator: 4, Time: 0 }],
+    Notes: [{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: FLAGS(1, 10, 20, 40, 50) }],
+  };
+  await importChart(page, SLANT);
+  const profs = await page.locator('#canvas').evaluate(el => {
+    const c = el as HTMLCanvasElement;
+    const ctx = c.getContext('2d')!;
+    const dpr = c.width / c.clientWidth;
+    const padY = 16, pxPerSec = 90;
+    const sample = (t: number) => {
+      const y = Math.round((padY + t * pxPerSec) * dpr);
+      const { data, width } = ctx.getImageData(0, y, c.width, 1);
+      const g: number[] = [];
+      for (let x = 0; x < width; x++) {
+        const r = data[x * 4], gg = data[x * 4 + 1], b = data[x * 4 + 2];
+        if (gg > 60 && b > 60 && gg > r + 18) g.push(gg);
+      }
+      if (g.length < 10) return null;
+      // 归一化到 9 个采样点，便于跨行比较。
+      return Array.from({ length: 9 }, (_, i) => g[Math.round((g.length - 1) * i / 8)]);
+    };
+    return [1.2, 1.4, 1.6, 1.8].map(sample);
+  });
+  const rows = profs.filter(Boolean) as number[][];
+  expect(rows.length).toBe(4);
+  // 中列应显著暗于两侧，且各行的中列值一致（不漂色）。
+  const mids = rows.map(r => r[4]);
+  expect(Math.max(...mids) - Math.min(...mids)).toBeLessThan(20);
+  for (const r of rows) {
+    expect(r[1]).toBeGreaterThan(r[4] + 30);
+    expect(r[7]).toBeGreaterThan(r[4] + 30);
+  }
+});
 test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
   await importChart(page, SAMPLE);
   // 在 2.5 s 处整行扫描，先定位宽带实际跨度（节点斜置时跨度随时间平移），

@@ -160,6 +160,41 @@ describe('Hold 宽带三列', () => {
     expect(mir[0].corners[0][0]).toBeGreaterThan(plain[0].corners[0][0]);
   });
 
+  it('斜置时渐变轴垂直于带轴，不沿带长漂色', () => {
+    // 头 10–20 → 尾 40–50：带轴明显倾斜。
+    const c = chart([{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 40, 50) }]);
+    const l = lay({ lanePx: 10, pxPerSec: 100 });
+    for (const half of bandHalves(c.roots[0], l)) {
+      const [ha, hb, tb, ta] = half.corners;
+      const headMid = [(ha[0] + hb[0]) / 2, (ha[1] + hb[1]) / 2];
+      const tailMid = [(ta[0] + tb[0]) / 2, (ta[1] + tb[1]) / 2];
+      const ax = tailMid[0] - headMid[0], ay = tailMid[1] - headMid[1];
+      const gx = half.gradTo[0] - half.gradFrom[0], gy = half.gradTo[1] - half.gradFrom[1];
+      const cos = (ax * gx + ay * gy) / (Math.hypot(ax, ay) * Math.hypot(gx, gy));
+      expect(Math.abs(cos)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('渐变轴长度等于带身的垂直宽度', () => {
+    const c = chart([{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20) }]);
+    const l = lay({ lanePx: 10 });
+    // 水平带：垂直宽度 = 一列到另一列的横向距离。
+    for (const half of bandHalves(c.roots[0], l)) {
+      const len = Math.hypot(half.gradTo[0] - half.gradFrom[0], half.gradTo[1] - half.gradFrom[1]);
+      expect(len).toBeCloseTo(4.5 * l.lanePx, 6);   // (15.5−11) 格
+    }
+  });
+
+  it('渐变起点仍对应左列（法线取反也不翻转）', () => {
+    for (const [l2, r2] of [[30, 40], [10, 20], [20, 30]]) {
+      const c = chart([{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, l2, r2) }]);
+      const h = bandHalves(c.roots[0], lay({ lanePx: 10, pxPerSec: 100 }));
+      // 左半边的起点色恒为 Side，终点恒为 Center。
+      expect(h[0].fromColor.slice(0, 3)).toEqual([...HOLD_SIDE]);
+      expect(h[0].toColor.slice(0, 3)).toEqual([...HOLD_CENTER]);
+    }
+  });
+
   it('链按源数组顺序逐节点产出半边', () => {
     // 串链谓词：首段 (l2,r2) 必须等于次段 (l,r)，故次段沿用 [10,20]。
     const c = chart([

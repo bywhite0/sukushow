@@ -10,8 +10,8 @@ import {
   type Layout, chainEnd, contentHeight, edgeX, noteSpan, measures, timeY, trackWidth,
 } from './view';
 import {
-  type BandHalf, type SpriteMeta, NOTE_SPRITE, chainBandHalves, cssRgba,
-  laneX, noteSpriteSize, sliceCaps,
+  type BandHalf, type SpriteMeta, NOTE_SPRITE, SPRITE_SCALE_X, chainBandHalves, cssRgba,
+  laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld, pxPerWorld, sliceCaps,
 } from './slice';
 
 /** 未加载到贴图时的兜底配色，沿用原版四类。 */
@@ -193,7 +193,7 @@ export class FlatRenderer {
         const [x0, x1] = noteSpan(n, lay, false);
         const y = timeY(n.time, lay);
         if (img && meta) {
-          this.drawSliced(img, meta, x0, y, Math.max(1, x1 - x0), n.r - n.l + 1, type, lay);
+          this.drawSliced(img, meta, (x0 + x1) / 2, y, n.r - n.l + 1, type, lay);
         } else {
           const th = Math.max(instantPx, noteSpriteSize(n.r - n.l + 1, type, lay).h);
           ctx.fillRect(x0, y - th / 2, Math.max(1, x1 - x0), th);
@@ -228,8 +228,7 @@ export class FlatRenderer {
     const meta = this.lib.meta[1];
     if (!img || !meta) return;
     const x0 = laneX(l, lay), x1 = laneX(r + 1, lay);
-    const a = Math.min(x0, x1), b = Math.max(x0, x1);
-    this.drawSliced(img, meta, a, timeY(time, lay), Math.max(1, b - a), r - l + 1, 1, lay);
+    this.drawSliced(img, meta, (x0 + x1) / 2, timeY(time, lay), r - l + 1, 1, lay);
   }
 
   /** 一个宽带半边：横向从一列渐变到另一列。 */
@@ -249,29 +248,30 @@ export class FlatRenderer {
     ctx.fill();
   }
 
-  /** 九宫格横向拉伸：左右端头原样、中段拉伸，纵向整体缩放到原版厚度。 */
+  /** 九宫格横向拉伸：左右端头保持原生尺寸（圆角不变形），仅中段拉伸。 */
   private drawSliced(
-    img: HTMLImageElement, meta: SpriteMeta, x0: number, yCenter: number,
-    targetW: number, widthUnits: number, type: number, lay: Layout,
+    img: HTMLImageElement, meta: SpriteMeta, centerX: number, yCenter: number,
+    widthUnits: number, type: number, lay: Layout,
   ) {
     const ctx = this.ctx;
-    const { w: worldW, h: worldH } = noteSpriteSize(widthUnits, type, lay);
-    const w = Math.max(targetW, worldW);
-    const h = Math.max(2, worldH);
+    const k = pxPerWorld(lay);
+    // 世界单位：与 sliceCaps 同口径，避免把像素宽当成世界宽。
+    const worldW = noteWidthWorld(widthUnits) * SPRITE_SCALE_X;
+    const w = worldW * k;
+    const h = Math.max(2, noteDepthWorld(type) * SPRITE_SCALE_X * k);
     const rect = meta.rect;
     const sw = rect[2] || img.naturalWidth, sh = rect[3] || img.naturalHeight;
     const caps = sliceCaps(meta, worldW);
-    const scale = worldW > 0 ? w / worldW : 1;
-    const left = caps.left * scale, right = caps.right * scale;
+    const left = caps.left * k, right = caps.right * k;
     const mid = Math.max(0, w - left - right);
-    const x = x0 + (targetW - w) / 2;
+    const x = centerX - w / 2;
     const y = yCenter - h / 2;
     const uL = caps.uL, uR = caps.uR;
     const draw = (dx: number, dw: number, sx: number, sWidth: number) => {
       if (dw <= 0.01 || sWidth <= 0.01) return;
       ctx.drawImage(img, sx, 0, sWidth, sh, dx, y, dw, h);
     };
-    // 端头若超出目标宽度，sliceCaps 已按比例缩小，三段仍首尾相接。
+    // 端头超宽时 sliceCaps 已等比缩小，三段仍首尾相接。
     draw(x, left, 0, sw * uL);
     draw(x + left, mid, sw * uL, sw * (1 - uL - uR));
     draw(x + left + mid, right, sw * (1 - uR), sw * uR);
