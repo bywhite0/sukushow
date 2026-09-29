@@ -205,10 +205,12 @@ const DEFAULT_CSS = [
   '.fever-edge{stroke:#ff6bd6;stroke-opacity:.75;stroke-width:1.5;stroke-dasharray:4 3}',
   '.side-tick{stroke:#8fa3c0;stroke-opacity:.5;stroke-width:1}',
   // 底部信息区（照参考仓库：meta 底色 + 分隔线 + 曲名 / 副标题）
+  // 字号不写死在类里——它由封面边长派生（标题 = size/2、副标题 = size/4，
+  // 见 metaPanel），这样 `--meta-size` 一改，文字跟着封面一起缩放。
   '.meta{fill:#0f1626}',
   '.meta-line{stroke:#2a3a55;stroke-width:1}',
-  '.meta-title{font:bold 26px/1 "Segoe UI",system-ui,sans-serif;fill:#e8eefc}',
-  '.meta-sub{font:15px/1 "Segoe UI",system-ui,sans-serif;fill:#9fb0cc}',
+  '.meta-title{font-family:"Segoe UI",system-ui,sans-serif;font-weight:900;fill:#e8eefc}',
+  '.meta-sub{font-family:"Segoe UI",system-ui,sans-serif;font-weight:700;fill:#9fb0cc}',
   '.meta-frame{fill:none;stroke:#2a3a55;stroke-width:1}',
 ].join('\n');
 
@@ -589,9 +591,10 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
 /**
  * 底部信息区 —— 照参考仓库 `pjsekai-scores-rs`：封面 + 曲名 + 副标题，横带贴在图底。
  *
- * 参考仓库的排布（`drawing.rs` 的 meta 段）：封面 `meta_size` 见方，左边距
- * `lane_padding×2`；文字块在封面右侧，曲名基线比封面底高 16px，副标题再往下。
- * 本仓库沿用同样的相对关系，尺寸按本仓的留白习惯缩到 192。
+ * 参考仓库的排布（`drawing.rs` 的 meta 段，数值取自其 `0642_master.svg` 实测）：
+ * 封面 `meta_size` 见方、左边距 `lane_padding×2`；文字块在封面右侧，
+ * **标题字号 = `meta_size/2`、副标题 = `meta_size/4`**，基线分别贴在封面底边
+ * 上 16px 与 `meta_size/3` 处。字号随封面一起缩放，故不写进 CSS 类。
  */
 function metaPanel(meta: MetaPanel, totalW: number, yTop: number, padX: number): string {
   const size = meta.size ?? 192;
@@ -609,11 +612,23 @@ function metaPanel(meta: MetaPanel, totalW: number, yTop: number, padX: number):
     out.push(`<rect class="meta-frame" x="${n(pad)}" y="${n(imgY)}" width="${n(size)}" height="${n(size)}"/>`);
   }
   const textX = pad + (meta.jacket ? size + padX * 2 : 0);
+  const titleSize = size / 2;
+  const subSize = size / 4;
+  // 基线位置照参考仓库的比例：副标题在封面纵向三分之一处，标题贴着封面底边。
+  // 两者相距 `size×0.625`——96px 的标题与 48px 的副标题才不叠在一起。
+  const titleY = imgY + size - padX;
+  const subY = imgY + size / 3 - 8;
   if (meta.title) {
-    out.push(`<text class="meta-title" x="${n(textX)}" y="${n(imgY + size - 16)}">${esc(meta.title)}</text>`);
+    out.push(
+      `<text class="meta-title" x="${n(textX)}" y="${n(titleY)}"`
+      + ` font-size="${n(titleSize)}">${esc(meta.title)}</text>`,
+    );
   }
   if (meta.subtitle) {
-    out.push(`<text class="meta-sub" x="${n(textX)}" y="${n(imgY + size - 16 + 24)}">${esc(meta.subtitle)}</text>`);
+    out.push(
+      `<text class="meta-sub" x="${n(textX)}" y="${n(subY)}"`
+      + ` font-size="${n(subSize)}">${esc(meta.subtitle)}</text>`,
+    );
   }
   return out.join('');
 }

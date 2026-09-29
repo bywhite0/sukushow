@@ -395,6 +395,22 @@ describe('Combo 与 Fever', () => {
     expect(count(svg, 'side-bg')).toBe(0);
     expect(svg).toContain('width="992"');
   });
+
+  it('开侧栏后音符跟着轨道一起右移（两者同一条基线）', () => {
+    // 音符曾经只按 padX 定位、轨道栏却按 padX+sideWidth 定位，于是开侧栏后
+    // 轨道右移而音符不动，整条谱面看起来往左偏了一格。
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 0, 0) }]);
+    const noteX = (svg: string) => {
+      const m = svg.match(/<svg x="([\d.]+)" y="[\d.]+" width="[\d.]+" height="[\d.]+" viewBox="[^"]*"[^>]*><use xlink:href="#sp-ui_sc2_ingame_notes_tap"/);
+      return Number(m![1]);
+    };
+    const bare = renderSvg(chart, lib(), opts({ aspect: 0 })).svg;
+    const withSide = renderSvg(chart, lib(), opts({ aspect: 0, side: { barNumbers: true } })).svg;
+    const laneX = (svg: string) => Number(svg.match(/<rect class="lane" x="([\d.]+)"/)![1]);
+    // 音符左缘相对轨道起点始终是同一个偏移（音符贴图自身的左边距）。
+    expect(noteX(withSide) - laneX(withSide)).toBeCloseTo(noteX(bare) - laneX(bare), 3);
+    expect(laneX(withSide) - laneX(bare)).toBeCloseTo(96, 3);
+  });
 });
 
 describe('底部信息区', () => {

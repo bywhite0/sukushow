@@ -139,12 +139,29 @@ double 累加会分岔。这是实现细节差异，不是口径错误。故**�
 
 ## 底部信息区
 
-照参考仓库 `pjsekai-scores-rs` 的版式：信息区在图片**底部**一条横带，左边方形封面
-（`meta_size = 192` 见方，左边距 `lane_padding×2`），右边曲名与副标题。本仓库沿用同样的
-相对关系，画布总高相应增加 `封面边长 + padX×2`。
+照参考仓库 `pjsekai-scores-rs` 的版式：信息区在图片**底部**一条横带，左边方形封面，
+右边两行文字。数值取自其 `0642_master.svg` 实测（`meta_size = 192`、`lane_padding = 40`、
+`time_padding = 32`）：
+
+| 元素 | 参考仓库 | 本仓库 |
+|---|---|---|
+| 封面 | `meta_size` 见方，左边距 `lane_padding×2` | 同 |
+| 标题字号 | `meta_size/2` = **96px**，字重 900 | 同（随 `--meta-size` 缩放） |
+| 副标题字号 | `meta_size/4` = **48px**，字重 700 | 同 |
+| 标题基线 | 封面底边上 16px | 封面底边上 `padX` |
+| 副标题基线 | 封面纵向 `meta_size/3` 处（在标题**上方**） | 同 |
+
+副标题在标题**上方**是参考仓库的排法，两者基线相距 `meta_size×0.625`——照搬是为了
+96px 的标题与 48px 的副标题不叠在一起。画布总高相应增加 `封面边长 + padX×2`。
 
 封面即曲绘，源包是 `cache/plain/image_music_thumbnail_<id>.assetbundle`，需解包后取 PNG；
 对照仓库 llll-preview-web 已解好一批在 `public/assets/jacket/`。
+
+## 横向基线的唯一来源
+
+音符、轨道栏、小节线、Fever 带全都从 `padX + sideWidth` 起算：`layout.edgeX` 与
+`geometry.laneX` 必须同源。曾经 `laneX` 只用 `padX`，开侧栏后轨道栏右移而音符不动，
+整条谱面看起来往左偏了一格。改任何一处的起点，另一处必须跟着改。
 
 ## 谱面数据格式
 

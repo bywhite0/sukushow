@@ -267,9 +267,15 @@ function gradientAxis(c: [number, number][]): { gradFrom: [number, number]; grad
   return forward ? { gradFrom: pa, gradTo: pb } : { gradFrom: pb, gradTo: pa };
 }
 
-/** 连续轨道坐标 → 画布 x（含镜像）。 */
+/**
+ * 连续轨道坐标 → 画布 x（含镜像）。
+ *
+ * 起点必须是 `padX + sideWidth`，与 `layout.edgeX` 一致——音符、轨道栏、小节线
+ * 全都从同一条基线起算。这里若只用 `padX`，开侧栏后轨道栏右移而音符不动，
+ * 整条谱面看起来就往左偏了一格。
+ */
 export function laneX(pos: number, lay: Layout): number {
-  return lay.padX + (lay.mirror ? LANES_REF - pos : pos) * lay.lanePx;
+  return lay.padX + lay.sideWidth + (lay.mirror ? LANES_REF - pos : pos) * lay.lanePx;
 }
 
 /** 链上各节点的宽带半边，顺序 = 源数组顺序。 */
