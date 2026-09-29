@@ -1,6 +1,7 @@
 /** Persist preview sidebar / transport settings in localStorage. */
 
 import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from './rgOptions';
+import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
 
 export const SETTINGS_STORAGE_KEY = 'llll-preview-web:settings:v1';
 
@@ -42,6 +43,8 @@ export type PreviewSettings = {
   rate: number;
   /** Preview hit FX: current=直冲天上(+rotol/拖尾); limited=限速; full=限速+rotol+拖尾. */
   hitEffect: 'off' | 'current' | 'limited' | 'full';
+  /** 预览窗口固定比例（顶栏按钮组）；free = 跟随窗口。 */
+  aspectRatio: AspectId;
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -77,6 +80,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   techScore: RG_OPTION_DEFAULTS.technicalScoreDisplay,
   rate: 1,
   hitEffect: 'current',
+  aspectRatio: DEFAULT_ASPECT,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -138,6 +142,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
       ? num('rate', d.rate)
       : d.rate,
     hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' || o.hitEffect === 'limited' || o.hitEffect === 'full' ? o.hitEffect : d.hitEffect,
+    aspectRatio: isAspectId(o.aspectRatio) ? o.aspectRatio : d.aspectRatio,
   };
 }
 
