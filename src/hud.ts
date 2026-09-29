@@ -63,6 +63,7 @@ import {
   autoPlayConditionType,
   autoPlayJudgementType,
   conditionSprite,
+  fastSlowLayoutY,
   judgementLayoutY,
   judgementSprite,
   shouldShowFastSlow,
@@ -1492,6 +1493,8 @@ export class LiveHud {
   setJudgementY(opt: number): void {
     this.judgementYOpt = opt;
     this.repositionJudge();
+    // Condition 与判定字同档时贴在判定字上方（OverlapOffsetY），故一并重排。
+    this.repositionCondition();
   }
 
   setFastSlowY(opt: number): void {
@@ -1521,7 +1524,7 @@ export class LiveHud {
   }
 
   private repositionJudge(): void {
-    const y = judgementLayoutY(this.judgementYOpt, -270);
+    const y = judgementLayoutY(this.judgementYOpt);
     if (this.judge) {
       const w = this.judge.style.width ? parseFloat(this.judge.style.width) : 340;
       place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, Number.isFinite(w) ? w : 340, 80);
@@ -1533,7 +1536,7 @@ export class LiveHud {
 
   private repositionCondition(): void {
     if (!this.conditionEl) return;
-    const y = judgementLayoutY(this.fastSlowYOpt, -210);
+    const y = fastSlowLayoutY(this.judgementYOpt, this.fastSlowYOpt);
     place(this.conditionEl, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, y, 180, 64);
   }
 
@@ -1544,7 +1547,8 @@ export class LiveHud {
       this.conditionEl.style.visibility = 'hidden';
       return;
     }
-    mountSprite(this.conditionEl, spr.name, spr.fallback);
+    // 原地换图：每次判定都 mountSprite 会不断追加 <img>，多个 SLOW 纵向叠成一串。
+    setSprite(this.conditionEl, spr.name, spr.fallback);
   }
 
   private paintCondition(time: number): void {
@@ -1580,7 +1584,7 @@ export class LiveHud {
     while (this.judge.firstChild) this.judge.removeChild(this.judge.firstChild);
     const w = name.includes('perfect_plus') ? 386 : 340;
     this.judge.style.width = `${w}px`;
-    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt, -270), w, 80);
+    place(this.judge, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt), w, 80);
     mountSprite(this.judge, name, fallback);
   }
 
@@ -1644,16 +1648,18 @@ export class LiveHud {
     root.className = 'hud-judge';
     const pop = document.createElement('div');
     pop.className = 'hud-perfect';
-    // Anchored at dump (0, -270). Sprite size: perfect 340x80 / perfect_plus 386x80.
+    // level56 Judge prefab (0, -270) + JudgementY×70 (ScoreResolver.Inject) ⇒ default 5 → (0, +80).
+    // Sprite size: perfect 340x80 / perfect_plus 386x80.
     this.judgePop = pop;
-    place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt, -270), 340, 80);
+    place(pop, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.judgementYOpt), 340, 80);
     mountSprite(pop, 'ui_sc2_ingame_hantei_perfect', 'PERFECT');
     pop.style.visibility = 'hidden';
-    // JudgeRoot/Condition (0, -210) 180×64; FastSlowY moves it; gated by FastSlowThreshold.
+    // JudgeRoot/Condition prefab (0, -210) 180×64; +FastSlowY×70 (or judge+60 when same step) ⇒ default (0, +140).
+    // Gated by FastSlowThreshold.
     const cond = document.createElement('div');
     cond.className = 'hud-condition';
     this.conditionEl = cond;
-    place(cond, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, judgementLayoutY(this.fastSlowYOpt, -210), 180, 64);
+    place(cond, 400, 400, 0.5, 0.5, 0.5, 0.5, 0, fastSlowLayoutY(this.judgementYOpt, this.fastSlowYOpt), 180, 64);
     mountSprite(cond, 'ui_sc2_ingame_hantei_slow', 'SLOW');
     cond.style.visibility = 'hidden';
     root.append(pop, cond);
