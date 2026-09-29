@@ -12,18 +12,18 @@ import {
   AP_GAGE_FLASH_DURATION,
   apRateBurstScale,
   apRateBurstRootAlpha,
-  apRateBurstCoreAlpha,
+  apRateBurstCoreColor,
   apRateBurstParticleScale,
-  apRateBurstParticleAlpha,
+  apRateBurstParticleColor,
+  apRateBurstSpawn,
   apRateBurstTravel,
+  lerpRange,
   AP_RATE_BURST_DURATION,
   AP_RATE_BURST_ACTIVATE_DELAY,
   AP_RATE_BURST_ROOT,
   AP_RATE_BURST_CORE,
-  AP_RATE_BURST_RING,
-  AP_RATE_BURST_RING_INNER,
-  AP_RATE_BURST_ROOT_GAIN,
-  AP_RATE_BURST_CORE_ALPHA_GAIN,
+  AP_RATE_PARTICLE,
+  AP_RATE_CLOSS,
   apContinueAfterHit,
   apContinueEffectVisible,
   comboEffectUpperAlpha,
@@ -47,7 +47,6 @@ import {
   scoreAddTweenAlpha,
   SCORE_ADD_LIFE,
   SCORE_ADD_REST_X,
-  SCORE_ADD_X_NUDGE,
 } from './hudFxMath';
 
 import { isFeverAt, type FeverWindow } from './fever';
@@ -128,6 +127,29 @@ export function hudLayout(stageWidth: number, stageHeight: number) {
 
 function spriteUrl(name: string): string {
   return `/rg/sprites/${name}.png`;
+}
+
+/** APRateEffect 火花画布（CSS px，以徽章中心为原点；足够容纳 Closs 的最远行程）。 */
+const AP_RATE_SPARK_CANVAS = { w: 720, h: 360 } as const;
+const AP_RATE_SPARK_DPR = 2;
+
+interface ApRateSpark {
+  tex: string;
+  /** 所属系统的 startDelay（同系统共用）。 */
+  delay: number;
+  /** 出生点（px，y 向上）。 */
+  x: number; y: number;
+  /** 初速度（px/s，y 向上）。 */
+  vx: number; vy: number;
+  life: number;
+  /** startSize（px）。 */
+  size: number;
+  /** RotationModule 角速度（rad/s）。 */
+  spin: number;
+  /** TwoGradients 的逐粒子插值随机数。 */
+  colorRand: number;
+  /** 限速上限（px/s）与阻尼。 */
+  limit: number; dampen: number;
 }
 
 function place(
@@ -401,13 +423,12 @@ export class LiveHud {
   private comboFlashEl: HTMLElement | null = null;
   private comboFlashDigits: HTMLElement | null = null;
   private apRateBurstEl: HTMLElement | null = null;
-  /** APRateEffect 的贴图火花（贴图近似，非 GPU 粒子）。 */
-  private apRateBurstSparks: {
-    el: HTMLElement; ax: number; ay: number; vx: number; vy: number;
-    life: number; delay: number; spin: number;
-    /** 限速上限（px/s）与阻尼：原包 LimitVelocityOverLifetime 的 magnitude / dampen。 */
-    limit: number; dampen: number;
-  }[] = [];
+  /** APRateEffect #229 Particle / #228 ClossParticle 的粒子（出生时按原包参数取定）。 */
+  private apRateBurstSparks: ApRateSpark[] = [];
+  /** 两种火花贴图拆成的 R/G/B 单通道图（预乘），用于按顶点色逐通道加色。 */
+  private readonly apRateTexChannels = new Map<string, { ch: HTMLCanvasElement[] }>();
+  /** #41 Bg_core 的 `Default-Particle` 像素（非预乘 RGBA）。 */
+  private apRateCoreTex: { w: number; h: number; px: Uint8ClampedArray } | null = null;
   /** 爆发是否已建好（区别于 `apRateFlashAt` 的动画时基）。 */
   private apRateBurstLive = false;
   private addScoreEl: HTMLElement | null = null;
@@ -965,74 +986,112 @@ export class LiveHud {
   }
 
   /**
-   * PLAN §47 APRateEffect — level56 `ComboRoot/APRateUpper/APRateEffect` #227。
-   * 主体是粉色四角星粒子从徽章周围爆发，两层大面积贴图只是垫在后面的底光。
-   * 尺寸/速度/限速均取原包序列化值；1 世界单位 = 100 px（CanvasScaler
-   * `m_ReferencePixelsPerUnit=100` + 参考分辨率 1920×1080）。
+   * 载入 APRateEffect 贴图像素：火花贴图拆成 R/G/B 三张单通道预乘图，
+   * 以便 `lighter` 合成时按顶点色逐通道缩放，得到与 `Mobile/Particles/Additive`
+   * 一致的 `tex.rgb × tex.a × col.rgb × col.a` 加色。
+   */
+  private loadApRateTextures(): void {
+    if (typeof document === 'undefined') return;
+    const load = (name: string, cb: (id: ImageData) => void) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        try { cb(ctx.getImageData(0, 0, c.width, c.height)); } catch { /* 无像素访问时跳过 */ }
+      };
+      img.src = `/rg/fx/tex/${name}`;
+    };
+    for (const spec of [AP_RATE_PARTICLE, AP_RATE_CLOSS]) {
+      load(spec.tex, (id) => {
+        const ch = [0, 1, 2].map((k) => {
+          const c = document.createElement('canvas');
+          c.width = id.width;
+          c.height = id.height;
+          const out = new ImageData(id.width, id.height);
+          for (let i = 0; i < id.data.length; i += 4) {
+            out.data[i + k] = 255;
+            out.data[i + 3] = Math.round(id.data[i + k] * id.data[i + 3] / 255);
+          }
+          c.getContext('2d')?.putImageData(out, 0, 0);
+          return c;
+        });
+        this.apRateTexChannels.set(spec.tex, { ch });
+      });
+    }
+    load('Default-Particle.png', (id) => {
+      this.apRateCoreTex = { w: id.width, h: id.height, px: id.data };
+    });
+  }
+
+  /**
+   * APRateEffect — level56 `ComboRoot/APRateUpper/APRateEffect` #227 及三个子发射器。
+   * 参数全部取原包序列化值（见 hudFxMath 的 AP_RATE_*）；1 世界单位 = 100 px。
+   * 随机数用 `Math.random`，与 Unity 的 RNG 序列不同，只保证分布一致。
    */
   private spawnApRateBurst(): void {
     const host = this.apRateBurstEl;
     if (!host) return;
     host.replaceChildren();
-    const mk = (cls: string, src: string, w: number, h: number) => {
-      const d = document.createElement('div');
-      d.className = cls;
-      d.style.width = `${w}px`;
-      d.style.height = `${h}px`;
-      const img = document.createElement('img');
-      img.alt = '';
-      img.draggable = false;
-      img.src = `/rg/fx/tex/${src}`;
-      d.append(img);
-      return d;
+    const mkCanvas = (cls: string, w: number, h: number, cssW: number, cssH: number) => {
+      const c = document.createElement('canvas');
+      c.className = cls;
+      c.width = w;
+      c.height = h;
+      c.style.width = `${cssW}px`;
+      c.style.height = `${cssH}px`;
+      return c;
     };
-    // 背景层：#563 Root（254×63 基准）/ #530 Bg_core（400×300 基准），sortingOrder +1。
-    const root = mk('burst-root', 'APRate_OutlineEffect.png',
-      AP_RATE_BURST_ROOT.w, AP_RATE_BURST_ROOT.h);
-    const core = mk('burst-core', 'Default-Particle.png',
-      AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
-    host.append(root, core);
-    // 主体层：#565 Particle（14 颗，慢）/ #564 Closs（15 颗，快）。
-    const sparks: {
-      el: HTMLElement; ax: number; ay: number; vx: number; vy: number;
-      life: number; delay: number; spin: number; star: boolean;
-      /** LimitVelocityOverLifetime 的 magnitude / dampen。 */
-      limit: number; dampen: number;
-    }[] = [];
-    const addSparks = (
-      cls: string, count: number, speedLo: number, speedHi: number,
-      star: boolean, limit: number, dampen: number,
-    ) => {
-      for (let i = 0; i < count; i++) {
-        const t = (i + Math.random()) / count * Math.PI * 2;
-        const r = AP_RATE_BURST_RING_INNER + Math.random() * (1 - AP_RATE_BURST_RING_INNER);
-        const ax = Math.cos(t) * AP_RATE_BURST_RING.rx * r;
-        const ay = Math.sin(t) * AP_RATE_BURST_RING.ry * r;
-        // 速度 6–7 / 1.0–1.6 世界单位/秒 ⇒ ×100 px/s。
-        const sp = (speedLo + Math.random() * (speedHi - speedLo)) * 100;
-        // startSize 0.3–0.6 世界单位 ⇒ 30–60 px。
-        const size = star ? 30 + Math.random() * 30 : 20 + Math.random() * 20;
-        const el = mk(cls, star ? 'sc2_outgameLvUp_glitter_lyric_01.png' : 'sc2_Particle_light02.png', size, size);
-        host.append(el);
-        sparks.push({
-          el, ax, ay,
-          vx: Math.cos(t) * sp, vy: Math.sin(t) * sp,
-          life: 0.4 + Math.random() * 0.3,
-          delay: Math.random() * 0.15,
-          spin: star ? 0 : (Math.random() * 2 - 1) * Math.PI * 0.5,
-          star, limit, dampen,
+    // sortingOrder −1：两层火花共用一张加色画布。
+    const sparks = mkCanvas('burst-sparks',
+      AP_RATE_SPARK_CANVAS.w * AP_RATE_SPARK_DPR, AP_RATE_SPARK_CANVAS.h * AP_RATE_SPARK_DPR,
+      AP_RATE_SPARK_CANVAS.w, AP_RATE_SPARK_CANVAS.h);
+    // sortingOrder +1：#227 Root（Additive）与 #41 Bg_core（Premultiply ⇒ 压暗层 + 加亮层）。
+    const root = document.createElement('div');
+    root.className = 'burst-root';
+    root.style.width = `${AP_RATE_BURST_ROOT.w}px`;
+    root.style.height = `${AP_RATE_BURST_ROOT.h}px`;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.src = '/rg/fx/tex/APRate_OutlineEffect.png';
+    root.append(img);
+    const tw = this.apRateCoreTex?.w ?? 64, th = this.apRateCoreTex?.h ?? 64;
+    const shade = mkCanvas('burst-core-shade', tw, th, AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
+    const light = mkCanvas('burst-core-light', tw, th, AP_RATE_BURST_CORE.w, AP_RATE_BURST_CORE.h);
+    host.append(sparks, root, shade, light);
+
+    const list: ApRateSpark[] = [];
+    for (const spec of [AP_RATE_PARTICLE, AP_RATE_CLOSS]) {
+      // startDelay 是主模块属性：整个系统一次取值。
+      const delay = lerpRange(spec.delay, Math.random());
+      for (let i = 0; i < spec.count; i++) {
+        const sp = apRateBurstSpawn(Math.random(), Math.random());
+        const speed = lerpRange(spec.speed, Math.random()) * 100;
+        list.push({
+          tex: spec.tex,
+          delay,
+          x: sp.x * 100,
+          y: sp.y * 100,
+          vx: sp.dx * speed,
+          vy: sp.dy * speed,
+          life: lerpRange(spec.life, Math.random()),
+          size: lerpRange(spec.size, Math.random()) * 100,
+          spin: spec.spin ? lerpRange(spec.spin, Math.random()) : 0,
+          colorRand: Math.random(),
+          limit: lerpRange(spec.limit, Math.random()) * 100,
+          dampen: spec.dampen,
         });
       }
-    };
-    // #565 Particle：初速 100–160，magnitude TwoConstants 0.7–1.0 ⇒ 限速 70–100，dampen 0.2。
-    addSparks('burst-particles', 14, 1.0, 1.6, false, 70 + Math.random() * 30, 0.2);
-    // #564 Closs：初速 600–700，magnitude 常量 1.0 ⇒ 限速 100，dampen 0.3。
-    addSparks('burst-glitter', 15, 6.0, 7.0, true, 100, 0.3);
-    this.apRateBurstSparks = sparks;
+    }
+    this.apRateBurstSparks = list;
     this.apRateBurstLive = true;
   }
 
-  /** 清空 APRateEffect 的贴图节点（寿命结束、重播或换谱时调用）。 */
+  /** 清空 APRateEffect 的节点（寿命结束、重播或换谱时调用）。 */
   private clearApRateBurst(): void {
     if (!this.apRateBurstLive && !this.apRateBurstSparks.length) return;
     this.apRateBurstLive = false;
@@ -1054,33 +1113,94 @@ export class LiveHud {
       this.clearApRateBurst();
       return;
     }
-    const root = host.querySelector<HTMLElement>('.burst-root');
-    const core = host.querySelector<HTMLElement>('.burst-core');
-    // Root / Bg_core 共用尺寸曲线，两层都从中心放大。
+    // Root / Bg_core 共用尺寸曲线，从中心放大。
     const s = apRateBurstScale(age);
+    const root = host.querySelector<HTMLElement>('.burst-root');
     if (root) {
-      root.style.opacity = String(apRateBurstRootAlpha(age) * AP_RATE_BURST_ROOT_GAIN);
+      root.style.opacity = String(apRateBurstRootAlpha(age));
       root.style.transform = `translate(-50%,-50%) scale(${s})`;
     }
-    if (core) {
-      // Bg_core 的基准不透明度是原包 startColor.a = 0.537。此处内联设置，
-      // 不能写在 CSS —— 内联样式会覆盖它。
-      core.style.opacity = String(apRateBurstCoreAlpha(age) * AP_RATE_BURST_CORE_ALPHA_GAIN);
-      core.style.transform = `translate(-50%,-50%) scale(${s})`;
+    const shade = host.querySelector<HTMLCanvasElement>('.burst-core-shade');
+    const light = host.querySelector<HTMLCanvasElement>('.burst-core-light');
+    if (shade && light) this.paintApRateCore(shade, light, age, s);
+    const canvas = host.querySelector<HTMLCanvasElement>('.burst-sparks');
+    if (canvas) this.paintApRateSparks(canvas, age);
+  }
+
+  /**
+   * #41 Bg_core：`Legacy Shaders/Particles/Alpha Blended Premultiply`
+   * （`Blend One OneMinusSrcAlpha`，片元 = `col × tex × col.a`）。
+   * 帧缓冲结果 `P + dst·(1 − A)`，其中 `P = col.rgb·tex.rgb·col.a`、`A = col.a²·tex.a`；
+   * 拆成压暗层 `(0,0,0,A)`（普通合成）与加亮层 `P`（plus-lighter）两张画布。
+   */
+  private paintApRateCore(shade: HTMLCanvasElement, light: HTMLCanvasElement, age: number, s: number): void {
+    const tex = this.apRateCoreTex;
+    const sctx = shade.getContext('2d');
+    const lctx = light.getContext('2d');
+    if (!tex || !sctx || !lctx) return;
+    if (shade.width !== tex.w || shade.height !== tex.h) {
+      shade.width = light.width = tex.w;
+      shade.height = light.height = tex.h;
     }
+    const c = apRateBurstCoreColor(age);
+    const sh = sctx.createImageData(tex.w, tex.h);
+    const li = lctx.createImageData(tex.w, tex.h);
+    const px = tex.px;
+    const aa = c.a * c.a;
+    for (let i = 0; i < px.length; i += 4) {
+      sh.data[i + 3] = Math.round(aa * px[i + 3]);
+      const pr = c.r * c.a * px[i], pg = c.g * c.a * px[i + 1], pb = c.b * c.a * px[i + 2];
+      const m = Math.max(pr, pg, pb);
+      if (m > 0) {
+        // 以最大通道作 alpha 存储，使预乘后的 rgb 恰为 P。
+        li.data[i] = Math.round(pr / m * 255);
+        li.data[i + 1] = Math.round(pg / m * 255);
+        li.data[i + 2] = Math.round(pb / m * 255);
+        li.data[i + 3] = Math.round(m);
+      }
+    }
+    sctx.putImageData(sh, 0, 0);
+    lctx.putImageData(li, 0, 0);
+    const tf = `translate(-50%,-50%) scale(${s})`;
+    shade.style.transform = tf;
+    light.style.transform = tf;
+  }
+
+  /**
+   * #229 Particle / #228 ClossParticle：`Mobile/Particles/Additive`（`Blend SrcAlpha One`，
+   * 片元 = `tex × col`）。每颗按 R/G/B 单通道图以 `col.c × col.a` 为 globalAlpha 叠加。
+   */
+  private paintApRateSparks(canvas: HTMLCanvasElement, age: number): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const D = AP_RATE_SPARK_DPR;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'lighter';
+    const cx = AP_RATE_SPARK_CANVAS.w / 2, cy = AP_RATE_SPARK_CANVAS.h / 2;
     for (const sp of this.apRateBurstSparks) {
       const a = age - sp.delay;
-      if (a <= 0 || a >= sp.life) {
-        sp.el.style.opacity = '0';
-        continue;
-      }
+      if (a <= 0 || a >= sp.life) continue;
+      const tex = this.apRateTexChannels.get(sp.tex);
+      if (!tex) continue;
       const u = a / sp.life;
+      const size = sp.size * apRateBurstParticleScale(u);
+      if (size <= 0) continue;
+      const col = apRateBurstParticleColor(u, sp.colorRand);
+      if (col.a <= 0) continue;
       // LimitVelocityOverLifetime：位移是 v(t)=lim+(v0−lim)e^(−κt) 的积分。
-      const [x, y] = apRateBurstTravel(sp.vx, sp.vy, a, sp.limit, sp.dampen);
-      sp.el.style.opacity = String(apRateBurstParticleAlpha(u));
-      sp.el.style.transform = `translate(-50%,-50%) translate(${sp.ax + x}px,${-(sp.ay + y)}px) `
-        + `rotate(${sp.spin * a}rad) scale(${apRateBurstParticleScale(u)})`;
+      const [dx, dy] = apRateBurstTravel(sp.vx, sp.vy, a, sp.limit, sp.dampen);
+      ctx.setTransform(D, 0, 0, D, (cx + sp.x + dx) * D, (cy - (sp.y + dy)) * D);
+      if (sp.spin) ctx.rotate(sp.spin * a);
+      const gains = [col.r * col.a, col.g * col.a, col.b * col.a];
+      for (let k = 0; k < 3; k++) {
+        if (gains[k] <= 0) continue;
+        ctx.globalAlpha = Math.min(1, gains[k]);
+        ctx.drawImage(tex.ch[k], -size / 2, -size / 2, size, size);
+      }
     }
+    ctx.globalAlpha = 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /**
@@ -1506,7 +1626,7 @@ export class LiveHud {
       el.style.transform = '';
       return;
     }
-    const x = scoreAddTweenX(age) + SCORE_ADD_X_NUDGE;
+    const x = scoreAddTweenX(age);
     const alpha = scoreAddTweenAlpha(age);
     el.style.visibility = 'visible';
     el.style.opacity = String(alpha);
@@ -1637,6 +1757,7 @@ export class LiveHud {
     this.comboFlashDigits = flashDigits;
     this.comboFx = fx;
     this.apRateBurstEl = burst;
+    this.loadApRateTextures();
     safe.append(root);
     return { row, label, apRate, apRateValue };
   }

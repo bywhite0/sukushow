@@ -15,9 +15,13 @@ import {
   AP_GAGE_FLASH_DURATION,
   apRateBurstScale,
   apRateBurstRootAlpha,
-  apRateBurstCoreAlpha,
+  apRateBurstCoreColor,
   apRateBurstParticleScale,
-  apRateBurstParticleAlpha,
+  apRateBurstParticleColor,
+  apRateBurstSpawn,
+  AP_RATE_PARTICLE,
+  AP_RATE_CLOSS,
+  AP_RATE_BURST_CORE_START,
   apRateBurstTravel,
   AP_RATE_BURST_DURATION,
   AP_RATE_BURST_ACTIVATE_DELAY,
@@ -87,16 +91,19 @@ describe('comboFlash curves', () => {
   });
 });
 
-describe('apRateFlash curves', () => {
-  it('scale reaches 1.5 by t=7/12', () => {
-    expect(apRateFlashScale(0)).toBeCloseTo(1, 5);
-    expect(apRateFlashScale(7 / 12)).toBeCloseTo(1.5, 5);
-    expect(apRateFlashScale(0.75)).toBeCloseTo(1.5, 5);
+describe('APIncreaseAnimation（clip #94）', () => {
+  it('scale 按 (−5.0379, 4.4082, 0, 1) 在 0.5833 到 1.5 并保持', () => {
+    expect(apRateFlashScale(0)).toBe(1);
+    expect(apRateFlashScale(0.3)).toBeCloseTo(-5.037900924682617 * 0.027 + 4.408163070678711 * 0.09 + 1, 9);
+    expect(apRateFlashScale(0.5833333134651184)).toBe(1.5);
+    expect(apRateFlashScale(0.5833)).toBeCloseTo(1.5, 3);
+    expect(apRateFlashScale(0.75)).toBe(1.5);
   });
-  it('alpha 1→0 over 0.75s', () => {
-    expect(apRateFlashAlpha(0)).toBeCloseTo(1, 5);
-    expect(apRateFlashAlpha(0.375)).toBeGreaterThan(0.4);
-    expect(apRateFlashAlpha(0.75)).toBeCloseTo(0, 5);
+  it('alpha 按 (4.7407, −5.3333, 0, 1) 在 0.75 归零', () => {
+    expect(apRateFlashAlpha(0)).toBe(1);
+    expect(apRateFlashAlpha(0.375)).toBeCloseTo(4.74074125289917 * 0.052734375 - 5.333333969116211 * 0.140625 + 1, 9);
+    expect(apRateFlashAlpha(0.7499)).toBeCloseTo(0, 3);
+    expect(apRateFlashAlpha(0.75)).toBe(0);
   });
 });
 
@@ -157,18 +164,59 @@ describe('APRateEffect 贴图爆发', () => {
     expect(apRateBurstRootAlpha(1)).toBe(0);
   });
 
-  it('Bg_core alpha 整寿命线性淡出到 1s', () => {
-    expect(apRateBurstCoreAlpha(0)).toBeCloseTo(1, 5);
-    expect(apRateBurstCoreAlpha(0.5)).toBeGreaterThan(0.3);
-    expect(apRateBurstCoreAlpha(1)).toBe(0);
+  it('Bg_core 顶点色 = startColor × 渐变', () => {
+    const c0 = apRateBurstCoreColor(0);
+    expect(c0.r).toBeCloseTo(0.9339622855186462, 9);
+    expect(c0.g).toBeCloseTo(0.14117646217346191 * 0.3744660019874573, 9);
+    expect(c0.b).toBeCloseTo(0.5493686199188232 * 0.8733367323875427, 9);
+    expect(c0.a).toBeCloseTo(AP_RATE_BURST_CORE_START.a, 9);
+    expect(apRateBurstCoreColor(0.5).a).toBeGreaterThan(0.2);
+    expect(apRateBurstCoreColor(1).a).toBe(0);
   });
 
-  it('火花粒子尺寸从 0 长出、alpha 单调淡出', () => {
+  it('火花尺寸曲线 2u − u²', () => {
     expect(apRateBurstParticleScale(0)).toBe(0);
+    expect(apRateBurstParticleScale(0.5)).toBeCloseTo(0.75, 9);
     expect(apRateBurstParticleScale(1)).toBe(1);
-    expect(apRateBurstParticleScale(0.5)).toBeGreaterThan(0);
-    expect(apRateBurstParticleAlpha(0)).toBeCloseTo(1, 5);
-    expect(apRateBurstParticleAlpha(1)).toBe(0);
+  });
+
+  it('火花颜色：TwoGradients 按逐粒子随机数在两条渐变间插值', () => {
+    // r=1 ⇒ maxGradient：起点 (0.996, 0.224, 0.6)，alpha 1 @0.0088 → 0 @1
+    const hi = apRateBurstParticleColor(0, 1);
+    expect(hi.g).toBeCloseTo(0.22352942824363708, 9);
+    expect(hi.a).toBe(1);
+    // r=0 ⇒ minGradient：alpha 0 起步，0.2076–0.7485 为 1
+    expect(apRateBurstParticleColor(0, 0).a).toBe(0);
+    expect(apRateBurstParticleColor(0.5, 0).a).toBe(1);
+    expect(apRateBurstParticleColor(0, 0).g).toBeCloseTo(0.07075470685958862, 9);
+    const mid = apRateBurstParticleColor(0.5, 0.5);
+    const lo = apRateBurstParticleColor(0.5, 0), top = apRateBurstParticleColor(0.5, 1);
+    expect(mid.b).toBeCloseTo((lo.b + top.b) / 2, 9);
+    expect(apRateBurstParticleColor(1, 0.3).a).toBe(0);
+  });
+
+  it('发射器参数取原包值', () => {
+    expect(AP_RATE_PARTICLE.count).toBe(14);
+    expect(AP_RATE_CLOSS.count).toBe(15);
+    expect(AP_RATE_PARTICLE.spin).toBeNull();
+    expect(AP_RATE_CLOSS.spin![1]).toBeCloseTo(Math.PI / 2, 6);
+    expect(AP_RATE_PARTICLE.limit).toEqual([0.699999988079071, 1]);
+    expect(AP_RATE_CLOSS.limit).toEqual([1, 1]);
+  });
+
+  it('Circle 出生点落在 (13.5, 3) 缩放后的环带内，方向为单位向量', () => {
+    for (const [ra, rr] of [[0, 0], [0.25, 1], [0.5, 0.5], [0.8, 0.1]]) {
+      const p = apRateBurstSpawn(ra, rr);
+      const ex = p.x / (0.07999999821186066 * 13.5), ey = p.y / (0.07999999821186066 * 3);
+      const k = Math.hypot(ex, ey);
+      expect(k).toBeGreaterThanOrEqual(0.7 - 1e-6);
+      expect(k).toBeLessThanOrEqual(1 + 1e-6);
+      expect(Math.hypot(p.dx, p.dy)).toBeCloseTo(1, 9);
+    }
+    // 角度 0 ⇒ 右侧，半径随机 0 ⇒ 内缘
+    const p0 = apRateBurstSpawn(0, 0);
+    expect(p0.x).toBeCloseTo(0.07999999821186066 * 13.5 * 0.7, 6);
+    expect(p0.dx).toBeCloseTo(1, 9);
   });
 });
 
@@ -197,6 +245,11 @@ describe('apRateBurstTravel（LimitVelocityOverLifetime 位移积分）', () => 
     // 方向比例仍为 3:4
     expect(y / x).toBeCloseTo(400 / 300, 6);
     expect(Math.hypot(x, y)).toBeLessThan(500 * 0.4);
+  });
+
+  it('初速不超过上限时不衰减', () => {
+    const [x] = apRateBurstTravel(80, 0, 0.5, 100, 0.2);
+    expect(x).toBeCloseTo(40, 9);
   });
 
   it('位移随限速上限单调增（lim 越大走越远）', () => {

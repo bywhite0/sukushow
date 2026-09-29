@@ -45,6 +45,8 @@
 .hud-add-score{display:flex;align-items:center;justify-content:flex-start;font-size:24px;font-weight:700;letter-spacing:0.04em;z-index:2;pointer-events:none;white-space:nowrap;transform-origin:center center;text-align:left}
 .hud-add-score .hud-ol{color:rgb(255,58,153);-webkit-text-stroke:2.4px rgb(255,58,153)}
 .hud-add-score .hud-face{color:#fff}
+/* TMP 左对齐：文字从 200×40 框的左缘起排，位数多时向右延伸。 */
+.hud-add-score .hud-ol,.hud-add-score .hud-face{justify-content:flex-start;text-align:left}
 .hud-score-label,.hud-ap-label,.hud-ap-value,.hud-mental-label,.hud-mental-now,.hud-mental-sep,.hud-mental-max{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;white-space:nowrap}
 .hud-score-label{font-size:20px;color:#fff;z-index:3}
 .hud-score-strip{overflow:visible;z-index:3}
@@ -280,55 +282,23 @@
   filter:drop-shadow(0 0 10px rgba(10,150,255,.55));
 }
 
-/* AP増加: base badge stays; APRateUpper flash copy; Local-scaled burst (PLAN §46/47).
-   爆发的尺寸/透明度由 paintApRateBurst 每帧按原包曲线驱动，这里只管布局与染色。 */
-.hud-aprate-burst{
-  pointer-events:none;
-  z-index:4;
-  overflow:visible;
-}
-.hud-aprate-burst > div{
+/* AP増加: base badge stays; APRateUpper flash copy; APRateEffect burst (PLAN §46/47).
+   爆发各层的尺寸/透明度/像素由 paintApRateBurst 每帧按原包数据驱动，这里只管布局与混合。
+   容器不设 z-index，避免多建一层层叠上下文；各层自带 z-index 4，与徽章(3)/闪光副本(5)排序。 */
+.hud-aprate-burst{pointer-events:none;overflow:visible}
+.hud-aprate-burst > *{
   position:absolute;left:50%;top:50%;
   transform:translate(-50%,-50%);
   pointer-events:none;
-  opacity:0;
+  z-index:4;
 }
-.hud-aprate-burst img{width:100%;height:100%;display:block}
-/* 底光层。两张贴图都是白的/灰的，颜色靠 mask 染。
-   Root 的不透明度由 paintApRateBurst 驱动。 */
-.hud-aprate-burst .burst-root{mix-blend-mode:screen}
-/* Bg_core 的不透明度由 paintApRateBurst 内联设置（= startColor.a × 增益），
-   不要写在这里——内联样式会覆盖它。这里只管染色。 */
-.hud-aprate-burst .burst-core{
-  mix-blend-mode:screen;
-  background:linear-gradient(180deg,rgb(255,36,140),rgb(255,120,190));
-  -webkit-mask-image:url(/rg/fx/tex/Default-Particle.png);
-  mask-image:url(/rg/fx/tex/Default-Particle.png);
-  -webkit-mask-size:100% 100%;mask-size:100% 100%;
-  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
-  -webkit-mask-position:center;mask-position:center;
-}
-.hud-aprate-burst .burst-core img{visibility:hidden}
-/* 主体层：粉色四角星。贴图是纯白，粉色来自原包 ColorModule 的 TwoGradients ⇒ 用 mask 染色。 */
-.hud-aprate-burst .burst-glitter,
-.hud-aprate-burst .burst-particles{
-  mix-blend-mode:screen;
-  background:linear-gradient(180deg,#ff3a99,#ffcee6);
-  -webkit-mask-size:100% 100%;mask-size:100% 100%;
-  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
-  -webkit-mask-position:center;mask-position:center;
-}
-.hud-aprate-burst .burst-glitter{
-  -webkit-mask-image:url(/rg/fx/tex/sc2_outgameLvUp_glitter_lyric_01.png);
-  mask-image:url(/rg/fx/tex/sc2_outgameLvUp_glitter_lyric_01.png);
-}
-.hud-aprate-burst .burst-particles{
-  -webkit-mask-image:url(/rg/fx/tex/sc2_Particle_light02.png);
-  mask-image:url(/rg/fx/tex/sc2_Particle_light02.png);
-}
-/* 染色层不需要内部的 <img>，用 mask 直接呈现形状。 */
-.hud-aprate-burst .burst-glitter img,
-.hud-aprate-burst .burst-particles img{visibility:hidden}
+/* sortingOrder −1：Particle / Closs，Mobile/Particles/Additive ⇒ 加色。 */
+.hud-aprate-burst .burst-sparks{mix-blend-mode:plus-lighter}
+/* sortingOrder +1：Root（APRate_OutlineEffect，Additive）。 */
+.hud-aprate-burst .burst-root{opacity:0;mix-blend-mode:plus-lighter}
+.hud-aprate-burst .burst-root img{width:100%;height:100%;display:block}
+/* Bg_core（Alpha Blended Premultiply）：压暗层普通合成，加亮层加色。 */
+.hud-aprate-burst .burst-core-light{mix-blend-mode:plus-lighter}
 .hud-aprate{
   transform-origin:center center;
   background:rgb(255,58,153);
