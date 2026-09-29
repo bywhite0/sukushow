@@ -6,6 +6,7 @@ import type { Chart } from './chart';
 import { BORDER, Y, edges, worldX } from './geometry';
 import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab, FxMat } from './rgAssets';
 import { fxMaterial } from './shaders';
+import { fnv1a, lcg, mixSeed } from './rng';
 import { PITCH, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
 
 const MAX_SPARKS = 2400;
@@ -85,6 +86,8 @@ interface Live {
   uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
   abs?: boolean; fever?: boolean;
   coreSide?: 'left' | 'right';
+  /** 本次启动的随机源：确定性模式下按（特效 id、uid、位置、启动时刻）播种，同一时刻重放得到同样的粒子。 */
+  rnd: () => number;
 }
 
 function lerpKeys(keys: { t: number; v: number; i?: number; o?: number }[] | undefined, t: number) {
@@ -250,6 +253,7 @@ export class HitFx {
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
   private last = Number.NaN;
+  private seeded = false;
   private sparks = 0;
   constructor(private fx: FxFile, private tex: Record<string, THREE.Texture>) {
     const mats = new Map(fx.mats.map(m => [m.id, m]));
@@ -405,7 +409,7 @@ export class HitFx {
       shapeSx, shapeSy: spec.shape.sy, shapeSz: spec.shape.sz, angle,
     };
   }
-  private emitShape(spec: Spec, sized: ReturnType<HitFx['sized']>, rnd: number, rnd2: number) {
+  private emitShape(spec: Spec, sized: ReturnType<HitFx['sized']>, rnd: number, rnd2: number, random: () => number) {
     const rad = spec.shape.radius || 0;
     let ox = 0, oy = 0, oz = 0, dx = 0, dy = 0, dz = 1;
     const type = spec.shape.en ? spec.shape.type : -1;
@@ -418,7 +422,7 @@ export class HitFx {
       // Box
       ox = (rnd - 0.5) * sized.shapeSx;
       oy = (rnd2 - 0.5) * sized.shapeSy;
-      oz = (Math.random() - 0.5) * sized.shapeSz;
+      oz = (random() - 0.5) * sized.shapeSz;
     } else if (type === 12) {
       // SingleSidedEdge
       ox = (rnd - 0.5) * 2 * rad * sized.shapeSx;
@@ -452,7 +456,7 @@ export class HitFx {
     oy += spec.shape.py;
     oz += spec.shape.pz;
     if (spec.shape.randDir > 0) {
-      const u = Math.random() * Math.PI * 2, v = Math.random() * 2 - 1;
+      const u = random() * Math.PI * 2, v = random() * 2 - 1;
       const r = Math.sqrt(Math.max(0, 1 - v * v));
       const rdx = Math.cos(u) * r, rdy = v, rdz = Math.sin(u) * r;
       const k = Math.min(1, Math.max(0, spec.shape.randDir));
@@ -467,29 +471,30 @@ export class HitFx {
     return { ox: rx, oy: ry, oz: rz, dx: rdx, dy: rdy, dz: rdz };
   }
   private burst(live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number, offOverride?: [number, number, number]) {
-    const sized = this.sized(spec, live.width, Math.random(), burstCount);
+    const random = live.rnd;
+    const sized = this.sized(spec, live.width, random(), burstCount);
     const count = countOverride ?? sized.count;
     // ForceOverLifetime：`randomizePerFrame=False` 时每个粒子在**出生瞬间**采样一次，
     // 整条生命期恒定（Unity 文档）。`inWorldSpace=false` 需按节点旋转折算到世界系。
     const force: [number, number, number] = spec.forceEn
       ? (() => {
         const f: [number, number, number] = [
-          sample(spec.force[0], Math.random()),
-          sample(spec.force[1], Math.random()),
-          sample(spec.force[2], Math.random()),
+          sample(spec.force[0], random()),
+          sample(spec.force[1], random()),
+          sample(spec.force[2], random()),
         ];
         return spec.forceWorld ? f : qrot(spec.qx, spec.qy, spec.qz, spec.qw, f[0], f[1], f[2]) as [number, number, number];
       })()
       : [0, 0, 0];
     const pitchLocal = spec.align === 2 && isPitchLocal(spec.qx, spec.qy, spec.qz, spec.qw);
     for (let i = 0; i < count && this.total() < MAX_SPARKS; i++) {
-      const rnd = Math.random(), rnd2 = Math.random();
-      const sh = this.emitShape(spec, sized, rnd, rnd2);
+      const rnd = random(), rnd2 = random();
+      const sh = this.emitShape(spec, sized, rnd, rnd2, random);
       const speed = sample(spec.speed, rnd);
       const grad = spec.grad;
       const gradMin = spec.gradTwo ? spec.gradMin : undefined;
-      const gradBlend = gradMin ? Math.random() : undefined;
-      const trailRandom = spec.trailEn ? Math.random() : 0;
+      const gradBlend = gradMin ? random() : undefined;
+      const trailRandom = spec.trailEn ? random() : 0;
       const trailSeed = Math.floor(trailRandom * 0x100000000);
       const trailFactor = live.fever ? feverTrailWidthFactor(trailSeed) : trailRandom;
       // World 模拟空间（`moveWithTransform=1`）：粒子出生时把发射器当前的入场位移烘进世界
@@ -546,7 +551,7 @@ export class HitFx {
       const base = Number.isFinite(period) ? delay + cycle * period : delay;
       this.emitBursts(live, spec, prevAge, age, period, age > 0, base);
     }
-    const rate = sample(spec.rate, Math.random());
+    const rate = sample(spec.rate, live.rnd());
     if (rate > 0) {
       spec.rateAcc += rate * Math.max(0, age - prevAge);
       const n = Math.floor(spec.rateAcc);
@@ -556,7 +561,7 @@ export class HitFx {
     // 走完边线全长 ~34.7 单位 ⇒ 约 174 个。World 空间下必须**按路径细分**发射：每个粒子带上
     // 出生时刻的节点位置与已存活时长，才能沿轨迹连成可见的「行进高光」；若整帧一次性发射，
     // 粒子会全部堆在帧末位置，且以整帧时长推进年龄而立即过期。
-    const rd = spec.rateDist ? sample(spec.rateDist, Math.random()) : 0;
+    const rd = spec.rateDist ? sample(spec.rateDist, live.rnd()) : 0;
     if (rd > 0 && dist > 0) {
       spec.distAcc += rd * dist;
       const n = Math.floor(spec.distAcc);
@@ -673,21 +678,32 @@ export class HitFx {
     // FeverEffectStartAnimation 在 1/60 秒激活两侧入场根节点。
     const coreSide = id === 'feverCoreLeft' ? 'left' : id === 'feverCoreRight' ? 'right' : undefined;
     const delay = fever && !coreSide ? 1 / 60 : 0;
+    const rnd = this.seeded
+      ? lcg(mixSeed(fnv1a(id), uid, x * 1000, width * 1000, (Number.isFinite(this.last) ? this.last : 0) * 1e4))
+      : () => Math.random();
     const specs = src.map(s => {
       // 每个发射器每次启动只采样一次 startDelay，平移整条周期序列（见 emitDue）。
-      const startDelay = delay + (fever ? sample(s.delay, Math.random()) : 0);
+      const startDelay = delay + (fever ? sample(s.delay, rnd()) : 0);
       return { ...s, delayAbs: startDelay, burstI: 0, rateAcc: 0, distAcc: 0, cycle: 0 };
     });
     const live: Live = {
       // 发射器周期 = `lengthInSec`。原包里彗星层是 0.1s、LineBase 1.6s、LineMove 0.8s，
       // 不能兜底成 1：那会把 0.1s 的层撑成 1s，整条时间轴都错。
       uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 0.05),
-      loop, x, width, specs, sparks: [], abs, fever, coreSide,
+      loop, x, width, specs, sparks: [], abs, fever, coreSide, rnd,
     };
     // Fire bursts at t=0 immediately (most note FX bursts are at 0).
     for (const spec of specs) this.emitDue(live, spec, -1e-6, 0);
     this.live.push(live);
     return live;
+  }
+  /**
+   * 确定性随机：每次特效启动按（id、uid、位置、启动时刻）播种。实时预览与视频导出都开启，
+   * 拖动 / 重放 / 导出在同一时刻得到同一组粒子（前提是按同样的步长逐帧推进）。
+   * 默认关闭（沿用 Math.random），单元测试依赖对 Math.random 打桩。
+   */
+  setDeterministic(on: boolean) {
+    this.seeded = on;
   }
   clear() {
     this.live = [];
