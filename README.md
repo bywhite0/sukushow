@@ -40,6 +40,34 @@ pnpm verify:corpus "本地谱面目录"
 
 音符时间单位为秒。音频偏移为毫秒，正值使音频晚开始；这是预览器的附加功能，不把源 JSON 的 Offset 当作原游戏已消费的字段。
 
+## 视频导出
+
+播放栏的「导出视频」在浏览器本地逐帧渲染，包含舞台、HUD、击中特效、开场及曲终横幅，并离线混合 BGM 和局内音效；不会上传文件。
+
+- MP4（H.264 + AAC；AAC 不可用时回退 Opus）或 WebM（VP9 + Opus）。浏览器不支持的组合会禁用；无可用音频编码器时界面明确提示无音轨。
+- 30 / 60 fps，12 / 20 / 45 Mbps 或自动码率；支持 720p、1080p、4K 及 19.5:9、20:9、16:10、4:3 预设。
+- 可选起止秒数与开场过场。包含开场时允许负时刻，0 秒是谱面与未偏移 BGM 的起点；片长按整数帧舍入。
+- 导出固定为 1 倍速，不跟随预览倍率。结束、取消或失败后恢复尺寸、倍率和原播放位置，并停在暂停状态。
+- 需要安全上下文（HTTPS 或 localhost）与可用的 WebCodecs。编码支持随浏览器、系统和设备变化，支持探测不保证运行中不会失败。
+- 视频和整段 PCM 暂存在内存，长片段尤其 4K 会占用较多内存；建议先导出短片确认效果。导出期间保持页面打开，后台节流可能降低速度。
+
+本地真实媒体验收（需本地曲目资源、Chromium、ffmpeg / ffprobe；另一个终端先运行 `pnpm dev --port 5179`）：
+
+```powershell
+pnpm smoke:export --song 103119 --start 20 --duration 3 --res 720p --fps 30 --container mp4 --intro off --frames 0.5,1.5,2.5 --out test-results/export-smoke
+```
+
+脚本检查时长、分辨率、帧率、编码、48 kHz 双声道音轨和页面错误；可通过 `FFMPEG` / `FFPROBE` 指定工具路径。音轨存在不等于听感或音画同步已逐事件验证，参数探测不等于所有规格均已完成实测。导出的游戏素材仍受原权利人的许可约束。
+
+Windows 本地内存验收（需 PowerShell 7 的 `pwsh`、Playwright Chromium 和本地曲目资源；同样先启动开发服务器）：
+
+```powershell
+pnpm verify:export-memory --base http://127.0.0.1:5179 --res 1080p --fps 30 --out test-results/export-memory-full
+pnpm verify:export-memory --base http://127.0.0.1:5179 --res 1080p --fps 30 --duration 30 --repeat 3 --settle 5 --cancel-after-frames 30 --out test-results/export-memory-repeat
+```
+
+脚本记录 Chromium 进程私有内存、JS 堆及 Backing Storage，并在本地保存视频和 `memory.json`。默认输出及上述用例均写入 Git 已忽略的 `test-results/`。第二条命令在同一页面连续导出三次，比较保留下载、撤销下载并等待 GC 后的占用，再检查渲染中取消后的恢复。系统空闲内存低于 1 GiB 或进程私有内存比初始基线增加超过 3 GiB 时取消；每两秒采样一次，不保证捕获瞬时峰值。
+
 ## Fever 元数据
 
 原始谱面不包含 Fever 分段。`src/feverMetadata.json` 从本地 `Musics.yaml.json` 的 `FeverSectionNo` 和 `cache/plain/musicscore_<Id>.csv` 的 `key_type=20` 分段事件及 `key_type=99` 曲终事件生成。
@@ -68,7 +96,7 @@ node scripts/copy-rg-assets.mjs --unity <RhythmGameAssetsDir> --meta <sprite_met
 
 参见 [实现依据与限制](docs/evidence.md)。行为以客户端二进制与场景序列化为准；重建工程仅辅助定位逻辑。参考 sekai-mmw-preview-web 的本地文件与播放交互设计，不转换为 SUS，不移植其 WASM 渲染器。
 
-**不宣称像素级还原。** 有 `public/rg` 时使用附带皮肤 / 简化 FX / SafeArea HUD；无资源时程序化回退。粒子为 Additive 近似（非完整 Unity ParticleSystem）。浮点计算使用 JavaScript double，并非逐指令 float32 仿真。移动端扩大垂直视角属于预览器适配。
+**不宣称像素级还原。** 有 `public/rg` 时使用附带皮肤 / 简化 FX / SafeArea HUD；无资源时程序化回退。粒子为 Additive 近似（非完整 Unity ParticleSystem）。浮点计算以 JavaScript double 为主，Hold 计数采样与串链时间比较按原包 float32 语义处理，并非全引擎逐指令 float32 仿真。移动端扩大垂直视角属于预览器适配。
 
 默认不包含游戏谱面与歌曲音频；附带 `public/se/` 局内音效。只能导入已解密谱面，不提供解密入口。16 MiB 谱面、128 MiB 音频、50,000 音符为加载上限。极端密集自制谱可能达到绘制批容量，当前未实现分页渲染。
 

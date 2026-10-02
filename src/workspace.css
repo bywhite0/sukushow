@@ -140,3 +140,27 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 @media (prefers-reduced-motion: reduce) {
   button { transition: none; }
 }
+
+/* 视频导出：导出期间画布是预设尺寸（可能不是 16:9），按比例内接显示，不拉伸。 */
+.stage canvas.exporting { object-fit: contain; background: #000; }
+.export-dialog {
+  width: min(560px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--shell-line); border-radius: 8px;
+  background: var(--shell-surface); color: var(--shell-text); box-shadow: 0 16px 48px oklch(0% 0 0 / .45);
+}
+.export-dialog::backdrop { background: oklch(10% .01 285 / .55); }
+.export-form { padding: 20px 24px 24px; }
+.export-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 16px; padding: 0; min-height: 0; max-width: none; }
+.export-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.export-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.export-grid .setting { margin: 0 0 16px; display: block; }
+.export-grid .setting > span { display: flex; margin-bottom: 8px; }
+.export-grid select, .export-grid input { width: 100%; }
+.export-grid select option:disabled { color: var(--shell-muted); }
+.export-support { margin: 4px 0 12px; min-height: 1.5em; color: var(--shell-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.export-progress { display: grid; gap: 8px; margin: 0 0 16px; }
+.export-progress[hidden] { display: none; }
+.export-progress progress { width: 100%; height: 8px; accent-color: var(--shell-accent); }
+.export-progress output { color: var(--shell-muted); font-family: Consolas, monospace; font-size: 11px; line-height: 1.5; }
+.export-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+.export-download { display: inline-flex; align-items: center; text-decoration: none; color: var(--shell-accent); }
+.export-download[hidden] { display: none; }

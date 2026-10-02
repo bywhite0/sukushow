@@ -143,7 +143,12 @@ export class PreviewRenderer {
     this.ui.add(this.uiRoot);
     this.uiRoot.add(this.laneUi);
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(canvas); this.resize();
-    void loadRgLibrary().then(lib => { if (!this.disposed && lib) this.useLibrary(lib); }).catch(() => undefined);
+    this.libReady = loadRgLibrary().then(lib => { if (!this.disposed && lib) this.useLibrary(lib); }).catch(() => undefined);
+  }
+  private readonly libReady: Promise<void>;
+  /** 原包资源库加载结束（成功或失败）；导出前等待，避免前几帧退回简易绘制。 */
+  whenReady(): Promise<void> {
+    return this.libReady;
   }
   private useLibrary(lib: RgLibrary) {
     this.lib = lib;

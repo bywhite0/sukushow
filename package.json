@@ -11,11 +11,14 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "smoke:export": "node ./scripts/export-smoke.mjs",
+    "verify:export-memory": "node ./scripts/export-memory.mjs",
     "verify:corpus": "tsx scripts/verify-corpus.ts",
     "metadata:fever": "tsx scripts/build-fever-metadata.ts"
   },
   "dependencies": {
     "fflate": "^0.8.2",
+    "mediabunny": "1.61.0",
     "three": "^0.183.0"
   },
   "devDependencies": {

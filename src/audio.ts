@@ -25,6 +25,10 @@ export class AudioPlayer {
   seek(time:number){this.transport.seek(time);this.sync();}
   setRate(rate:number){this.transport.setRate(rate);this.sync();}
   setOffset(seconds:number){if(!Number.isFinite(seconds))throw new Error('偏移必须是有限数');this.offset=seconds;this.sync();}
+  /** 已解码的 BGM（导出离线混音用）。 */
+  get audioBuffer(){return this.buffer;}
+  /** 音乐音量（0..1）。 */
+  get volume(){return this.gain.gain.value;}
   setVolume(volume:number){this.gain.gain.value=Math.max(0,Math.min(1,volume));}
   reset(){this.pause();this.transport.seek(this.transport.start);}
   clear(){this.generation++;this.buffer=null;this.reset();}

@@ -6,10 +6,12 @@ import feverIndex from './feverMetadata.json';
 import { feverForFilename, parseFeverWindow } from './feverMetadata';
 import type { FeverWindow } from './fever';
 import { AudioPlayer } from './audio';
-import { createWebAudioSeOutput, SeResolver } from './se';
+import { CapturingSeOutput, createWebAudioSeOutput, SeResolver } from './se';
 import { PreviewRenderer } from './renderer';
 import { LiveHud } from './hud';
-import { loadHudFonts, preloadImages } from './canvasKit';
+import { imagesSettled, loadHudFonts, preloadImages } from './canvasKit';
+import type { ExportFrameSource } from './export/exporter';
+import { installExportDialog, probeAllConfigs } from './ui/exportDialog';
 import { StageCompositor, type StageView } from './stageCompositor';
 import { StartAnimation, START_CLIP_DURATION } from './startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from './comboResult';
@@ -29,7 +31,7 @@ app.innerHTML=`
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
  <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-hidden="true"></canvas><canvas id="stage-canvas" aria-label="谱面预览画面"></canvas></div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
- <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button></div></div>
+ <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="export-video" class="quiet" type="button">导出视频</button><button id="fullscreen" class="quiet">全屏预览</button></div></div>
 </section>
 <aside aria-label="预览设置">
  <div class="inspector-heading"><h2>预览设置</h2><span>自动保存</span></div>
@@ -194,6 +196,8 @@ el('aspect-mount').replaceChildren(aspectPicker.root);
 applyAspect(aspectId);
 
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
+/** 视频导出进行中：实时循环已暂停，走带 / 键盘操作无效。 */
+let exporting=false;
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
@@ -225,12 +229,12 @@ function kickStartSe(){
  if(tr.start<0?tr.time<0:off<=0.05)se.playStart(Math.max(0,off));
 }
 function seekTo(t:number){
- if(!player)return;
+ if(!player||exporting)return;
  player.seek(t);se?.clear();se?.stopAll();
  if(player.transport.playing)kickStartSe();
 }
 async function toggle(){
- if(!player)return;
+ if(!player||exporting)return;
  try{
   if(player.transport.playing){
    // 过场中按键 = 跳过开场，直接到 0 秒开播（开场 SE 不打断）。
@@ -257,7 +261,7 @@ input('chart-file').onchange=async()=>{
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
 el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-document.addEventListener('keydown',e=>{if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
+document.addEventListener('keydown',e=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
 const hud=new LiveHud();
 void loadHudFonts();
 void preloadImages(LiveHud.textureUrls());
@@ -420,10 +424,117 @@ function animate(){
  }
  frame=requestAnimationFrame(animate);
 }animate();
-/** 测试 / 调试钩子（只读取状态，不改变行为）。 */
+
+/* ── 视频导出：同一条 canvas 合成路径，按虚拟时钟逐帧渲染 ── */
+/** 逻辑步频：实时预览每个动画帧推进一次 HUD 判定与 SeResolver（3 帧窗口）；导出按 60 Hz 细分（推断：原包 MainLogic 以 60 fps 运行）。 */
+const EXPORT_LOGIC_HZ=60;
+/** 起点前预滚（秒）：让起点时刻已在飞的击中特效、hold 光效与 HUD 动画在第一帧就存在（时长为推断值）。 */
+const EXPORT_PREROLL_SEC=1;
+function createExportSource(opts:{intro:boolean}):ExportFrameSource{
+ const canvas=el<HTMLCanvasElement>('stage-canvas');
+ const gl=el<HTMLCanvasElement>('chart-canvas');
+ let view:StageView={cssW:1920,cssH:1080,dpr:1};
+ let capture:CapturingSeOutput|null=null,liveSe:SeResolver|undefined,resumeAt=0,lastLogic=0,lastFrame=0,phaseAcc=0,began=false;
+ const minStart=opts.intro?-START_CLIP_DURATION:0;
+ /** 一个逻辑步：HUD 判定 + SE 派发（记成事件）+ 曲终横幅。 */
+ const logicStep=(tau:number)=>{capture!.now=tau;hud.sync(chart,tau,true);syncComboResult(tau,true);};
+ /** 逻辑推进到 t：按 ≤1/60 s 等分细分，最后一步恰好落在 t。 */
+ const advanceLogic=(t:number)=>{
+  const dt=t-lastLogic;if(!(dt>0))return;
+  const n=Math.max(1,Math.ceil(dt*EXPORT_LOGIC_HZ-1e-6));
+  for(let k=1;k<=n;k++)logicStep(k===n?t:lastLogic+dt*k/n);
+  lastLogic=t;
+ };
+ /** 3D 场景推进到 t（特效按 dt 逐帧步进，hold 呼吸按 dt×60 折算步数）。 */
+ const renderScene=(t:number)=>{
+  const r=renderer!;
+  phaseAcc+=Math.max(0,t-lastFrame)*60;const steps=Math.floor(phaseAcc+1e-6);phaseAcc-=steps;r.setPhaseSteps(steps);
+  r.setPlaying(true);r.setFeverState(hud.feverVisible,hud.feverWindowStart);r.render(chart,t,speed,mirror,lines);
+  lastFrame=t;
+ };
+ const showIntro=(t:number)=>startAnim.show(opts.intro&&t<0?t-minStart:null);
+ return {
+  canvas,
+  async begin(width,height,startSec){
+   if(!player||!renderer||!se||!seOut)throw new Error('预览未初始化');
+   exporting=true;began=true;
+   cancelAnimationFrame(frame);frame=0;
+   const tr=player.transport;resumeAt=tr.time;
+   player.pause();se.pause();player.setRate(1);
+   view={cssW:width,cssH:height,dpr:1};
+   renderer.setFixedSize({w:width,h:height,dpr:1});
+   canvas.classList.add('exporting');
+   await Promise.all([loadHudFonts(),preloadImages(LiveHud.textureUrls()),comboResult.load(),renderer.whenReady(),seOut.ensureLoaded()]);
+   // 过场贴图（封面等）在首次绘制时才请求：先各画一遍再等全部贴图就绪。
+   if(opts.intro)for(const c of [0,0.5,1,1.5,2,2.5,3,3.5]){startAnim.show(c);compositor.draw(view,{gl,hud,startAnim,comboResult});}
+   startAnim.show(null);
+   await imagesSettled();
+   const out=seOut;
+   capture=new CapturingSeOutput({tapVolume:out.tapVolume,seVolume:out.seVolume,hasCue:(i)=>out.cueBuffers.has(i)});
+   liveSe=se;se=new SeResolver(capture);hud.setSe(se);
+   // 预滚：暂停语义直接重建到 p0（特效清空、hold 光效按时刻补回），之后按播放语义逐步推进到起点。
+   const p0=Math.max(minStart,startSec-EXPORT_PREROLL_SEC);
+   // 两次暂停语义的跳转（p0−1 ms → p0）保证 HUD 与特效都从 p0 重建，不沿用实时预览残留的状态。
+   capture.now=p0;hud.sync(chart,p0-1e-3,false);hud.sync(chart,p0,false);comboLastT=p0;if(finishTime===null||p0<finishTime)comboResult.hide();
+   renderer.setPhaseSteps(0);renderer.setPlaying(false);renderer.render(chart,p0-1e-3,speed,mirror,lines);renderer.render(chart,p0,speed,mirror,lines);
+   lastLogic=p0;lastFrame=p0;phaseAcc=0;
+   // 开场 SE：与 kickStartSe 同规则——含过场时在过场开头（−START_CLIP_DURATION）起播；
+   // 不含过场时仅从 0 秒（≤0.05 s）开始导出才放。起点之前的事件在混音时从中途接上。
+   if(opts.intro){capture.now=minStart;se.playStart(0);}
+   else if(startSec<=0.05){capture.now=startSec;se.playStart(Math.max(0,startSec));}
+   for(let tau=p0+1/EXPORT_LOGIC_HZ;tau<startSec-1e-9;tau+=1/EXPORT_LOGIC_HZ){advanceLogic(tau);renderScene(tau);}
+  },
+  renderAt(t){
+   advanceLogic(t);
+   renderScene(t);
+   showIntro(t);
+   compositor.draw(view,{gl,hud,startAnim,comboResult});
+  },
+  collectAudio(endSec){
+   // 视频最后一帧还覆盖一个帧间隔；补齐该区间的音效，再按实际片长截断循环音。
+   advanceLogic(endSec);
+   const out=seOut!,buffers=new Map<string,AudioBuffer>();
+   for(const [i,b] of out.cueBuffers)buffers.set(String(i),b);
+   capture?.finish(endSec);
+   return {
+    events:capture?capture.events.map(e=>({...e})):[],
+    bgm:player?.audioBuffer??null,bgmStartSec:player?.offset??0,bgmVolume:player?.volume??0,
+    soundVolume:1,soundBuffers:buffers,
+    // 实时预览的 hold 循环是整段循环（loop=true，无循环点）。
+    loopPoints:()=>null,
+   };
+  },
+  end(){
+   if(!began)return;began=false;
+   if(liveSe){se=liveSe;hud.setSe(se);liveSe=undefined;}
+   capture=null;
+   renderer?.setFixedSize(null);renderer?.setPhaseSteps(1);
+   canvas.classList.remove('exporting');
+   startAnim.show(null);
+   exporting=false;
+   if(player){player.setRate(Number(el<HTMLSelectElement>('rate').value));seekTo(resumeAt);}
+   comboLastT=resumeAt;
+   if(!frame)frame=requestAnimationFrame(animate);
+  },
+ };
+}
+const exportDialog=installExportDialog(el<HTMLButtonElement>('export-video'),{
+ createSource:createExportSource,
+ // 走带终点已含曲终横幅（chart.duration ≥ FinishTime + 横幅时长）。
+ durationSec:()=>player?.transport.duration??chart.duration,
+ introSec:START_CLIP_DURATION,
+ introDefault:()=>input('opt-start-anim').checked,
+ lockTargets:()=>[document.querySelector<HTMLElement>('.workspace-header')!,document.querySelector<HTMLElement>('aside')!,document.querySelector<HTMLElement>('.transport')!],
+ title:()=>el('chart-name').textContent??'',
+ message,
+});
+if(!player)el<HTMLButtonElement>('export-video').disabled=true;
+
+/** 测试 / 调试钩子（只读取状态；导出探测 / 自动化验证用）。 */
 (window as unknown as {__LPW__:unknown}).__LPW__={
- hud,startAnim,comboResult,compositor,
+ hud,startAnim,comboResult,compositor,exportDialog,
  get renderer(){return renderer;},get player(){return player;},
+ probeExportConfigs:probeAllConfigs,
 };
 window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();},{once:true});
 
