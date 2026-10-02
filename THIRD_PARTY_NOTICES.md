@@ -4,6 +4,7 @@
 
 - Three.js：MIT，https://github.com/mrdoob/three.js
 - fflate：MIT，https://github.com/101arrowz/fflate
+- Mediabunny：MPL-2.0，https://github.com/Vanilagy/mediabunny ，用于视频封装；其代码继续适用 MPL-2.0，不由本仓 MIT 声明替代。
 
 构建与测试：Vite、Vitest、TypeScript、tsx（MIT）；Playwright（Apache-2.0）。完整依赖树和版本见 pnpm-lock.yaml，包内许可文件随安装提供。
 
