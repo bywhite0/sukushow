@@ -160,12 +160,32 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 .song-option-badges, .difficulty-group { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 .song-option-badge, .difficulty-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; padding: 3px 5px; border: 1px solid var(--shell-line); border-radius: 4px; color: var(--shell-muted); font-size: 10px; font-weight: 700; }
 .difficulty-chip { width: 40px; height: 40px; padding: 0; border-radius: 8px; background: var(--shell-raised); font-size: 13px; }
-.difficulty-chip.is-active { border-color: var(--shell-accent); background: var(--shell-accent); color: var(--shell-ink); }
-.song-option-badge[data-difficulty="NORMAL"], .difficulty-chip[data-difficulty="NORMAL"] { color: oklch(76% .13 155); }
-.song-option-badge[data-difficulty="HARD"], .difficulty-chip[data-difficulty="HARD"] { color: oklch(80% .13 85); }
-.song-option-badge[data-difficulty="EXPERT"], .difficulty-chip[data-difficulty="EXPERT"] { color: oklch(68% .16 20); }
-.song-option-badge[data-difficulty="MASTER"], .difficulty-chip[data-difficulty="MASTER"] { color: oklch(72% .15 300); }
-.difficulty-chip.is-active { color: var(--shell-ink); }
+
+/* LLLL 的难度色是统一前端的默认值，2D 与 LLLL 3D 共用这组颜色。 */
+.picker {
+  --difficulty-normal: #36d6e0;
+  --difficulty-hard: #ffb32f;
+  --difficulty-expert: #fd5b91;
+  --difficulty-master: #9370d5;
+  --difficulty-active-text: #fff;
+}
+
+/* PJSK 原生 UI 的难度色只在 PJSK 模式覆盖，避免污染 LLLL / 2D。 */
+.workspace[data-view="pjsk"] .picker {
+  --difficulty-normal: oklch(76% .13 155);
+  --difficulty-hard: oklch(80% .13 85);
+  --difficulty-expert: oklch(68% .16 20);
+  --difficulty-master: oklch(74% .15 300);
+  --difficulty-active-text: var(--shell-ink);
+}
+
+.song-option-badge[data-difficulty="NORMAL"], .difficulty-chip[data-difficulty="NORMAL"] { --difficulty-color: var(--difficulty-normal); color: var(--difficulty-color); }
+.song-option-badge[data-difficulty="HARD"], .difficulty-chip[data-difficulty="HARD"] { --difficulty-color: var(--difficulty-hard); color: var(--difficulty-color); }
+.song-option-badge[data-difficulty="EXPERT"], .difficulty-chip[data-difficulty="EXPERT"] { --difficulty-color: var(--difficulty-expert); color: var(--difficulty-color); }
+.song-option-badge[data-difficulty="MASTER"], .difficulty-chip[data-difficulty="MASTER"] { --difficulty-color: var(--difficulty-master); color: var(--difficulty-color); }
+.difficulty-chip[data-difficulty] { border-color: color-mix(in srgb, var(--difficulty-color) 55%, transparent); }
+.difficulty-chip[data-difficulty]:hover { border-color: var(--difficulty-color); background: color-mix(in srgb, var(--difficulty-color) 16%, var(--shell-raised)); }
+.difficulty-chip.is-active { border-color: var(--difficulty-color); background: var(--difficulty-color); color: var(--difficulty-active-text); }
 .picker-empty { padding: 20px 12px; color: var(--shell-muted); font-size: 11px; text-align: center; }
 .aspect-group { display: flex; align-items: center; gap: 4px; }
 .aspect-chip { min-width: 40px; height: 40px; padding: 0 9px; border: 1px solid var(--shell-line); border-radius: 8px; background: var(--shell-raised); color: var(--shell-muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
