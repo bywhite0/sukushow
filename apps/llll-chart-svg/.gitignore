@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 本地谱面与贴图路径（不入库）
+scripts/link-assets.local.json
+local-assets/
+
+# 渲染产物
+out/
+*.local.svg
