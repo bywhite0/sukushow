@@ -1,0 +1,10 @@
+node_modules/
+dist/
+src/generated/
+public/wasm/
+*.log
+
+# 游戏资源（体积大，且非本项目可再分发）——用 scripts/link-assets.py 从本地副本链接进来
+public/assets/audio/
+public/assets/jacket/
+public/assets/chart/
