@@ -1,0 +1,6366 @@
+{
+  "source": {
+    "credits": "wikiwiki.jp/llll_wiki 曲目页「楽曲基本情報」（raw_html，rowspan 展开）",
+    "vocal": "4L masterdata/Musics.yaml（CenterCharacterId + SingerCharacterId）",
+    "snapshot": "20260922-132806"
+  },
+  "total": 236,
+  "coverage": {
+    "lyricist": 236,
+    "composer": 236,
+    "arranger": 214,
+    "stringsArranger": 16
+  },
+  "centerConflicts": [
+    {
+      "id": "103107",
+      "title": "Kawaii no susume",
+      "value": "乙宗梢",
+      "wikiSays": "日野下花帆",
+      "authority": "masterdata"
+    }
+  ],
+  "songs": [
+    {
+      "id": "103101",
+      "title": "Dream Believers（4人Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "Dream Believers(4人Ver.)"
+    },
+    {
+      "id": "103102",
+      "title": "永遠のEuphoria（4人Ver.）",
+      "lyricist": "KOMU",
+      "composer": "オオヤギヒロオ",
+      "arranger": "オオヤギヒロオ",
+      "stringsArranger": "山下洋介",
+      "center": "夕霧綴理",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "support": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "乙宗梢",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "永遠のEuphoria(4人Ver.)"
+    },
+    {
+      "id": "103103",
+      "title": "フォーチュンムービー",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "フォーチュンムービー"
+    },
+    {
+      "id": "103104",
+      "title": "Reflection in the mirror",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Reflection in the mirror"
+    },
+    {
+      "id": "103105",
+      "title": "謳歌爛漫",
+      "lyricist": "ケリー",
+      "composer": "小野寺祐輔(Arte Refact)",
+      "arranger": "河合泰志(Arte Refact)",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "謳歌爛漫"
+    },
+    {
+      "id": "103106",
+      "title": "眩耀夜行",
+      "lyricist": "ケリー",
+      "composer": "小野寺祐輔 (Arte Refact)",
+      "arranger": "脇 眞富 (Arte Refact)",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "眩耀夜行"
+    },
+    {
+      "id": "103107",
+      "title": "Kawaii no susume",
+      "lyricist": "ケリー",
+      "composer": "佐藤厚仁",
+      "arranger": "佐藤厚仁、Kijibato",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Kawaii no susume"
+    },
+    {
+      "id": "103108",
+      "title": "ジブンダイアリー",
+      "lyricist": "TATSUNE",
+      "composer": "栗原 暁（Jazzin’park）、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ジブンダイアリー"
+    },
+    {
+      "id": "103109",
+      "title": "永遠のEuphoria",
+      "lyricist": "KOMU",
+      "composer": "オオヤギヒロオ",
+      "arranger": "オオヤギヒロオ",
+      "stringsArranger": "山下洋介",
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "永遠のEuphoria"
+    },
+    {
+      "id": "103110",
+      "title": "ハクチューアラモード",
+      "lyricist": "ナユタン星人",
+      "composer": "ナユタン星人",
+      "arranger": "ナユタン星人",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/ハクチューアラモード"
+    },
+    {
+      "id": "103111",
+      "title": "パラレルダンサー",
+      "lyricist": "TATSUNE",
+      "composer": "家原正樹",
+      "arranger": "家原正樹",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "パラレルダンサー"
+    },
+    {
+      "id": "103112",
+      "title": "Dream Believers",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "村野さやか",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "Dream Believers"
+    },
+    {
+      "id": "103113",
+      "title": "アイデンティティ",
+      "lyricist": "ろさ",
+      "composer": "大熊淳生 (Arte Refact)",
+      "arranger": "大熊淳生 (Arte Refact)",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "アイデンティティ"
+    },
+    {
+      "id": "103114",
+      "title": "Legato",
+      "lyricist": "PA-NON",
+      "composer": "浅利進吾",
+      "arranger": "山下洋介",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "Legato"
+    },
+    {
+      "id": "103115",
+      "title": "千変万華",
+      "lyricist": "ケリー",
+      "composer": "大熊淳生 (Arte Refact)",
+      "arranger": "大熊淳生 (Arte Refact)",
+      "stringsArranger": "真部 裕",
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "千変万華"
+    },
+    {
+      "id": "103116",
+      "title": "Yup! Yup! Yup!",
+      "lyricist": "Kanata Okajima",
+      "composer": "Kanata Okajima、ArmySlick",
+      "arranger": "ArmySlick",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "Yup! Yup! Yup!"
+    },
+    {
+      "id": "103117",
+      "title": "シュガーメルト",
+      "lyricist": "ケリー",
+      "composer": "山下洋介",
+      "arranger": "山下洋介",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "シュガーメルト"
+    },
+    {
+      "id": "103118",
+      "title": "Link to the FUTURE",
+      "lyricist": "畑 亜貴",
+      "composer": "LiCu、古河 夕",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "Link to the FUTURE"
+    },
+    {
+      "id": "103119",
+      "title": "ハッピー至上主義！",
+      "lyricist": "ろさ",
+      "composer": "友清貴之",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "藤島慈",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ハッピー至上主義！"
+    },
+    {
+      "id": "103120",
+      "title": "マハラジャンボリー",
+      "lyricist": "ろさ",
+      "composer": "サクマリョウ",
+      "arranger": "サクマリョウ",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "マハラジャンボリー"
+    },
+    {
+      "id": "103201",
+      "title": "Preserved Roses",
+      "lyricist": "井上秋緒",
+      "composer": "浅倉大介",
+      "arranger": "浅倉大介",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Preserved Roses"
+    },
+    {
+      "id": "103202",
+      "title": "心予報",
+      "lyricist": "Eve",
+      "composer": "Eve",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "心予報"
+    },
+    {
+      "id": "103203",
+      "title": "ダンスロボットダンス",
+      "lyricist": "ナユタン星人",
+      "composer": "ナユタン星人",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ダンスロボットダンス"
+    },
+    {
+      "id": "103204",
+      "title": "御旗のもとに",
+      "lyricist": "広井王子",
+      "composer": "田中公平",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "御旗のもとに"
+    },
+    {
+      "id": "103205",
+      "title": "ダイヤモンドハッピー",
+      "lyricist": "畑 亜貴",
+      "composer": "石濱 翔 (MONACA)",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ダイヤモンドハッピー"
+    },
+    {
+      "id": "103301",
+      "title": "TOKIMEKI Runners",
+      "lyricist": "畑 亜紀",
+      "composer": "矢鴇つかさ (Arte Refact)",
+      "arranger": "矢鴇つかさ (Arte Refact)",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "TOKIMEKI Runners"
+    },
+    {
+      "id": "103302",
+      "title": "君のこころは輝いてるかい?",
+      "lyricist": "畑 亜貴",
+      "composer": "光増ハジメ",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "村野さやか",
+        "夕霧綴理",
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "君のこころは輝いてるかい？"
+    },
+    {
+      "id": "104101",
+      "title": "Dream Believers（104期Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Dream Believers(104期Ver.)"
+    },
+    {
+      "id": "104102",
+      "title": "Sparkly Spot（104期NEW Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "渡辺拓也",
+      "arranger": "酒井拓也（Arte Refact）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Sparkly Spot(104期NEW Ver.)"
+    },
+    {
+      "id": "104103",
+      "title": "365 Days",
+      "lyricist": "佐藤舞花",
+      "composer": "園田健太郎",
+      "arranger": "園田健太郎",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "365 Days"
+    },
+    {
+      "id": "104104",
+      "title": "千変万華（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "大熊淳生 (Arte Refact)",
+      "arranger": "大熊淳生 (Arte Refact)",
+      "stringsArranger": "真部 裕",
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "千変万華(104期Ver.)"
+    },
+    {
+      "id": "104105",
+      "title": "Bloom the smile, Bloom the dream!",
+      "lyricist": "塚田耕平",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Bloom the smile, Bloom the dream!"
+    },
+    {
+      "id": "104106",
+      "title": "永遠のEuphoria（104期Ver.）",
+      "lyricist": "KOMU",
+      "composer": "オオヤギヒロオ",
+      "arranger": "オオヤギヒロオ",
+      "stringsArranger": "山下洋介",
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "永遠のEuphoria(104期Ver.)"
+    },
+    {
+      "id": "104107",
+      "title": "眩耀夜行（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "小野寺祐輔 (Arte Refact)",
+      "arranger": "脇 眞富 (Arte Refact)",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "眩耀夜行(104期Ver.)"
+    },
+    {
+      "id": "104108",
+      "title": "ハクチューアラモード（104期Ver.）",
+      "lyricist": "ナユタン星人",
+      "composer": "ナユタン星人",
+      "arranger": "ナユタン星人",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ハクチューアラモード(104期Ver.)"
+    },
+    {
+      "id": "104109",
+      "title": "ファンファーレ！！！",
+      "lyricist": "ろさ",
+      "composer": "Kijibato（Dream Monster）",
+      "arranger": "Kijibato（Dream Monster）",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ファンファーレ！！！"
+    },
+    {
+      "id": "104110",
+      "title": "マハラジャンボリー（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "サクマリョウ",
+      "arranger": "サクマリョウ",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "マハラジャンボリー(104期Ver.)"
+    },
+    {
+      "id": "104111",
+      "title": "Link to the FUTURE（104期Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "LiCu、古河 夕",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Link to the FUTURE(104期Ver.)"
+    },
+    {
+      "id": "104112",
+      "title": "ハナムスビ",
+      "lyricist": "ケリー",
+      "composer": "川崎智哉",
+      "arranger": "川崎智哉",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ハナムスビ"
+    },
+    {
+      "id": "104113",
+      "title": "シュガーメルト（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "山下洋介",
+      "arranger": "山下洋介",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "シュガーメルト(104期Ver.)"
+    },
+    {
+      "id": "104114",
+      "title": "全方位キュン♡",
+      "lyricist": "ろさ",
+      "composer": "Junky",
+      "arranger": "Junky",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "全方位キュン♡"
+    },
+    {
+      "id": "104115",
+      "title": "Chu! Chocolate",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Chu! Chocolate"
+    },
+    {
+      "id": "104116",
+      "title": "ベジ・ラブ・ルー",
+      "lyricist": "MIZUE",
+      "composer": "すみだしんや",
+      "arranger": "前嶋康明",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ベジ・ラブ・ルー"
+    },
+    {
+      "id": "104117",
+      "title": "おいでよ！石川大観光",
+      "lyricist": "新谷風太",
+      "composer": "白戸佑輔（Dream Monster）",
+      "arranger": "白戸佑輔（Dream Monster）",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "おいでよ！石川大観光"
+    },
+    {
+      "id": "104118",
+      "title": "いったん",
+      "lyricist": "佐伯youthK",
+      "composer": "佐伯youthK",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "いったん"
+    },
+    {
+      "id": "104119",
+      "title": "Dream Believers（SAKURA Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Dream Believers(SAKURA Ver.)"
+    },
+    {
+      "id": "104120",
+      "title": "Love it! Wonderful Trip!",
+      "lyricist": "佐藤舞花",
+      "composer": "椿山日南子（Dream Monster）",
+      "arranger": "椿山日南子（Dream Monster）",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "村野さやか",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Love it! Wonderful Trip!"
+    },
+    {
+      "id": "104201",
+      "title": "ミラクルショッピング ～ドン・キホーテのテーマ～",
+      "lyricist": "田中マイミ",
+      "composer": "田中マイミ",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ミラクルショッピング～ドン・キホーテのテーマ～"
+    },
+    {
+      "id": "104202",
+      "title": "ルージュの伝言",
+      "lyricist": "荒井由実",
+      "composer": "荒井由実",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ルージュの伝言"
+    },
+    {
+      "id": "104203",
+      "title": "Welcome!",
+      "lyricist": "コゲどんぼ",
+      "composer": "坂本裕介",
+      "arranger": "坂本裕介",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "Welcome!"
+    },
+    {
+      "id": "104204",
+      "title": "コネクト",
+      "lyricist": "渡辺 翔",
+      "composer": "渡辺 翔",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "コネクト"
+    },
+    {
+      "id": "104301",
+      "title": "夏色えがおで1,2,Jump!",
+      "lyricist": "畑 亜貴",
+      "composer": "奥松 誠",
+      "arranger": "高田 暁",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "夏色えがおで1,2,Jump!"
+    },
+    {
+      "id": "104302",
+      "title": "常夏☆サンシャイン",
+      "lyricist": "宮嶋淳子",
+      "composer": "EFFY",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "常夏☆サンシャイン"
+    },
+    {
+      "id": "105101",
+      "title": "Dream Believers（105期Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "日野下花帆",
+      "singer": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "Dream Believers(105期Ver.)"
+    },
+    {
+      "id": "105102",
+      "title": "Celebration!",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "CHOKKAKU",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/Celebration!"
+    },
+    {
+      "id": "105103",
+      "title": "チリコンカン",
+      "lyricist": "Skipjack",
+      "composer": "佐藤厚仁（Dream Monster）",
+      "arranger": "佐藤厚仁（Dream Monster）",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/チリコンカン"
+    },
+    {
+      "id": "105104",
+      "title": "Hello, new dream!",
+      "lyricist": "塚田耕平",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "Hello, new dream!"
+    },
+    {
+      "id": "105105",
+      "title": "幸せのリボン",
+      "lyricist": "TATSUNE",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "夕霧綴理"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "幸せのリボン"
+    },
+    {
+      "id": "105106",
+      "title": "BLAST!!",
+      "lyricist": "ろさ",
+      "composer": "Fi’Ne、Yuqui-lah",
+      "arranger": "ハヤシベトモノリ（Plus-Tech Squeeze Box）",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "BLAST!!"
+    },
+    {
+      "id": "203101",
+      "title": "Mix shake!!",
+      "lyricist": "ケリー",
+      "composer": "川崎智哉",
+      "arranger": "川崎智哉",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Mix shake!!"
+    },
+    {
+      "id": "203102",
+      "title": "ツキマカセ",
+      "lyricist": "TATSUNE",
+      "composer": "福田陽司",
+      "arranger": "渡辺和紀",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ツキマカセ"
+    },
+    {
+      "id": "203103",
+      "title": "Holiday∞Holiday",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Holiday∞Holiday"
+    },
+    {
+      "id": "203104",
+      "title": "Mirage Voyage",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Mirage Voyage"
+    },
+    {
+      "id": "203105",
+      "title": "夏めきペイン",
+      "lyricist": "指原莉乃",
+      "composer": "栗原 暁 (Jazzin’park)、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": "門脇大輔",
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "スクステ/楽曲/夏めきペイン"
+    },
+    {
+      "id": "203106",
+      "title": "ド！ド！ド！",
+      "lyricist": "ろさ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/ド！ド！ド！"
+    },
+    {
+      "id": "203107",
+      "title": "素顔のピクセル",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "素顔のピクセル"
+    },
+    {
+      "id": "203108",
+      "title": "ノンフィクションヒーローショー",
+      "lyricist": "ろさ",
+      "composer": "要田 健",
+      "arranger": "要田 健",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ノンフィクションヒーローショー"
+    },
+    {
+      "id": "203109",
+      "title": "Runway",
+      "lyricist": "PA-NON",
+      "composer": "渡辺未来",
+      "arranger": "渡辺未来",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "Runway"
+    },
+    {
+      "id": "203110",
+      "title": "青春の輪郭",
+      "lyricist": "TATSUNE",
+      "composer": "SHIBU",
+      "arranger": "SHIBU",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/青春の輪郭"
+    },
+    {
+      "id": "203111",
+      "title": "ツバサ・ラ・リベルテ",
+      "lyricist": "桃宇アリサ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "夕霧綴理",
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "ツバサ・ラ・リベルテ"
+    },
+    {
+      "id": "203112",
+      "title": "天才なのかもしれない",
+      "lyricist": "ろさ",
+      "composer": "戸嶋友祐",
+      "arranger": "戸嶋友祐",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "天才なのかもしれない"
+    },
+    {
+      "id": "203113",
+      "title": "Special Thanks",
+      "lyricist": "ケリー",
+      "composer": "めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Special Thanks"
+    },
+    {
+      "id": "203114",
+      "title": "ミルク",
+      "lyricist": "ろさ",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ミルク"
+    },
+    {
+      "id": "203115",
+      "title": "Colorfulness",
+      "lyricist": "PA-NON",
+      "composer": "川崎智哉",
+      "arranger": "川崎智哉",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Colorfulness"
+    },
+    {
+      "id": "203116",
+      "title": "BANG YOU グラビティ",
+      "lyricist": "ろさ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "BANG YOU グラビティ"
+    },
+    {
+      "id": "203117",
+      "title": "抱きしめる花びら",
+      "lyricist": "Kanata Okajima",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": "Hayato Yamamoto、Satoshi Setsune",
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "抱きしめる花びら"
+    },
+    {
+      "id": "203118",
+      "title": "STEP UP !",
+      "lyricist": "山岸洸一",
+      "composer": "山岸洸一",
+      "arranger": "山岸洸一",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "STEP UP！"
+    },
+    {
+      "id": "203201",
+      "title": "そばかす",
+      "lyricist": "YUKI",
+      "composer": "恩田快人",
+      "arranger": "恩田快人",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "そばかす"
+    },
+    {
+      "id": "203202",
+      "title": "ビバハピ",
+      "lyricist": "Mitchie M",
+      "composer": "Mitchie M",
+      "arranger": "Mitchie M",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ビバハピ"
+    },
+    {
+      "id": "203203",
+      "title": "狙いうち",
+      "lyricist": "阿久悠",
+      "composer": "都倉俊一",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "乙宗梢",
+        "村野さやか",
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "vocal": [
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "狙いうち"
+    },
+    {
+      "id": "203204",
+      "title": "♡桃色片想い♡",
+      "lyricist": "つんく",
+      "composer": "つんく",
+      "arranger": "高橋諭一",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "藤島慈"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "♡桃色片想い♡"
+    },
+    {
+      "id": "203205",
+      "title": "いーあるふぁんくらぶ",
+      "lyricist": "みきとP",
+      "composer": "みきとP",
+      "arranger": "みきとP",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "いーあるふぁんくらぶ"
+    },
+    {
+      "id": "203206",
+      "title": "ハッピーシンセサイザ",
+      "lyricist": "EasyPop",
+      "composer": "EasyPop",
+      "arranger": "EasyPop",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ハッピーシンセサイザ"
+    },
+    {
+      "id": "203207",
+      "title": "強風オールバック",
+      "lyricist": "ゆこぴ",
+      "composer": "ゆこぴ",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "強風オールバック"
+    },
+    {
+      "id": "203208",
+      "title": "CHANGE!!!!",
+      "lyricist": "yura",
+      "composer": "NBGI (内田哲也)",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "CHANGE!!!!"
+    },
+    {
+      "id": "203301",
+      "title": "僕らのLIVE 君とのLIFE",
+      "lyricist": "畑 亜貴",
+      "composer": "山田高弘",
+      "arranger": "高田 暁",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "僕らのLIVE 君とのLIFE"
+    },
+    {
+      "id": "203302",
+      "title": "始まりは君の空",
+      "lyricist": "畑 亜貴",
+      "composer": "兼松 衆",
+      "arranger": "兼松 衆",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "始まりは君の空"
+    },
+    {
+      "id": "204101",
+      "title": "アイデンティティ（104期NEW Ver.）",
+      "lyricist": "ろさ",
+      "composer": "大熊淳生 (Arte Refact)",
+      "arranger": "佐藤厚仁",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "アイデンティティ(104期NEW Ver.)"
+    },
+    {
+      "id": "204102",
+      "title": "Mix shake!!（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "川崎智哉",
+      "arranger": "川崎智哉",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Mix shake!!(104期Ver.)"
+    },
+    {
+      "id": "204103",
+      "title": "ノンフィクションヒーローショー（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "要田 健",
+      "arranger": "要田 健",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ノンフィクションヒーローショー(104期Ver.)"
+    },
+    {
+      "id": "204104",
+      "title": "みらくりえーしょん",
+      "lyricist": "ろさ",
+      "composer": "桑原佑介",
+      "arranger": "MOSAIC.WAV",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "みらくりえーしょん"
+    },
+    {
+      "id": "204105",
+      "title": "アオクハルカ",
+      "lyricist": "ケリー",
+      "composer": "鶴﨑輝一",
+      "arranger": "鶴﨑輝一",
+      "stringsArranger": "菊谷知樹",
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "アオクハルカ"
+    },
+    {
+      "id": "204106",
+      "title": "Mirage Voyage（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Mirage Voyage(104期Ver.)"
+    },
+    {
+      "id": "204107",
+      "title": "Proof",
+      "lyricist": "TATSUNE",
+      "composer": "法戸祐樹",
+      "arranger": "佐藤厚仁（Dream Monster）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Proof"
+    },
+    {
+      "id": "204108",
+      "title": "夏めきペイン（104期Ver.）",
+      "lyricist": "指原莉乃",
+      "composer": "栗原 暁 (Jazzin’park)、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": "門脇大輔",
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "スクステ/楽曲/夏めきペイン(104期Ver.)"
+    },
+    {
+      "id": "204109",
+      "title": "Holiday∞Holiday（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Holiday∞Holiday(104期Ver.)"
+    },
+    {
+      "id": "204110",
+      "title": "素顔のピクセル（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "素顔のピクセル(104期Ver.)"
+    },
+    {
+      "id": "204111",
+      "title": "ド！ド！ド！（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ド！ド！ド！(104期Ver.)"
+    },
+    {
+      "id": "204112",
+      "title": "バアドケージ",
+      "lyricist": "TATSUNE",
+      "composer": "伊藤聡汰",
+      "arranger": "平田祥一郎",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "バアドケージ"
+    },
+    {
+      "id": "204113",
+      "title": "ツバサ・ラ・リベルテ（104期Ver.）",
+      "lyricist": "桃宇アリサ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "ツバサ・ラ・リベルテ(104期Ver.)"
+    },
+    {
+      "id": "204114",
+      "title": "青春の輪郭（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "SHIBU",
+      "arranger": "SHIBU",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "青春の輪郭(104期Ver.)"
+    },
+    {
+      "id": "204115",
+      "title": "天才なのかもしれない（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "戸嶋友祐",
+      "arranger": "戸嶋友祐",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "天才なのかもしれない(104期Ver.)"
+    },
+    {
+      "id": "204116",
+      "title": "KEY of Like！",
+      "lyricist": "ケリー、TATSUNE、ろさ",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "KEY of Like！"
+    },
+    {
+      "id": "204117",
+      "title": "ユメワズライ",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ユメワズライ"
+    },
+    {
+      "id": "204118",
+      "title": "レム",
+      "lyricist": "TATSUNE",
+      "composer": "田仲圭太",
+      "arranger": "高木龍一（Dream Monster）",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "レム"
+    },
+    {
+      "id": "204119",
+      "title": "恋景色昭和ロマン",
+      "lyricist": "森 雪之丞",
+      "composer": "きなみうみ",
+      "arranger": "きなみうみ",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "恋景色昭和ロマン"
+    },
+    {
+      "id": "204120",
+      "title": "いつでも、いつまでも",
+      "lyricist": "youth case",
+      "composer": "youth case",
+      "arranger": "佐々木博史",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "いつでも、いつまでも"
+    },
+    {
+      "id": "204121",
+      "title": "アステリズム",
+      "lyricist": "小松ナノハ",
+      "composer": "戸嶋友祐",
+      "arranger": "戸嶋友祐",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "アステリズム"
+    },
+    {
+      "id": "204201",
+      "title": "ビビデバ",
+      "lyricist": "ツミキ",
+      "composer": "ツミキ",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ビビデバ"
+    },
+    {
+      "id": "204202",
+      "title": "きゅうくらりん",
+      "lyricist": "いよわ",
+      "composer": "いよわ",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "きゅうくらりん"
+    },
+    {
+      "id": "204301",
+      "title": "Snow halation",
+      "lyricist": "畑亜貴",
+      "composer": "山田高弘",
+      "arranger": "中西亮輔",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Snow halation"
+    },
+    {
+      "id": "204302",
+      "title": "NEO SKY, NEO MAP!",
+      "lyricist": "畑亜貴",
+      "composer": "小高光太郎、UiNA",
+      "arranger": "小高光太郎、谷 ナオキ",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "NEO SKY, NEO MAP!"
+    },
+    {
+      "id": "205101",
+      "title": "WAWO!",
+      "lyricist": "ろさ",
+      "composer": "みかんもどき（Dream Monster）",
+      "arranger": "ha-j",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "WAWO!"
+    },
+    {
+      "id": "205102",
+      "title": "やっぱ天使！",
+      "lyricist": "ろさ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "藤島慈"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "やっぱ天使！"
+    },
+    {
+      "id": "205103",
+      "title": "37.5℃のファンタジー",
+      "lyricist": "ケリー",
+      "composer": "園田健太郎",
+      "arranger": "園田健太郎",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "37.5℃のファンタジー"
+    },
+    {
+      "id": "205201",
+      "title": "輪舞-revolution",
+      "lyricist": "奥井雅美",
+      "composer": "矢吹俊郎",
+      "arranger": "矢吹俊郎",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/輪舞-revolution"
+    },
+    {
+      "id": "205202",
+      "title": "ロミオとシンデレラ",
+      "lyricist": "doriko",
+      "composer": "doriko",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "vocal": [
+        "セラス"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ロミオとシンデレラ"
+    },
+    {
+      "id": "205203",
+      "title": "月光",
+      "lyricist": "鬼束ちひろ",
+      "composer": "鬼束ちひろ",
+      "arranger": "羽毛田丈史",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "セラス"
+      ],
+      "vocal": [
+        "桂城泉"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "月光"
+    },
+    {
+      "id": "205301",
+      "title": "青空Jumping Heart",
+      "lyricist": "畑 亜貴",
+      "composer": "伊藤 賢、光増ハジメ",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "青空Jumping Heart"
+    },
+    {
+      "id": "303101",
+      "title": "On your mark",
+      "lyricist": "Kanata Okajima、Hayato Yamamoto",
+      "composer": "EFFY",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "On your mark"
+    },
+    {
+      "id": "303102",
+      "title": "水彩世界",
+      "lyricist": "ケリー",
+      "composer": "栗原 暁（Jazzin’park）、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "水彩世界"
+    },
+    {
+      "id": "303103",
+      "title": "AWOKE",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "AWOKE"
+    },
+    {
+      "id": "303104",
+      "title": "Sparkly Spot",
+      "lyricist": "TATSUNE",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Sparkly Spot"
+    },
+    {
+      "id": "303105",
+      "title": "希望的プリズム",
+      "lyricist": "TATSUNE",
+      "composer": "水流雄一朗、室屋優美、Haruka Kato",
+      "arranger": "水流雄一朗、真部 裕",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "希望的プリズム"
+    },
+    {
+      "id": "303106",
+      "title": "スケイプゴート",
+      "lyricist": "TATSUNE",
+      "composer": "Hiroki Sagawa(Relic Lyric, inc.)、武田城以",
+      "arranger": "武田城以",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スケイプゴート"
+    },
+    {
+      "id": "303107",
+      "title": "DEEPNESS",
+      "lyricist": "桃宇アリサ",
+      "composer": "古河 夕",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "support": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "DEEPNESS"
+    },
+    {
+      "id": "303108",
+      "title": "Tragic Drops",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Tragic Drops"
+    },
+    {
+      "id": "303109",
+      "title": "ココン東西",
+      "lyricist": "ろさ",
+      "composer": "Ryu",
+      "arranger": "Ryu",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/ココン東西"
+    },
+    {
+      "id": "303110",
+      "title": "残陽",
+      "lyricist": "ケリー",
+      "composer": "小野寺祐輔 (Arte Refact)",
+      "arranger": "小野寺祐輔 (Arte Refact)",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "残陽"
+    },
+    {
+      "id": "303111",
+      "title": "Take It Over",
+      "lyricist": "TATSUNE",
+      "composer": "LiCu",
+      "arranger": "LiCu",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Take It Over"
+    },
+    {
+      "id": "303112",
+      "title": "KNOT",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "KNOT"
+    },
+    {
+      "id": "303113",
+      "title": "Trick & Cute",
+      "lyricist": "KOMU",
+      "composer": "志村真白",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "Trick ＆ Cute"
+    },
+    {
+      "id": "303114",
+      "title": "Dear my future",
+      "lyricist": "ケリー",
+      "composer": "Joshua Leung、不滅のアスカ",
+      "arranger": "Joshua Leung",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Dear my future"
+    },
+    {
+      "id": "303115",
+      "title": "明日の空の僕たちへ",
+      "lyricist": "KOMU",
+      "composer": "家原正樹",
+      "arranger": "家原正樹",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "明日の空の僕たちへ"
+    },
+    {
+      "id": "303116",
+      "title": "飴色",
+      "lyricist": "TATSUNE",
+      "composer": "Aira",
+      "arranger": "Aira",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "飴色"
+    },
+    {
+      "id": "303117",
+      "title": "青とシャボン",
+      "lyricist": "TATSUNE",
+      "composer": "佐藤厚仁",
+      "arranger": "佐藤厚仁",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "青とシャボン"
+    },
+    {
+      "id": "303118",
+      "title": "Pleasure Feather",
+      "lyricist": "Hayato Yamamoto",
+      "composer": "山岸洸一",
+      "arranger": "要田 健",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "乙宗梢"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "乙宗梢"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Pleasure Feather"
+    },
+    {
+      "id": "303119",
+      "title": "以心☆電信",
+      "lyricist": "ろさ",
+      "composer": "Kijibato",
+      "arranger": "Kijibato",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "以心☆電信"
+    },
+    {
+      "id": "303201",
+      "title": "深愛",
+      "lyricist": "水樹奈々",
+      "composer": "上松範康",
+      "arranger": "上松範康",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "乙宗梢"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "深愛"
+    },
+    {
+      "id": "303202",
+      "title": "ロストワンの号哭",
+      "lyricist": "Neru",
+      "composer": "Neru",
+      "arranger": "Neru",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ロストワンの号哭"
+    },
+    {
+      "id": "303203",
+      "title": "名前のない怪物",
+      "lyricist": "ryo",
+      "composer": "ryo",
+      "arranger": "ryo",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "名前のない怪物"
+    },
+    {
+      "id": "303204",
+      "title": "ヴィラン",
+      "lyricist": "てにをは",
+      "composer": "てにをは",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ヴィラン"
+    },
+    {
+      "id": "303205",
+      "title": "威風堂々",
+      "lyricist": "梅とら",
+      "composer": "梅とら",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "威風堂々"
+    },
+    {
+      "id": "303206",
+      "title": "祝福",
+      "lyricist": "Ayase",
+      "composer": "Ayase",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "祝福"
+    },
+    {
+      "id": "303207",
+      "title": "lucky train!",
+      "lyricist": "只野菜摘",
+      "composer": "中野領太",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈"
+      ],
+      "vocal": [
+        "村野さやか",
+        "日野下花帆",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "lucky train!"
+    },
+    {
+      "id": "304101",
+      "title": "On your mark（104期Ver.）",
+      "lyricist": "Kanata Okajima、Hayato Yamamoto",
+      "composer": "EFFY",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "夕霧綴理",
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "On your mark(104期Ver.)"
+    },
+    {
+      "id": "304102",
+      "title": "Reflection in the mirror（104期NEW Ver.）",
+      "lyricist": "ケリー",
+      "composer": "桃宇アリサ、めんま",
+      "arranger": "ArmySlick",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Reflection in the mirror(104期NEW Ver.)"
+    },
+    {
+      "id": "304103",
+      "title": "ココン東西（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "Ryu",
+      "arranger": "Ryu",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "藤島慈",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ココン東西(104期Ver.)"
+    },
+    {
+      "id": "304104",
+      "title": "Tragic Drops（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Tragic Drops(104期Ver.)"
+    },
+    {
+      "id": "304105",
+      "title": "レディバグ",
+      "lyricist": "TATSUNE",
+      "composer": "渡辺拓也",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "レディバグ"
+    },
+    {
+      "id": "304106",
+      "title": "KNOT（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "KNOT(104期Ver.)"
+    },
+    {
+      "id": "304107",
+      "title": "月夜見海月",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "スクステ/楽曲/月夜見海月"
+    },
+    {
+      "id": "304108",
+      "title": "以心☆電信（104期Ver.）",
+      "lyricist": "ろさ",
+      "composer": "Kijibato",
+      "arranger": "Kijibato",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "以心☆電信(104期Ver.)"
+    },
+    {
+      "id": "304109",
+      "title": "DEEPNESS（ReC Ver.）",
+      "lyricist": "桃宇アリサ",
+      "composer": "古河 夕",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 6,
+      "wikiPage": "DEEPNESS(ReC Ver.)"
+    },
+    {
+      "id": "304110",
+      "title": "希望的プリズム（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "水流雄一朗、室屋優美、Haruka Kato",
+      "arranger": "水流雄一朗、真部 裕",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "希望的プリズム(104期Ver.)"
+    },
+    {
+      "id": "304111",
+      "title": "Trick & Cute（104期Ver.）",
+      "lyricist": "KOMU",
+      "composer": "志村真白",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Trick ＆ Cute(104期Ver.)"
+    },
+    {
+      "id": "304112",
+      "title": "Take It Over（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "LiCu",
+      "arranger": "LiCu",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Take It Over(104期Ver.)"
+    },
+    {
+      "id": "304113",
+      "title": "Now or Never",
+      "lyricist": "新谷風太",
+      "composer": "古河 夕",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "Now or Never"
+    },
+    {
+      "id": "304114",
+      "title": "ジョーショーキリュー",
+      "lyricist": "ろさ",
+      "composer": "ハム",
+      "arranger": "ハム",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "ジョーショーキリュー"
+    },
+    {
+      "id": "304115",
+      "title": "AWOKE（104期Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "夕霧綴理",
+        "村野さやか"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "AWOKE(104期Ver.)"
+    },
+    {
+      "id": "304116",
+      "title": "水彩世界（104期Ver.）",
+      "lyricist": "ケリー",
+      "composer": "栗原 暁（Jazzin’park）、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "support": [
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "百生吟子",
+        "乙宗梢",
+        "日野下花帆"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "水彩世界(104期Ver.)"
+    },
+    {
+      "id": "304117",
+      "title": "AURORA FLOWER",
+      "lyricist": "畑 亜貴",
+      "composer": "白戸佑輔（Dream Monster）",
+      "arranger": "白戸佑輔（Dream Monster）",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "AURORA FLOWER"
+    },
+    {
+      "id": "304118",
+      "title": "ゲッカビジン",
+      "lyricist": "綺羅クリア",
+      "composer": "Giz'Mo（from Jam9）、Eunsol（1008）、石黑 剛",
+      "arranger": "渡辺和紀",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "support": [],
+      "vocal": [
+        "夕霧綴理",
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "ゲッカビジン"
+    },
+    {
+      "id": "304119",
+      "title": "かくれんぼしよう",
+      "lyricist": "ろさ",
+      "composer": "成本智美（SUPA LOVE）",
+      "arranger": "江上浩太郎（SUPA LOVE）",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "藤島慈",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "かくれんぼしよう"
+    },
+    {
+      "id": "304120",
+      "title": "COMPASS",
+      "lyricist": "TATSUNE",
+      "composer": "四市田雲豹（SUPA LOVE）",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "COMPASS"
+    },
+    {
+      "id": "304121",
+      "title": "マハラジャンボリーⅡ",
+      "lyricist": "zopp",
+      "composer": "Shusui",
+      "arranger": "大久保 薫",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "マハラジャンボリーⅡ"
+    },
+    {
+      "id": "304122",
+      "title": "恥は人生のかきすて",
+      "lyricist": "綺羅クリア",
+      "composer": "菊谷知樹",
+      "arranger": "菊谷知樹",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "恥は人生のかきすて"
+    },
+    {
+      "id": "304201",
+      "title": "This game",
+      "lyricist": "深青結希",
+      "composer": "若林 充",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [],
+      "support": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocal": [
+        "安養寺姫芽"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "This game"
+    },
+    {
+      "id": "304202",
+      "title": "STARTLINER",
+      "lyricist": "kz",
+      "composer": "kz",
+      "arranger": "kz",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "support": [],
+      "vocal": [
+        "安養寺姫芽",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴"
+      ],
+      "vocalCount": 9,
+      "wikiPage": "STARTLINER"
+    },
+    {
+      "id": "304203",
+      "title": "雑踏、僕らの街",
+      "lyricist": "大濱健悟",
+      "composer": "大濱健悟",
+      "arranger": "大濱健悟",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "雑踏、僕らの街"
+    },
+    {
+      "id": "304301",
+      "title": "Daydream Warrior",
+      "lyricist": "畑亜貴",
+      "composer": "前口 渉",
+      "arranger": "中土智博",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "support": [
+        "乙宗梢",
+        "藤島慈",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "村野さやか",
+        "夕霧綴理",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "Daydream Warrior"
+    },
+    {
+      "id": "305101",
+      "title": "Edelied",
+      "lyricist": "東乃カノ",
+      "composer": "江口寛至",
+      "arranger": "市川淳",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Edelied"
+    },
+    {
+      "id": "305102",
+      "title": "アンペア",
+      "lyricist": "TATSUNE",
+      "composer": "Kanata Okajima、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/アンペア"
+    },
+    {
+      "id": "305103",
+      "title": "Retrofuture",
+      "lyricist": "Skipjack",
+      "composer": "市川淳",
+      "arranger": "市川淳",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "スクステ/楽曲/Retrofuture"
+    },
+    {
+      "id": "305104",
+      "title": "be proud",
+      "lyricist": "ケリー",
+      "composer": "めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "乙宗梢"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "be proud"
+    },
+    {
+      "id": "305105",
+      "title": "アイマイメーデー",
+      "lyricist": "TATSUNE",
+      "composer": "山下僚海（SUPA LOVE）",
+      "arranger": "高橋修平（SUPA LOVE）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "アイマイメーデー"
+    },
+    {
+      "id": "305106",
+      "title": "十六夜セレーネ",
+      "lyricist": "Skipjack",
+      "composer": "Skipjack",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "十六夜セレーネ"
+    },
+    {
+      "id": "305107",
+      "title": "アイドゥーミー！",
+      "lyricist": "綺羅クリア",
+      "composer": "サクマリョウ",
+      "arranger": "サクマリョウ",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "アイドゥーミー！"
+    },
+    {
+      "id": "405101",
+      "title": "天地黎明",
+      "lyricist": "Skipjack",
+      "composer": "Skipjack",
+      "arranger": "石塚知生",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "天地黎明"
+    },
+    {
+      "id": "405102",
+      "title": "フルーツパンチ",
+      "lyricist": "ケリー",
+      "composer": "本田正樹（Dream Monster）",
+      "arranger": "本田正樹（Dream Monster）",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "フルーツパンチ"
+    },
+    {
+      "id": "405103",
+      "title": "太陽であれ！",
+      "lyricist": "TATSUNE",
+      "composer": "鈴木裕明（SUPA LOVE）",
+      "arranger": "鈴木裕明（SUPA LOVE）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "太陽であれ！"
+    },
+    {
+      "id": "405104",
+      "title": "とーひょー☆スター！",
+      "lyricist": "綺羅クリア",
+      "composer": "サクマリョウ",
+      "arranger": "サクマリョウ",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "安養寺姫芽",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "とーひょー☆スター！"
+    },
+    {
+      "id": "405105",
+      "title": "Very! Very! COCO夏っ",
+      "lyricist": "ろさ",
+      "composer": "YUU for YOU、小久保祐希",
+      "arranger": "YUU for YOU",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Very! Very! COCO夏っ"
+    },
+    {
+      "id": "405106",
+      "title": "My Lucky Clover",
+      "lyricist": "ケリー",
+      "composer": "江口寛至（SUPA LOVE）",
+      "arranger": "ArmySlick",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "My Lucky Clover"
+    },
+    {
+      "id": "405107",
+      "title": "diamondz",
+      "lyricist": "TATSUNE",
+      "composer": "坂本 龍",
+      "arranger": "前嶋康明",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "diamondz"
+    },
+    {
+      "id": "405108",
+      "title": "可惜夜花火",
+      "lyricist": "ケリー",
+      "composer": "佐藤厚仁（Dream Monster）",
+      "arranger": "佐藤厚仁（Dream Monster）",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "可惜夜花火"
+    },
+    {
+      "id": "405109",
+      "title": "ブルウモーメント",
+      "lyricist": "TATSUNE",
+      "composer": "鶴﨑輝一",
+      "arranger": "鶴﨑輝一",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ブルウモーメント"
+    },
+    {
+      "id": "405110",
+      "title": "フュージョンクラスト",
+      "lyricist": "Skipjack",
+      "composer": "井内舞子",
+      "arranger": "井内舞子",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "フュージョンクラスト"
+    },
+    {
+      "id": "405111",
+      "title": "夏めきペイン（105期Ver.）",
+      "lyricist": "指原莉乃",
+      "composer": "栗原 暁 (Jazzin’park)、前田 佑",
+      "arranger": "前田 佑",
+      "stringsArranger": "門脇大輔",
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "夏めきペイン(105期Ver.)"
+    },
+    {
+      "id": "405112",
+      "title": "ニャオシグニャル",
+      "lyricist": "ろさ",
+      "composer": "Kijibato（Dream Monster）",
+      "arranger": "Kijibato（Dream Monster）",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ニャオシグニャル"
+    },
+    {
+      "id": "405113",
+      "title": "ハートにQ",
+      "lyricist": "ろさ",
+      "composer": "5u5h1",
+      "arranger": "5u5h1",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ハートにQ"
+    },
+    {
+      "id": "405114",
+      "title": "片翼のトリバガ",
+      "lyricist": "Skipjack",
+      "composer": "椿山日南子",
+      "arranger": "椿山日南子",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "片翼のトリバガ"
+    },
+    {
+      "id": "405115",
+      "title": "ドライブ・スペード・クレイジー",
+      "lyricist": "Skipjack",
+      "composer": "山崎真吾",
+      "arranger": "山崎真吾",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ドライブ・スペード・クレイジー"
+    },
+    {
+      "id": "405116",
+      "title": "一生に夢が咲くように",
+      "lyricist": "小松ナノハ",
+      "composer": "綺羅クリア",
+      "arranger": "Seiji Hotta",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "一生に夢が咲くように"
+    },
+    {
+      "id": "405117",
+      "title": "乙女詞華集",
+      "lyricist": "ケリー",
+      "composer": "大熊淳生（Arte Refact）",
+      "arranger": "大熊淳生（Arte Refact）",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "乙女詞華集"
+    },
+    {
+      "id": "405118",
+      "title": "バイタルサイン",
+      "lyricist": "ろさ",
+      "composer": "渡辺未来",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "バイタルサイン"
+    },
+    {
+      "id": "405119",
+      "title": "はじまりの羽音",
+      "lyricist": "PA-NON",
+      "composer": "渡辺未来",
+      "arranger": "渡辺未来",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "はじまりの羽音"
+    },
+    {
+      "id": "405120",
+      "title": "ガランドFlash",
+      "lyricist": "TATSUNE",
+      "composer": "タケノコ少年",
+      "arranger": "タケノコ少年",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "ガランドFlash"
+    },
+    {
+      "id": "405121",
+      "title": "平成ギャルズ!!!!",
+      "lyricist": "Skipjack",
+      "composer": "Skipjack",
+      "arranger": "大久保 薫",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "村野さやか",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "平成ギャルズ!!!!"
+    },
+    {
+      "id": "405122",
+      "title": "ちょ、尊いLOVE",
+      "lyricist": "TATSUNE",
+      "composer": "めんま",
+      "arranger": "めんま",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "vocal": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "ちょ、尊いLOVE"
+    },
+    {
+      "id": "405123",
+      "title": "シアター生き様",
+      "lyricist": "Skipjack",
+      "composer": "藤田卓也",
+      "arranger": "市川 淳",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "シアター生き様"
+    },
+    {
+      "id": "405124",
+      "title": "IcHiGo milK love",
+      "lyricist": "ケリー",
+      "composer": "たんしょそら、玉谷友輝、KUSHITA",
+      "arranger": "生田真心",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "日野下花帆",
+        "百生吟子",
+        "桂城泉"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "日野下花帆",
+        "百生吟子",
+        "桂城泉"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "IcHiGo milK love"
+    },
+    {
+      "id": "405125",
+      "title": "Nεw Black",
+      "lyricist": "ろさ",
+      "composer": "小久保祐希、Eunsol（1008）、YHEL",
+      "arranger": "酒井拓也（Arte Refact）",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "日野下花帆",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "セラス"
+      ],
+      "vocal": [
+        "桂城泉",
+        "日野下花帆",
+        "百生吟子",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 4,
+      "wikiPage": "Nεw Black"
+    },
+    {
+      "id": "405126",
+      "title": "チャーミングな花束を！",
+      "lyricist": "綺羅クリア",
+      "composer": "塚田耕平",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "チャーミングな花束を！"
+    },
+    {
+      "id": "405127",
+      "title": "Hip, hip, hooray!",
+      "lyricist": "ろさ",
+      "composer": "山本玲史",
+      "arranger": "山本玲史",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Hip, hip, hooray!"
+    },
+    {
+      "id": "405128",
+      "title": "令嬢モブ！",
+      "lyricist": "Skipjack",
+      "composer": "Skipjack",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "令嬢モブ！"
+    },
+    {
+      "id": "405129",
+      "title": "雪舞う空と二秒の永遠",
+      "lyricist": "小松ナノハ",
+      "composer": "綺羅クリア",
+      "arranger": "Seiji Hotta",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "雪舞う空と二秒の永遠"
+    },
+    {
+      "id": "405130",
+      "title": "Sayo-Shigure",
+      "lyricist": "ケリー",
+      "composer": "綺羅クリア",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Sayo-Shigure"
+    },
+    {
+      "id": "405131",
+      "title": "ハロめぐ讃歌",
+      "lyricist": "ろさ",
+      "composer": "Kijibato（Dream Monster）",
+      "arranger": "Kijibato（Dream Monster）",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "藤島慈"
+      ],
+      "vocalCount": 1,
+      "wikiPage": "ハロめぐ讃歌"
+    },
+    {
+      "id": "405132",
+      "title": "On your mark（102期Ver.）",
+      "lyricist": "Kanata Okajima、Hayato Yamamoto",
+      "composer": "EFFY",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理"
+      ],
+      "support": [],
+      "vocal": [
+        "藤島慈",
+        "乙宗梢",
+        "夕霧綴理"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "On your mark(102期Ver.)"
+    },
+    {
+      "id": "405133",
+      "title": "Echoes Beyond",
+      "lyricist": "ろさ",
+      "composer": "EFFY",
+      "arranger": "EFFY",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "Echoes Beyond"
+    },
+    {
+      "id": "405134",
+      "title": "JOKER.",
+      "lyricist": "GIUNONICO",
+      "composer": "Michael Super Lassie",
+      "arranger": "鈴木雅也",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "support": [],
+      "vocal": [
+        "セラス",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "JOKER."
+    },
+    {
+      "id": "405135",
+      "title": "リブウト",
+      "lyricist": "TATSUNE",
+      "composer": "岸 明平（Rhythmic Toy World）",
+      "arranger": "岸 明平（Rhythmic Toy World）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "リブウト"
+    },
+    {
+      "id": "405136",
+      "title": "トモダチになれる場所",
+      "lyricist": "ろさ",
+      "composer": "桑原佑介",
+      "arranger": "Capchii、桑原佑介",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "トモダチになれる場所"
+    },
+    {
+      "id": "405137",
+      "title": "不思議と君とライブラリー",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "不思議と君とライブラリー"
+    },
+    {
+      "id": "405138",
+      "title": "アイシイ",
+      "lyricist": "TATSUNE",
+      "composer": "Michael Super Lassie",
+      "arranger": "佐藤厚仁",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "アイシイ"
+    },
+    {
+      "id": "405139",
+      "title": "EdelinieN",
+      "lyricist": "Skipjack",
+      "composer": "Skipjack",
+      "arranger": "市川 淳",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "桂城泉"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "セラス",
+        "桂城泉"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "EdelinieN"
+    },
+    {
+      "id": "405140",
+      "title": "今、過去、未来の三原色",
+      "lyricist": "小松ナノハ",
+      "composer": "綺羅クリア",
+      "arranger": "Seiji Hotta",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 11,
+      "wikiPage": "今、過去、未来の三原色"
+    },
+    {
+      "id": "405141",
+      "title": "Dream Believers（B.G.P. Ver.）",
+      "lyricist": "畑 亜貴",
+      "composer": "渡辺拓也",
+      "arranger": "渡辺拓也",
+      "stringsArranger": "渡辺拓也、真部 裕",
+      "center": "日野下花帆",
+      "singer": [
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "日野下花帆",
+        "乙宗梢",
+        "夕霧綴理",
+        "藤島慈",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 11,
+      "wikiPage": "Dream Believers(B.G.P.Ver.)"
+    },
+    {
+      "id": "405142",
+      "title": "不思議と君とライブラリー（B.G.P. Ver.）",
+      "lyricist": "ケリー",
+      "composer": "塚田耕平",
+      "arranger": "塚田耕平",
+      "stringsArranger": null,
+      "center": "乙宗梢",
+      "singer": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "乙宗梢",
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "不思議と君とライブラリー(B.G.P.Ver.)"
+    },
+    {
+      "id": "405143",
+      "title": "アイシイ（B.G.P. Ver.）",
+      "lyricist": "TATSUNE",
+      "composer": "Michael Super Lassie",
+      "arranger": "佐藤厚仁",
+      "stringsArranger": null,
+      "center": "夕霧綴理",
+      "singer": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "夕霧綴理",
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "アイシイ(B.G.P.Ver.)"
+    },
+    {
+      "id": "405144",
+      "title": "トモダチになれる場所（B.G.P. Ver.）",
+      "lyricist": "ろさ",
+      "composer": "桑原佑介",
+      "arranger": "Capchii、桑原佑介",
+      "stringsArranger": null,
+      "center": "藤島慈",
+      "singer": [
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "藤島慈",
+        "大沢瑠璃乃",
+        "安養寺姫芽"
+      ],
+      "vocalCount": 3,
+      "wikiPage": "トモダチになれる場所(B.G.P.Ver.)"
+    },
+    {
+      "id": "405201",
+      "title": "テレパシ",
+      "lyricist": "DECO*27",
+      "composer": "DECO*27",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "テレパシ"
+    },
+    {
+      "id": "405202",
+      "title": "BOW AND ARROW",
+      "lyricist": "米津玄師",
+      "composer": "米津玄師",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "徒町小鈴"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "村野さやか",
+        "徒町小鈴"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "BOW AND ARROW"
+    },
+    {
+      "id": "405203",
+      "title": "もういちど ルミナス",
+      "lyricist": "織田あすか（Elements Garden）",
+      "composer": "末益涼太（Elements Garden）",
+      "arranger": "末益涼太（Elements Garden）",
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "もういちど ルミナス"
+    },
+    {
+      "id": "405204",
+      "title": "壱雫空",
+      "lyricist": "藤原優樹（SUPA LOVE）",
+      "composer": "hisakuni（SUPA LOVE）",
+      "arranger": "hisakuni（SUPA LOVE）",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "壱雫空"
+    },
+    {
+      "id": "405205",
+      "title": "キミがいなくちゃっ！",
+      "lyricist": "織田あすか（Elements Garden）",
+      "composer": "藤間仁（Elements Garden）",
+      "arranger": "藤間仁（Elements Garden）",
+      "stringsArranger": null,
+      "center": "安養寺姫芽",
+      "singer": [
+        "大沢瑠璃乃"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "安養寺姫芽",
+        "大沢瑠璃乃"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "キミがいなくちゃっ！"
+    },
+    {
+      "id": "405206",
+      "title": "FIRE BIRD",
+      "lyricist": "上松範康（Elements Garden）",
+      "composer": "上松範康（Elements Garden）",
+      "arranger": "藤永龍太郎（Elements Garden）",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "FIRE BIRD"
+    },
+    {
+      "id": "405207",
+      "title": "あんなに一緒だったのに",
+      "lyricist": "石川千亜紀",
+      "composer": "梶浦由記",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "あんなに一緒だったのに"
+    },
+    {
+      "id": "405208",
+      "title": "気まぐれロマンティック",
+      "lyricist": "水野良樹",
+      "composer": "水野良樹",
+      "arranger": null,
+      "stringsArranger": null,
+      "center": "百生吟子",
+      "singer": [
+        "日野下花帆"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "百生吟子",
+        "日野下花帆"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "気まぐれロマンティック"
+    },
+    {
+      "id": "405209",
+      "title": "Blessing",
+      "lyricist": "halyosy",
+      "composer": "halyosy",
+      "arranger": "halyosy",
+      "stringsArranger": null,
+      "center": "セラス",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "support": [],
+      "vocal": [
+        "セラス",
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "Blessing"
+    },
+    {
+      "id": "405301",
+      "title": "虹色Passions!",
+      "lyricist": "Ayaka Miyake",
+      "composer": "Keisuke Koyama",
+      "arranger": "Keisuke Koyama",
+      "stringsArranger": null,
+      "center": "徒町小鈴",
+      "singer": [
+        "村野さやか"
+      ],
+      "support": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "徒町小鈴",
+        "村野さやか"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "虹色Passions!"
+    },
+    {
+      "id": "405302",
+      "title": "愛♡スクリ～ム！",
+      "lyricist": "aim",
+      "composer": "DJ Chika a.k.a. INHERIT、Hayato Yamamoto",
+      "arranger": "Hayato Yamamoto、DJ Chika a.k.a. INHERIT",
+      "stringsArranger": null,
+      "center": "大沢瑠璃乃",
+      "singer": [
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "大沢瑠璃乃",
+        "日野下花帆",
+        "村野さやか",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "愛♡スクリ～ム！"
+    },
+    {
+      "id": "405303",
+      "title": "START!! True dreams",
+      "lyricist": "畑 亜貴",
+      "composer": "小幡康裕",
+      "arranger": "山下洋介",
+      "stringsArranger": null,
+      "center": "日野下花帆",
+      "singer": [
+        "百生吟子"
+      ],
+      "support": [
+        "村野さやか",
+        "大沢瑠璃乃",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocal": [
+        "日野下花帆",
+        "百生吟子"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "START!! True dreams"
+    },
+    {
+      "id": "405304",
+      "title": "Shocking Party",
+      "lyricist": "畑 亜貴",
+      "composer": "板垣祐介",
+      "arranger": "板垣祐介",
+      "stringsArranger": null,
+      "center": "桂城泉",
+      "singer": [
+        "セラス"
+      ],
+      "support": [
+        "日野下花帆",
+        "村野さやか",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽"
+      ],
+      "vocal": [
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 2,
+      "wikiPage": "Shocking Party"
+    },
+    {
+      "id": "405305",
+      "title": "僕らは今のなかで",
+      "lyricist": "畑亜貴",
+      "composer": "森慎太郎",
+      "arranger": "森慎太郎",
+      "stringsArranger": null,
+      "center": "村野さやか",
+      "singer": [
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "support": [],
+      "vocal": [
+        "村野さやか",
+        "日野下花帆",
+        "大沢瑠璃乃",
+        "百生吟子",
+        "徒町小鈴",
+        "安養寺姫芽",
+        "桂城泉",
+        "セラス"
+      ],
+      "vocalCount": 8,
+      "wikiPage": "僕らは今のなかで"
+    }
+  ]
+}
