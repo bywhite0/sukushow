@@ -1,5 +1,4 @@
 import './llll.css';
-import './llll-workspace.css';
 import { decodeChart } from '../../../llll-preview/src/chart';
 import { demoChart } from '../../../llll-preview/src/demo';
 import feverIndex from '../../../llll-preview/src/feverMetadata.json';
@@ -16,16 +15,18 @@ import { StageCompositor, type StageView } from '../../../llll-preview/src/stage
 import { StartAnimation, START_CLIP_DURATION } from '../../../llll-preview/src/startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from '../../../llll-preview/src/comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from '../../../llll-preview/src/songAssets';
-import { createSongPicker } from './llll/songPicker';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
+import type { SongSelectionStore } from '../songSelection';
 import {
   loadPreviewSettings,
   savePreviewSettings,
   type PreviewSettings,
 } from './llll/settingsPersist';
-const app=document.querySelector<HTMLDivElement>('#app')!;
+export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore };
+
+export function mount({ root, toolbar, songSelection }: LlllMountContext) {
+const app=root;
 app.innerHTML=`
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll 谱面放映室首页"><span class="brand-mark" aria-hidden="true">llll</span><span>谱面放映室<small>CHART PREVIEW</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div id="aspect-mount" class="aspect-mount"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -86,15 +87,19 @@ app.innerHTML=`
 </section></div>
 <div class="inspector-footer">设置仅影响预览，不会修改源文件。</div>
 </aside>
-</main><footer><span>非官方研究工具 · 原格式谱面预览</span><span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span></footer>`;
-const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
+</main>`;
+const el=<T extends HTMLElement=HTMLElement>(id:string)=>{
+ const node=root.querySelector<T>(`#${id}`)??toolbar.querySelector<T>(`#${id}`);
+ if(!node)throw new Error(`缺少元素 #${id}`);
+ return node;
+};
 const input=(id:string)=>el<HTMLInputElement>(id);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
 el('open-chart').onclick=()=>input('chart-file').click();
 el('open-audio').onclick=()=>input('audio-file').click();
 el('panel-display').querySelector('h2')!.after(el('opt-hit-effect').closest('label')!);
 el('panel-score').querySelector('h2')!.after(el('tech-score').closest('label')!);
-const settingTabs=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+const settingTabs=Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
 function selectSettingsTab(tab:HTMLButtonElement){
  for(const item of settingTabs){
   const selected=item===tab;
@@ -260,8 +265,9 @@ input('chart-file').onchange=async()=>{
 };
 input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
 el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
-el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-document.addEventListener('keydown',e=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}});
+el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
+const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
+document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
 void loadHudFonts();
 void preloadImages(LiveHud.textureUrls());
@@ -536,9 +542,12 @@ if(!player)el<HTMLButtonElement>('export-video').disabled=true;
  get renderer(){return renderer;},get player(){return player;},
  probeExportConfigs:probeAllConfigs,
 };
-window.addEventListener('pagehide',()=>{cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();},{once:true});
+let disposed=false;
+let unsubscribeSongSelection=()=>{};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();el('open-chart').onclick=null;el('open-audio').onclick=null;el('demo').onclick=null;el('chart-file').onchange=null;el('audio-file').onchange=null;el('fullscreen').onclick=null;cancelAnimationFrame(frame);renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+window.addEventListener('pagehide',dispose,{once:true});
 
-/* ── 选曲：本地 assets（scripts/link-assets.py）+ 可搜索曲目列表，同 PJSK 实现 ── */
+/* ── 选曲：统一壳层持有选择器，舞台只负责加载与渲染 ── */
 let songList:SongList|null=null;
 function finishTimeForFile(name:string):number|null{
  const hit=songList?findSongByChartFile(songList,name):null;
@@ -573,25 +582,21 @@ async function loadSongById(songId:string,difficulty:string){
  el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
  message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}），点击播放。`);
 }
-async function initSongPicker(){
- try{songList=await loadSongList();}catch(e){console.warn('[llll-preview] 曲目列表加载失败：',e);return;}
- const openSong=async(songId:string,difficulty:string)=>{
-  try{
-   await loadSongById(songId,difficulty);
-   const url=new URL(location.href);url.searchParams.set('song',songId);url.searchParams.set('difficulty',difficulty);history.replaceState(null,'',url);
-  }catch(e){message(`曲目加载失败：${String(e)}`,true);}
- };
- const picker=createSongPicker({list:songList,onChange:(songId,difficulty)=>{void openSong(songId,difficulty);}});
- el('song-picker-mount').replaceChildren(picker.root);
- // ?song=&difficulty=&offset=（offset 为毫秒，只作用于本次打开，不写入设置）。
- const search=new URLSearchParams(location.search);
- const songId=search.get('song');
- if(!songId)return;
- const offset=search.get('offset');
+void loadSongList().then((list)=>{if(!disposed)songList=list}).catch((error)=>{
+ console.warn('[llll-preview] 曲目列表加载失败：',error);
+});
+const openSong=async(songId:string,difficulty:string)=>{
+ try{await loadSongById(songId,difficulty);}
+ catch(e){if(!disposed)message(`曲目加载失败：${String(e)}`,true);}
+};
+unsubscribeSongSelection=songSelection.subscribe((selection)=>{
+ if(selection)void openSong(selection.songId,selection.difficulty);
+},false);
+const initialSelection=songSelection.get();
+if(initialSelection){
+ const offset=new URLSearchParams(location.search).get('offset');
  if(offset!==null&&offset!==''&&Number.isFinite(Number(offset))){input('offset').value=offset;player?.setOffset(Number(offset)/1000);}
- const difficulty=search.get('difficulty')??'MASTER';
- picker.select(songId,difficulty,false);
- try{await loadSongById(songId,picker.currentDifficulty()??difficulty);}
- catch(e){message(`曲目 ${songId} 加载失败：${String(e)}。已保留演示谱。`,true);}
+ void openSong(initialSelection.songId,initialSelection.difficulty);
 }
-void initSongPicker();
+return {dispose};
+}

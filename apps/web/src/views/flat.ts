@@ -1,216 +1,380 @@
-/** 工作台：文件导入、视图参数、悬停探针。 */
+/** 平面谱面工作台适配：只负责把 flat renderer 接到统一前端。 */
 
 import './flat.css';
 
 import { type Chart, decodeChart } from '../../../flat-preview/src/chart';
 import { FlatRenderer, loadSprites, noteLabel } from '../../../flat-preview/src/renderer';
 import { type Layout, defaultLayout, scrollToBottom, yTime } from '../../../flat-preview/src/view';
+import { findSong } from '../../../llll-preview/src/songAssets';
+import type { SongSelectionStore } from '../songSelection';
 
-const app = document.querySelector<HTMLDivElement>('#app');
-if (!app) throw new Error('缺少 #app 容器。');
-app.innerHTML = `
-  <div class="flat-app">
-    <header class="bar">
-      <h1>llll 平面谱面预览</h1><span class="tag">非官方研究工具</span><span class="spacer"></span>
-      <label class="file">导入谱面<input id="file" type="file" accept=".json,.bytes,application/json"></label>
-      <span id="status" class="status" role="status">未载入谱面</span>
-    </header>
-    <aside class="panel" aria-label="视图设置">
-      <fieldset><legend>视图</legend>
-        <label>纵向缩放 <input id="zoom" type="range" min="20" max="2400" step="5" value="90"><output id="zoom-out">90 px/s</output></label>
-        <label>轨道宽度 <input id="lane" type="range" min="4" max="40" step="1" value="14"><output id="lane-out">14 px</output></label>
-        <label>音符厚度 <input id="thick" type="range" min="2" max="16" step="1" value="6"><output id="thick-out">6 px</output></label>
-        <label>定位到 <input id="goto" type="number" min="0" step="0.1" value="0"><output id="goto-out">秒</output></label>
-        <label class="check"><input id="grid" type="checkbox" checked>轨道格线</label><label class="check"><input id="measure" type="checkbox" checked>小节线</label>
-        <label class="check"><input id="simul" type="checkbox" checked>同时押连线</label><label class="check"><input id="mirror" type="checkbox">左右镜像</label>
-      </fieldset>
-      <fieldset><legend>谱面</legend><dl id="meta"><dt>—</dt><dd>尚未导入</dd></dl></fieldset>
-      <fieldset><legend>悬停</legend><p id="probe" class="probe">把鼠标移到音符上</p></fieldset>
+export interface FlatMountOptions {
+  /** 统一前端为当前模式分配的根节点。 */
+  root: HTMLElement;
+  /** 可选：统一工具栏中的文件按钮挂载点。未传时放入右侧检查器。 */
+  toolbar?: HTMLElement;
+  /** 统一壳层持有的曲目与难度选择状态。 */
+  songSelection: SongSelectionStore;
+  /** 音符贴图根路径。 */
+  spriteBase?: string;
+}
+
+export interface FlatViewController {
+  load(bytes: Uint8Array, name: string): Promise<void>;
+  dispose(): void;
+}
+
+const mounts = new WeakMap<HTMLElement, FlatViewController>();
+
+const template = `
+  <main class="flat-view" data-view="flat">
+    <section class="viewer flat-viewer" aria-label="平面谱面预览">
+      <div class="preview-heading flat-preview-heading">
+        <div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">尚未载入</h1></div>
+      </div>
+      <div class="stage-shell flat-stage-shell">
+        <div class="stage flat-stage" id="stage">
+          <canvas id="canvas" aria-label="平面谱面画布"></canvas>
+          <div id="empty" class="empty flat-empty">
+            <p>拖入谱面文件，或在设置中导入谱面。</p>
+            <p class="hint">支持原格式 JSON 与 raw-deflate <code>.bytes</code>；文件不上传。</p>
+          </div>
+        </div>
+      </div>
+      <div id="status" class="viewer-status flat-status" role="status" aria-live="polite">未载入谱面</div>
+    </section>
+    <aside class="flat-inspector" aria-label="平面谱面设置">
+      <div class="inspector-heading"><h2>平面谱面</h2><span>本地解析 · Canvas</span></div>
+      <div class="settings-body flat-settings-body">
+        <fieldset class="flat-file-field"><legend>导入</legend><div class="flat-file-slot"></div></fieldset>
+        <fieldset><legend>视图</legend>
+          <label>纵向缩放 <input id="zoom" type="range" min="20" max="2400" step="5" value="90"><output id="zoom-out">90 px/s</output></label>
+          <label>轨道宽度 <input id="lane" type="range" min="4" max="40" step="1" value="14"><output id="lane-out">14 px</output></label>
+          <label>音符厚度 <input id="thick" type="range" min="2" max="16" step="1" value="6"><output id="thick-out">6 px</output></label>
+          <label>定位到 <input id="goto" type="number" min="0" step="0.1" value="0"><output id="goto-out">秒</output></label>
+          <label class="check"><input id="grid" type="checkbox" checked>轨道格线</label>
+          <label class="check"><input id="measure" type="checkbox" checked>小节线</label>
+          <label class="check"><input id="simul" type="checkbox" checked>同时押连线</label>
+          <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
+        </fieldset>
+        <fieldset><legend>谱面</legend><dl id="meta"><dt>—</dt><dd>尚未导入</dd></dl></fieldset>
+        <fieldset><legend>悬停</legend><p id="probe" class="probe">把鼠标移到音符上</p></fieldset>
+      </div>
+      <div class="inspector-footer flat-inspector-footer">设置仅影响预览，不会修改源文件。</div>
     </aside>
-    <main class="stage" id="stage"><canvas id="canvas" aria-label="平面谱面画布"></canvas><div id="empty" class="empty"><p>拖入谱面文件，或点上方「导入谱面」。</p><p class="hint">支持原格式 JSON 与 raw-deflate <code>.bytes</code>；文件不上传。</p></div></main>
-  </div>
+  </main>
 `;
 
-const el = <T extends HTMLElement>(id: string) => {
-  const node = document.getElementById(id);
+function query<T extends HTMLElement>(root: HTMLElement, id: string): T {
+  const node = root.querySelector<HTMLElement>(`#${id}`);
   if (!node) throw new Error(`缺少元素 #${id}`);
   return node as T;
-};
-
-const canvas = el<HTMLCanvasElement>('canvas');
-const stage = el<HTMLDivElement>('stage');
-const empty = el<HTMLDivElement>('empty');
-const status = el<HTMLSpanElement>('status');
-const probe = el<HTMLParagraphElement>('probe');
-const meta = el<HTMLDListElement>('meta');
-
-let renderer: FlatRenderer;
-try {
-  renderer = new FlatRenderer(canvas);
-} catch (error) {
-  status.textContent = `无法初始化画布：${String(error)}`;
-  status.classList.add('error');
-  throw error;
 }
 
-let chart: Chart | null = null;
-let layout: Layout = defaultLayout();
-let instantPx = 6;
-let showGrid = true, showMeasures = true, showSimultaneous = true;
-let spritesReady = false;
-
-function draw() {
-  if (!chart || !spritesReady) return;
-  const stats = renderer.render(chart, { layout, instantPx, showMeasures, showSimultaneous, showGrid });
-  canvas.dataset.drawn = String(stats.drawn);
-  canvas.dataset.instants = String(stats.instants);
-  canvas.dataset.holds = String(stats.holds);
-  canvas.dataset.total = String(stats.total);
-  canvas.dataset.duration = chart.duration.toFixed(4);
-  canvas.dataset.roots = String(chart.roots.length);
-  canvas.dataset.lines = String(chart.lines.length);
-  // 当前布局快照，便于探针与自动化核对坐标。
-  canvas.dataset.layout = JSON.stringify(layout);
+function createFileControl(): HTMLLabelElement {
+  const label = document.createElement('label');
+  label.className = 'flat-file file-action';
+  label.textContent = '导入谱面';
+  const input = document.createElement('input');
+  input.id = 'file';
+  input.type = 'file';
+  input.accept = '.json,.bytes,application/json';
+  label.append(input);
+  return label;
 }
 
-function setStatus(text: string, error = false) {
-  status.textContent = text;
-  status.classList.toggle('error', error);
-}
+export function mount(options: FlatMountOptions): FlatViewController {
+  const existing = mounts.get(options.root);
+  if (existing) return existing;
 
-function describe(c: Chart) {
-  const holds = c.notes.filter(n => n.type === 1).length;
-  const multi = c.notes.filter(n => n.type === 1 && n.holds.length > 1).length;
-  const rows: [string, string][] = [
-    ['音符', `${c.notes.length}`],
-    ['链首', `${c.roots.length}`],
-    ['Hold 节点', `${holds}（多航点 ${multi}）`],
-    ['同时押组', `${c.lines.length}`],
-    ['BPM 段', `${c.bpms.length}`],
-    ['拍号段', `${c.beats.length}`],
-    ['时长', `${c.duration.toFixed(3)} s`],
-  ];
-  meta.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-}
+  const root = options.root;
+  root.replaceChildren();
+  root.insertAdjacentHTML('beforeend', template);
 
-async function load(bytes: Uint8Array, name: string) {
-  try {
-    const c = await decodeChart(bytes);
-    chart = c;
-    // 时间轴向上：0 秒在内容底部，故初始把视口贴到内容底端。
-    layout = { ...layout, duration: c.duration, scrollPx: Math.max(0, c.duration * layout.pxPerSec - stage.clientHeight + layout.padY) };
-    empty.classList.add('hidden');
-    describe(c);
-    setStatus(`已载入 ${name}：${c.notes.length} 个音符`);
-    draw();
-  } catch (error) {
-    // 载入失败保留已有谱面。
-    setStatus(`${name} 载入失败：${String(error)}`, true);
-  }
-}
-
-el<HTMLInputElement>('file').onchange = async event => {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  await load(new Uint8Array(await file.arrayBuffer()), file.name);
-  input.value = '';
-};
-
-for (const type of ['dragenter', 'dragover'] as const) {
-  stage.addEventListener(type, event => { event.preventDefault(); stage.classList.add('drop'); });
-}
-for (const type of ['dragleave', 'drop'] as const) {
-  stage.addEventListener(type, () => stage.classList.remove('drop'));
-}
-stage.addEventListener('drop', async event => {
-  event.preventDefault();
-  const file = (event as DragEvent).dataTransfer?.files?.[0];
-  if (!file) return;
-  await load(new Uint8Array(await file.arrayBuffer()), file.name);
-});
-
-const zoom = el<HTMLInputElement>('zoom'), lane = el<HTMLInputElement>('lane'), thick = el<HTMLInputElement>('thick');
-
-/** 纵向可滚动上限：内容高 − 视口高。 */
-function maxScroll(): number {
-  if (!chart) return 0;
-  return Math.max(0, (layout.duration - 0) * layout.pxPerSec + layout.padY * 2 - stage.clientHeight);
-}
-
-/** 改纵向缩放时保持视口底边的时间不变，避免跳位。 */
-function setZoom(px: number) {
-  const bottomTime = yTime(stage.clientHeight, layout);
-  layout = { ...layout, pxPerSec: px };
-  layout = { ...layout, scrollPx: Math.min(maxScroll(), Math.max(0, scrollToBottom(bottomTime, layout, stage.clientHeight))) };
-  zoom.value = String(px);
-  el<HTMLOutputElement>('zoom-out').textContent = `${px} px/s`;
-  draw();
-}
-
-zoom.oninput = () => setZoom(Number(zoom.value));
-lane.oninput = () => { layout = { ...layout, lanePx: Number(lane.value) }; el<HTMLOutputElement>('lane-out').textContent = `${lane.value} px`; draw(); };
-thick.oninput = () => { instantPx = Number(thick.value); el<HTMLOutputElement>('thick-out').textContent = `${thick.value} px`; draw(); };
-el<HTMLInputElement>('grid').onchange = e => { showGrid = (e.target as HTMLInputElement).checked; draw(); };
-el<HTMLInputElement>('measure').onchange = e => { showMeasures = (e.target as HTMLInputElement).checked; draw(); };
-el<HTMLInputElement>('simul').onchange = e => { showSimultaneous = (e.target as HTMLInputElement).checked; draw(); };
-el<HTMLInputElement>('mirror').onchange = e => { layout = { ...layout, mirror: (e.target as HTMLInputElement).checked }; draw(); };
-
-/** 把指定时刻滚到视口底边——即视口显示 [time, time + 视口高/pxPerSec] 这一段。 */
-const goto = el<HTMLInputElement>('goto');
-function jumpTo(time: number) {
-  if (!Number.isFinite(time)) return;
-  layout = { ...layout, scrollPx: Math.max(0, scrollToBottom(time, layout, stage.clientHeight)) };
-  draw();
-}
-goto.oninput = () => jumpTo(Number(goto.value));
-el<HTMLOutputElement>('goto-out').textContent = '秒';
-
-// 滚轮缩放，Shift 换纵向；拖动平移。
-stage.addEventListener('wheel', event => {
-  if (!chart) return;
-  event.preventDefault();
-  const step = event.deltaY > 0 ? -5 : 5;
-  if (event.shiftKey) {
-    setZoom(Math.max(20, Math.min(2400, layout.pxPerSec + step * 5)));
+  if (options.toolbar) root.querySelector<HTMLElement>('.flat-file-field')?.remove();
+  const sharedInput = options.toolbar?.querySelector<HTMLInputElement>('#chart-file') ?? null;
+  let fileControl: HTMLLabelElement | null = null;
+  let fileInput: HTMLInputElement;
+  if (sharedInput) {
+    fileInput = sharedInput;
   } else {
-    const px = Math.max(4, Math.min(40, layout.lanePx + (event.deltaY > 0 ? -1 : 1)));
-    layout = { ...layout, lanePx: px };
-    lane.value = String(px);
-    el<HTMLOutputElement>('lane-out').textContent = `${px} px`;
+    const fileHost = root.querySelector<HTMLElement>('.flat-file-slot');
+    if (!fileHost) throw new Error('缺少平面谱面文件控件挂载点。');
+    fileControl = createFileControl();
+    fileHost.append(fileControl);
+    fileInput = fileControl.querySelector('input')!;
+  }
+
+  const canvas = query<HTMLCanvasElement>(root, 'canvas');
+  const stage = query<HTMLDivElement>(root, 'stage');
+  const empty = query<HTMLDivElement>(root, 'empty');
+  const status = query<HTMLDivElement>(root, 'status');
+  const probe = query<HTMLParagraphElement>(root, 'probe');
+  const meta = query<HTMLDListElement>(root, 'meta');
+  const chartName = query<HTMLHeadingElement>(root, 'chart-name');
+  const zoom = query<HTMLInputElement>(root, 'zoom');
+  const lane = query<HTMLInputElement>(root, 'lane');
+  const thick = query<HTMLInputElement>(root, 'thick');
+  const goto = query<HTMLInputElement>(root, 'goto');
+  const output = (id: string) => query<HTMLOutputElement>(root, id);
+
+  let renderer: FlatRenderer;
+  try {
+    renderer = new FlatRenderer(canvas);
+  } catch (error) {
+    status.textContent = `无法初始化画布：${String(error)}`;
+    status.classList.add('error');
+    throw error;
+  }
+
+  let chart: Chart | null = null;
+  let layout: Layout = defaultLayout();
+  let instantPx = 6;
+  let showGrid = true;
+  let showMeasures = true;
+  let showSimultaneous = true;
+  let spritesReady = false;
+  let disposed = false;
+  let unsubscribeSongSelection = () => {};
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  const cleanups: (() => void)[] = [];
+
+  const listen = (node: EventTarget, type: string, handler: EventListener, opts?: AddEventListenerOptions) => {
+    node.addEventListener(type, handler, opts);
+    cleanups.push(() => node.removeEventListener(type, handler, opts));
+  };
+
+  function setStatus(text: string, error = false) {
+    status.textContent = text;
+    status.classList.toggle('error', error);
+  }
+
+  function maxScroll(): number {
+    if (!chart) return 0;
+    return Math.max(0, layout.duration * layout.pxPerSec + layout.padY * 2 - stage.clientHeight);
+  }
+
+  function draw() {
+    if (disposed || !chart || !spritesReady) return;
+    const stats = renderer.render(chart, { layout, instantPx, showMeasures, showSimultaneous, showGrid });
+    canvas.dataset.drawn = String(stats.drawn);
+    canvas.dataset.instants = String(stats.instants);
+    canvas.dataset.holds = String(stats.holds);
+    canvas.dataset.total = String(stats.total);
+    canvas.dataset.duration = chart.duration.toFixed(4);
+    canvas.dataset.roots = String(chart.roots.length);
+    canvas.dataset.lines = String(chart.lines.length);
+    canvas.dataset.layout = JSON.stringify(layout);
+  }
+
+  function describe(next: Chart, name: string) {
+    const holds = next.notes.filter(note => note.type === 1).length;
+    const multi = next.notes.filter(note => note.type === 1 && note.holds.length > 1).length;
+    const rows: [string, string][] = [
+      ['音符', `${next.notes.length}`],
+      ['链首', `${next.roots.length}`],
+      ['Hold 节点', `${holds}（多航点 ${multi}）`],
+      ['同时押组', `${next.lines.length}`],
+      ['BPM 段', `${next.bpms.length}`],
+      ['拍号段', `${next.beats.length}`],
+      ['时长', `${next.duration.toFixed(3)} s`],
+    ];
+    meta.innerHTML = rows.map(([key, value]) => `<dt>${key}</dt><dd>${value}</dd>`).join('');
+    chartName.textContent = name;
+  }
+
+  async function load(bytes: Uint8Array, name: string) {
+    try {
+      const next = await decodeChart(bytes);
+      if (disposed) return;
+      chart = next;
+      layout = {
+        ...layout,
+        duration: next.duration,
+        scrollPx: Math.max(0, next.duration * layout.pxPerSec - stage.clientHeight + layout.padY),
+      };
+      empty.classList.add('hidden');
+      describe(next, name);
+      setStatus(`已载入 ${name}：${next.notes.length} 个音符`);
+      draw();
+    } catch (error) {
+      if (!disposed) setStatus(`${name} 载入失败：${String(error)}`, true);
+    }
+  }
+
+  function setZoom(px: number) {
+    if (!chart) return;
+    const bottomTime = yTime(stage.clientHeight, layout);
+    layout = { ...layout, pxPerSec: px };
+    layout = {
+      ...layout,
+      scrollPx: Math.min(maxScroll(), Math.max(0, scrollToBottom(bottomTime, layout, stage.clientHeight))),
+    };
+    zoom.value = String(px);
+    output('zoom-out').textContent = `${px} px/s`;
     draw();
   }
-}, { passive: false });
 
-let dragging = false, lastX = 0, lastY = 0;
-canvas.addEventListener('pointerdown', event => { dragging = true; lastX = event.clientX; lastY = event.clientY; canvas.setPointerCapture(event.pointerId); });
-canvas.addEventListener('pointerup', event => { dragging = false; canvas.releasePointerCapture(event.pointerId); });
-canvas.addEventListener('pointermove', event => {
-  if (!chart) return;
-  if (dragging) {
-    const scroll = Math.min(maxScroll(), Math.max(0, layout.scrollPx - (event.clientY - lastY)));
-    layout = { ...layout, padX: layout.padX + (event.clientX - lastX), scrollPx: scroll };
-    lastX = event.clientX; lastY = event.clientY;
+  function jumpTo(time: number) {
+    if (!Number.isFinite(time)) return;
+    layout = { ...layout, scrollPx: Math.max(0, scrollToBottom(time, layout, stage.clientHeight)) };
     draw();
-    return;
   }
-  const rect = canvas.getBoundingClientRect();
-  const hit = renderer.hitTest(chart, layout, event.clientX - rect.left, event.clientY - rect.top, instantPx);
-  probe.textContent = hit ? noteLabel(hit) : '把鼠标移到音符上';
-});
 
-canvas.addEventListener('pointerleave', () => { probe.textContent = '把鼠标移到音符上'; });
+  const wireFileInput = (fileInput: HTMLInputElement) => listen(fileInput, 'change', event => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    void file.arrayBuffer().then(buffer => load(new Uint8Array(buffer), file.name)).finally(() => { input.value = ''; });
+  });
+  wireFileInput(fileInput);
+  if (options.toolbar) {
+    const sharedButton = options.toolbar.querySelector<HTMLButtonElement>('#open-chart');
+    if (sharedButton) listen(sharedButton, 'click', () => fileInput.click());
+  }
 
-new ResizeObserver(() => draw()).observe(stage);
-draw();
+  let songLoadId = 0;
+  async function loadSongById(songId: string, difficulty: string) {
+    const song = await findSong(songId);
+    if (!song) throw new Error(`曲目列表里没有 Id ${songId}`);
+    const chartFile = song.charts[difficulty];
+    if (!chartFile) throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
+    const id = ++songLoadId;
+    setStatus(`正在加载 ${song.title} [${difficulty}]…`);
+    const response = await fetch(`/assets/chart/${chartFile}`);
+    if (!response.ok) throw new Error(`谱面下载失败（${response.status}）：${chartFile}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (disposed || id !== songLoadId) return;
+    await load(bytes, `${song.title} [${difficulty}]`);
+  }
+  const openSong = async (songId: string, difficulty: string) => {
+    try {
+      await loadSongById(songId, difficulty);
+    } catch (error) {
+      if (!disposed) setStatus(`曲目加载失败：${String(error)}`, true);
+    }
+  };
+  unsubscribeSongSelection = options.songSelection.subscribe((selection) => {
+    if (selection) void openSong(selection.songId, selection.difficulty);
+  }, false);
 
-// 音符贴图与九宫格边距：载入完成后重绘一次。
-void loadSprites().then(lib => {
-  renderer.setLibrary(lib);
-  spritesReady = true;
-  canvas.dataset.textured = '1';
+  for (const type of ['dragenter', 'dragover'] as const) {
+    listen(stage, type, event => { event.preventDefault(); stage.classList.add('drop'); });
+  }
+  for (const type of ['dragleave', 'drop'] as const) {
+    listen(stage, type, () => stage.classList.remove('drop'));
+  }
+  listen(stage, 'drop', event => {
+    event.preventDefault();
+    const file = (event as DragEvent).dataTransfer?.files?.[0];
+    if (!file) return;
+    void file.arrayBuffer().then(buffer => load(new Uint8Array(buffer), file.name));
+  });
+
+  listen(zoom, 'input', event => setZoom(Number((event.target as HTMLInputElement).value)));
+  listen(lane, 'input', event => {
+    layout = { ...layout, lanePx: Number((event.target as HTMLInputElement).value) };
+    output('lane-out').textContent = `${lane.value} px`;
+    draw();
+  });
+  listen(thick, 'input', event => {
+    instantPx = Number((event.target as HTMLInputElement).value);
+    output('thick-out').textContent = `${thick.value} px`;
+    draw();
+  });
+  listen(query<HTMLInputElement>(root, 'grid'), 'change', event => { showGrid = (event.target as HTMLInputElement).checked; draw(); });
+  listen(query<HTMLInputElement>(root, 'measure'), 'change', event => { showMeasures = (event.target as HTMLInputElement).checked; draw(); });
+  listen(query<HTMLInputElement>(root, 'simul'), 'change', event => { showSimultaneous = (event.target as HTMLInputElement).checked; draw(); });
+  listen(query<HTMLInputElement>(root, 'mirror'), 'change', event => {
+    layout = { ...layout, mirror: (event.target as HTMLInputElement).checked };
+    draw();
+  });
+  listen(goto, 'input', event => jumpTo(Number((event.target as HTMLInputElement).value)));
+
+  listen(stage, 'wheel', event => {
+    const wheel = event as WheelEvent;
+    if (!chart) return;
+    wheel.preventDefault();
+    const step = wheel.deltaY > 0 ? -5 : 5;
+    if (wheel.shiftKey) {
+      setZoom(Math.max(20, Math.min(2400, layout.pxPerSec + step * 5)));
+    } else {
+      const px = Math.max(4, Math.min(40, layout.lanePx + (wheel.deltaY > 0 ? -1 : 1)));
+      layout = { ...layout, lanePx: px };
+      lane.value = String(px);
+      output('lane-out').textContent = `${px} px`;
+      draw();
+    }
+  }, { passive: false });
+
+  listen(canvas, 'pointerdown', event => {
+    const pointer = event as PointerEvent;
+    dragging = true;
+    lastX = pointer.clientX;
+    lastY = pointer.clientY;
+    canvas.setPointerCapture(pointer.pointerId);
+  });
+  listen(canvas, 'pointerup', event => {
+    const pointer = event as PointerEvent;
+    dragging = false;
+    if (canvas.hasPointerCapture(pointer.pointerId)) canvas.releasePointerCapture(pointer.pointerId);
+  });
+  listen(canvas, 'pointermove', event => {
+    const pointer = event as PointerEvent;
+    if (!chart) return;
+    if (dragging) {
+      layout = {
+        ...layout,
+        padX: layout.padX + pointer.clientX - lastX,
+        scrollPx: Math.min(maxScroll(), Math.max(0, layout.scrollPx - (pointer.clientY - lastY))),
+      };
+      lastX = pointer.clientX;
+      lastY = pointer.clientY;
+      draw();
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const hit = renderer.hitTest(chart, layout, pointer.clientX - rect.left, pointer.clientY - rect.top, instantPx);
+    probe.textContent = hit ? noteLabel(hit) : '把鼠标移到音符上';
+  });
+  listen(canvas, 'pointerleave', () => { probe.textContent = '把鼠标移到音符上'; });
+
+  const resizeObserver = new ResizeObserver(() => draw());
+  resizeObserver.observe(stage);
+
+  const controller: FlatViewController = {
+    load,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      unsubscribeSongSelection();
+      resizeObserver.disconnect();
+      for (const cleanup of cleanups.splice(0)) cleanup();
+      fileControl?.remove();
+      if (mounts.get(root) === controller) mounts.delete(root);
+      root.replaceChildren();
+    },
+  };
+  mounts.set(root, controller);
+
+  void loadSprites(options.spriteBase ?? '/rg').then(lib => {
+    if (disposed) return;
+    renderer.setLibrary(lib);
+    spritesReady = true;
+    canvas.dataset.textured = '1';
+    draw();
+  }).catch(error => {
+    if (!disposed) setStatus(`贴图载入失败：${String(error)}`, true);
+  });
+
   draw();
-}).catch(error => {
-  setStatus(`贴图载入失败：${String(error)}`, true);
-  console.error(error);
-});
+  const initialSelection = options.songSelection.get();
+  if (initialSelection) void openSong(initialSelection.songId, initialSelection.difficulty);
+  return controller;
+}
+
+export function dispose(root: HTMLElement): void {
+  mounts.get(root)?.dispose();
+}
