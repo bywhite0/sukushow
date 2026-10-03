@@ -4,7 +4,7 @@ import './flat.css';
 
 import { type Chart, decodeChart } from '../../../flat-preview/src/chart';
 import { FlatRenderer, loadSprites, noteLabel } from '../../../flat-preview/src/renderer';
-import { type Layout, defaultLayout, scrollToBottom, yTime } from '../../../flat-preview/src/view';
+import { type Layout, defaultLayout, scrollToLine, yTime } from '../../../flat-preview/src/view';
 import { findSong } from '../../../llll-preview/src/songAssets';
 import type { SongSelectionStore } from '../songSelection';
 
@@ -35,6 +35,7 @@ const template = `
       <div class="stage-shell flat-stage-shell">
         <div class="stage flat-stage" id="stage">
           <canvas id="canvas" aria-label="平面谱面画布"></canvas>
+          <div id="judgement-line" class="flat-judgement-line" aria-hidden="true"></div>
           <div id="empty" class="empty flat-empty">
             <p>拖入谱面文件，或在设置中导入谱面。</p>
             <p class="hint">支持原格式 JSON 与 raw-deflate <code>.bytes</code>；文件不上传。</p>
@@ -42,6 +43,22 @@ const template = `
         </div>
       </div>
       <div id="status" class="viewer-status flat-status" role="status" aria-live="polite">未载入谱面</div>
+      <div class="transport flat-transport">
+        <label class="sr-only" for="timeline">播放进度</label>
+        <input id="timeline" type="range" min="0" max="0" step="0.001" value="0">
+        <div class="transport-row">
+          <button id="play" class="primary" type="button" aria-label="播放">▶ 播放</button>
+          <button id="restart" class="quiet" type="button" aria-label="回到开头">↺ 重播</button>
+          <output id="time">00:00.000 / 00:00.000</output>
+          <label class="rate-label">播放倍率
+            <select id="rate">
+              <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option><option value="1.25">1.25×</option>
+              <option value="1.5">1.5×</option><option value="2">2×</option>
+            </select>
+          </label>
+        </div>
+      </div>
     </section>
     <aside class="flat-inspector" aria-label="平面谱面设置">
       <div class="inspector-heading"><h2>平面谱面</h2><span>本地解析 · Canvas</span></div>
@@ -95,8 +112,17 @@ export function mount(options: FlatMountOptions): FlatViewController {
   const sharedInput = options.toolbar?.querySelector<HTMLInputElement>('#chart-file') ?? null;
   let fileControl: HTMLLabelElement | null = null;
   let fileInput: HTMLInputElement;
+  const fileInputs: HTMLInputElement[] = [];
   if (sharedInput) {
     fileInput = sharedInput;
+    // 保留旧版 flat 入口的不可见兼容节点，让已有本地导入入口继续可用。
+    const compatibilityInput = document.createElement('input');
+    compatibilityInput.id = 'file';
+    compatibilityInput.className = 'sr-only';
+    compatibilityInput.type = 'file';
+    compatibilityInput.accept = '.json,.bytes,application/json';
+    root.append(compatibilityInput);
+    fileInputs.push(compatibilityInput);
   } else {
     const fileHost = root.querySelector<HTMLElement>('.flat-file-slot');
     if (!fileHost) throw new Error('缺少平面谱面文件控件挂载点。');
@@ -104,9 +130,11 @@ export function mount(options: FlatMountOptions): FlatViewController {
     fileHost.append(fileControl);
     fileInput = fileControl.querySelector('input')!;
   }
+  fileInputs.push(fileInput);
 
   const canvas = query<HTMLCanvasElement>(root, 'canvas');
   const stage = query<HTMLDivElement>(root, 'stage');
+  const judgementLine = query<HTMLDivElement>(root, 'judgement-line');
   const empty = query<HTMLDivElement>(root, 'empty');
   const status = query<HTMLDivElement>(root, 'status');
   const probe = query<HTMLParagraphElement>(root, 'probe');
@@ -116,6 +144,11 @@ export function mount(options: FlatMountOptions): FlatViewController {
   const lane = query<HTMLInputElement>(root, 'lane');
   const thick = query<HTMLInputElement>(root, 'thick');
   const goto = query<HTMLInputElement>(root, 'goto');
+  const timeline = query<HTMLInputElement>(root, 'timeline');
+  const play = query<HTMLButtonElement>(root, 'play');
+  const restart = query<HTMLButtonElement>(root, 'restart');
+  const timeOutput = query<HTMLOutputElement>(root, 'time');
+  const rate = query<HTMLSelectElement>(root, 'rate');
   const output = (id: string) => query<HTMLOutputElement>(root, id);
 
   let renderer: FlatRenderer;
@@ -135,6 +168,11 @@ export function mount(options: FlatMountOptions): FlatViewController {
   let showSimultaneous = true;
   let spritesReady = false;
   let disposed = false;
+  let currentTime = 0;
+  let playing = false;
+  let playbackRate = 1;
+  let frame = 0;
+  let lastFrameAt = performance.now();
   let unsubscribeSongSelection = () => {};
   let dragging = false;
   let lastX = 0;
@@ -156,9 +194,45 @@ export function mount(options: FlatMountOptions): FlatViewController {
     return Math.max(0, layout.duration * layout.pxPerSec + layout.padY * 2 - stage.clientHeight);
   }
 
+  /** 2D 镜头的判定线位置：接近舞台底部，与 3D 相机的近端判定线同语义。 */
+  function judgementLineY(): number {
+    return Math.max(1, stage.clientHeight) * 0.78;
+  }
+
+  function clampTime(time: number): number {
+    if (!chart || !Number.isFinite(time)) return 0;
+    return Math.max(0, Math.min(chart.duration, time));
+  }
+
+  function followTime() {
+    if (!chart) return;
+    const scroll = scrollToLine(currentTime, layout, judgementLineY());
+    layout = { ...layout, scrollPx: Math.min(maxScroll(), Math.max(0, scroll)) };
+  }
+
+  function formatTime(time: number): string {
+    const safe = Math.max(0, Number.isFinite(time) ? time : 0);
+    const minutes = Math.floor(safe / 60);
+    const seconds = safe - minutes * 60;
+    return `${String(minutes).padStart(2, '0')}:${seconds.toFixed(3).padStart(6, '0')}`;
+  }
+
+  function syncTransport() {
+    const duration = chart?.duration ?? 0;
+    timeline.max = String(duration);
+    timeline.value = String(Math.min(duration, currentTime));
+    timeOutput.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+    play.textContent = playing ? 'Ⅱ 暂停' : '▶ 播放';
+    play.setAttribute('aria-label', playing ? '暂停' : '播放');
+  }
+
   function draw() {
     if (disposed || !chart || !spritesReady) return;
-    const stats = renderer.render(chart, { layout, instantPx, showMeasures, showSimultaneous, showGrid });
+    const stats = renderer.render(chart, {
+      layout, instantPx, showMeasures, showSimultaneous, showGrid,
+    });
+    judgementLine.style.display = 'block';
+    judgementLine.style.top = `${judgementLineY()}px`;
     canvas.dataset.drawn = String(stats.drawn);
     canvas.dataset.instants = String(stats.instants);
     canvas.dataset.holds = String(stats.holds);
@@ -167,6 +241,9 @@ export function mount(options: FlatMountOptions): FlatViewController {
     canvas.dataset.roots = String(chart.roots.length);
     canvas.dataset.lines = String(chart.lines.length);
     canvas.dataset.layout = JSON.stringify(layout);
+    canvas.dataset.time = currentTime.toFixed(4);
+    canvas.dataset.playing = playing ? '1' : '0';
+    canvas.dataset.judgementY = judgementLineY().toFixed(2);
   }
 
   function describe(next: Chart, name: string) {
@@ -190,14 +267,18 @@ export function mount(options: FlatMountOptions): FlatViewController {
       const next = await decodeChart(bytes);
       if (disposed) return;
       chart = next;
+      currentTime = 0;
+      playing = false;
       layout = {
         ...layout,
         duration: next.duration,
-        scrollPx: Math.max(0, next.duration * layout.pxPerSec - stage.clientHeight + layout.padY),
+        scrollPx: 0,
       };
+      followTime();
       empty.classList.add('hidden');
       describe(next, name);
       setStatus(`已载入 ${name}：${next.notes.length} 个音符`);
+      syncTransport();
       draw();
     } catch (error) {
       if (!disposed) setStatus(`${name} 载入失败：${String(error)}`, true);
@@ -206,12 +287,8 @@ export function mount(options: FlatMountOptions): FlatViewController {
 
   function setZoom(px: number) {
     if (!chart) return;
-    const bottomTime = yTime(stage.clientHeight, layout);
     layout = { ...layout, pxPerSec: px };
-    layout = {
-      ...layout,
-      scrollPx: Math.min(maxScroll(), Math.max(0, scrollToBottom(bottomTime, layout, stage.clientHeight))),
-    };
+    followTime();
     zoom.value = String(px);
     output('zoom-out').textContent = `${px} px/s`;
     draw();
@@ -219,8 +296,49 @@ export function mount(options: FlatMountOptions): FlatViewController {
 
   function jumpTo(time: number) {
     if (!Number.isFinite(time)) return;
-    layout = { ...layout, scrollPx: Math.max(0, scrollToBottom(time, layout, stage.clientHeight)) };
+    currentTime = clampTime(time);
+    goto.value = String(currentTime);
+    followTime();
+    syncTransport();
     draw();
+  }
+
+  function seek(time: number) {
+    if (!chart || !Number.isFinite(time)) return;
+    currentTime = clampTime(time);
+    followTime();
+    syncTransport();
+    draw();
+  }
+
+  function togglePlayback() {
+    if (!chart) return;
+    if (playing) {
+      playing = false;
+    } else {
+      if (currentTime >= chart.duration - 1e-6) currentTime = 0;
+      playing = true;
+      lastFrameAt = performance.now();
+    }
+    syncTransport();
+    draw();
+  }
+
+  function animate(now: number) {
+    if (disposed) return;
+    const delta = Math.max(0, Math.min(0.1, (now - lastFrameAt) / 1000));
+    lastFrameAt = now;
+    if (playing && chart) {
+      currentTime = clampTime(currentTime + delta * playbackRate);
+      if (currentTime >= chart.duration - 1e-6) {
+        currentTime = chart.duration;
+        playing = false;
+      }
+      followTime();
+      draw();
+    }
+    syncTransport();
+    frame = requestAnimationFrame(animate);
   }
 
   const wireFileInput = (fileInput: HTMLInputElement) => listen(fileInput, 'change', event => {
@@ -229,7 +347,7 @@ export function mount(options: FlatMountOptions): FlatViewController {
     if (!file) return;
     void file.arrayBuffer().then(buffer => load(new Uint8Array(buffer), file.name)).finally(() => { input.value = ''; });
   });
-  wireFileInput(fileInput);
+  for (const input of fileInputs) wireFileInput(input);
   if (options.toolbar) {
     const sharedButton = options.toolbar.querySelector<HTMLButtonElement>('#open-chart');
     if (sharedButton) listen(sharedButton, 'click', () => fileInput.click());
@@ -292,6 +410,31 @@ export function mount(options: FlatMountOptions): FlatViewController {
     draw();
   });
   listen(goto, 'input', event => jumpTo(Number((event.target as HTMLInputElement).value)));
+  listen(play, 'click', togglePlayback);
+  listen(restart, 'click', () => {
+    playing = false;
+    currentTime = 0;
+    goto.value = '0';
+    followTime();
+    syncTransport();
+    draw();
+  });
+  listen(timeline, 'input', event => seek(Number((event.target as HTMLInputElement).value)));
+  listen(rate, 'change', event => {
+    const value = Number((event.target as HTMLSelectElement).value);
+    if (Number.isFinite(value) && value > 0) playbackRate = value;
+  });
+  listen(document, 'keydown', event => {
+    const keyboard = event as KeyboardEvent;
+    if (keyboard.target instanceof HTMLElement && keyboard.target.closest('input,select,button,textarea,a')) return;
+    if (keyboard.code === 'Space') {
+      keyboard.preventDefault();
+      togglePlayback();
+    } else if (keyboard.code === 'ArrowRight' || keyboard.code === 'ArrowLeft') {
+      keyboard.preventDefault();
+      seek(currentTime + (keyboard.code === 'ArrowRight' ? 5 : -5));
+    }
+  });
 
   listen(stage, 'wheel', event => {
     const wheel = event as WheelEvent;
@@ -311,6 +454,7 @@ export function mount(options: FlatMountOptions): FlatViewController {
 
   listen(canvas, 'pointerdown', event => {
     const pointer = event as PointerEvent;
+    playing = false;
     dragging = true;
     lastX = pointer.clientX;
     lastY = pointer.clientY;
@@ -330,6 +474,9 @@ export function mount(options: FlatMountOptions): FlatViewController {
         padX: layout.padX + pointer.clientX - lastX,
         scrollPx: Math.min(maxScroll(), Math.max(0, layout.scrollPx - (pointer.clientY - lastY))),
       };
+      currentTime = clampTime(yTime(judgementLineY(), layout));
+      goto.value = String(currentTime);
+      syncTransport();
       lastX = pointer.clientX;
       lastY = pointer.clientY;
       draw();
@@ -341,7 +488,10 @@ export function mount(options: FlatMountOptions): FlatViewController {
   });
   listen(canvas, 'pointerleave', () => { probe.textContent = '把鼠标移到音符上'; });
 
-  const resizeObserver = new ResizeObserver(() => draw());
+  const resizeObserver = new ResizeObserver(() => {
+    followTime();
+    draw();
+  });
   resizeObserver.observe(stage);
 
   const controller: FlatViewController = {
@@ -349,6 +499,7 @@ export function mount(options: FlatMountOptions): FlatViewController {
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelAnimationFrame(frame);
       unsubscribeSongSelection();
       resizeObserver.disconnect();
       for (const cleanup of cleanups.splice(0)) cleanup();
@@ -369,6 +520,8 @@ export function mount(options: FlatMountOptions): FlatViewController {
     if (!disposed) setStatus(`贴图载入失败：${String(error)}`, true);
   });
 
+  syncTransport();
+  frame = requestAnimationFrame(animate);
   draw();
   const initialSelection = options.songSelection.get();
   if (initialSelection) void openSong(initialSelection.songId, initialSelection.difficulty);

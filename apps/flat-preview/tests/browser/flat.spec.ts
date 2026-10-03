@@ -34,6 +34,7 @@ test('初始为空态，画布已就位', async ({ page }) => {
 
 test('导入 JSON 谱面后画出全部音符与同时押', async ({ page }) => {
   await importChart(page, SAMPLE);
+  await seekTo(page, 2);
   const canvas = page.locator('#canvas');
   await expect(canvas).toHaveAttribute('data-total', '6');
   await expect(canvas).toHaveAttribute('data-roots', '5');
@@ -65,6 +66,7 @@ test('轨道宽度改变几何', async ({ page }) => {
 
 test('镜像开关左右翻转', async ({ page }) => {
   await importChart(page, SAMPLE);
+  await seekTo(page, 6);
   const before = await drawnBox(page);
   // Trace 音符占轨道 50–58，镜像后应移到左侧。
   const rightSideBefore = await pixelAt(page, 54, 6.0);
@@ -236,6 +238,7 @@ test('Hold 宽带横截面呈现 Center 暗、两侧亮', async ({ page }) => {
 
 test('Flick 叠加绿色箭头与 Sign，且不画到别的音符上', async ({ page }) => {
   await importChart(page, SAMPLE);
+  await seekTo(page, 5);
   const lay = await layoutOf(page);
   // 采样谱面的 Flick 在 5.0 s、轨道 30–32。
   const [x0, x1] = [lay.padX + 30 * lay.lanePx, lay.padX + 33 * lay.lanePx];
@@ -257,6 +260,7 @@ test('Flick 叠加绿色箭头与 Sign，且不画到别的音符上', async ({ 
 
 test('Flick 附加元素的纵向跨度大于音符本体厚度', async ({ page }) => {
   await importChart(page, SAMPLE);
+  await seekTo(page, 5);
   const lay = await layoutOf(page);
   // 本体厚度 = 0.45 世界单位 × scale.x。Sign 高 2.5×0.8 = 2.0 世界单位，远高于它。
   const bodyPx = 0.45 * 0.75 * (lay.lanePx / 0.15);
@@ -268,6 +272,27 @@ test('Flick 附加元素的纵向跨度大于音符本体厚度', async ({ page 
   expect(g.maxY - g.minY).toBeGreaterThan(bodyPx * 2);
 });
 
+test('播放时固定判定线并推进 2D 走带', async ({ page }) => {
+  await importChart(page, SAMPLE);
+  await seekTo(page, 2);
+  const before = await page.locator('#canvas').evaluate(el => ({
+    time: Number((el as HTMLCanvasElement).dataset.time),
+    layout: JSON.parse((el as HTMLCanvasElement).dataset.layout ?? '{}'),
+  }));
+  await page.locator('#play').click();
+  await expect(page.locator('#canvas')).toHaveAttribute('data-playing', '1');
+  await page.waitForFunction((start) => Number(document.querySelector<HTMLCanvasElement>('#canvas')?.dataset.time) > start + 0.15, before.time);
+  const after = await page.locator('#canvas').evaluate(el => ({
+    time: Number((el as HTMLCanvasElement).dataset.time),
+    layout: JSON.parse((el as HTMLCanvasElement).dataset.layout ?? '{}'),
+  }));
+  expect(after.time).toBeGreaterThan(before.time);
+  expect(after.layout.scrollPx).toBeLessThan(before.layout.scrollPx);
+  await expect(page.locator('#judgement-line')).toHaveCSS('display', 'block');
+  await page.locator('#play').click();
+  await expect(page.locator('#canvas')).toHaveAttribute('data-playing', '0');
+});
+
 async function importChart(page: import('@playwright/test').Page, data: unknown) {
   await page.setInputFiles('#file', {
     name: 'sample.json',
@@ -275,6 +300,12 @@ async function importChart(page: import('@playwright/test').Page, data: unknown)
     buffer: Buffer.from(JSON.stringify(data)),
   });
   await expect(page.locator('#empty')).toBeHidden();
+}
+
+async function seekTo(page: import('@playwright/test').Page, time: number) {
+  await page.locator('#goto').fill(String(time));
+  await page.locator('#goto').dispatchEvent('input');
+  await expect(page.locator('#canvas')).toHaveAttribute('data-time', time.toFixed(4));
 }
 
 async function layoutOf(page: import('@playwright/test').Page) {

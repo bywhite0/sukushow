@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseChart } from '../src/chart';
 import {
   LANES, chainEnd, chainQuads, defaultLayout, edgeX, holdQuad, instantRect,
-  measures, noteSpan, scrollToBottom, timeY, trackWidth, yTime,
+  measures, noteSpan, scrollToBottom, scrollToLine, timeY, trackWidth, yTime,
 } from '../src/view';
 
 /** l/r 为头端点轨道，l2/r2 为尾端点轨道。 */
@@ -83,6 +83,12 @@ describe('时间轴', () => {
     // 底边 = t，顶边 = t + 500/pxPerSec
     expect(yTime(500, view)).toBeCloseTo(30);
     expect(yTime(0, view)).toBeCloseTo(30 + 500 / l.pxPerSec);
+  });
+
+  it('scrollToLine 让当前时刻贴住固定判定线', () => {
+    const l = { ...lay(), duration: 60 };
+    const s = scrollToLine(30, l, 380);
+    expect(timeY(30, { ...l, scrollPx: s })).toBeCloseTo(380);
   });
 });
 
