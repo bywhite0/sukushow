@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.playwright/
+playwright-report/
+test-results/
+local-assets/
+*.log
+.env*
+!.env.example

@@ -2,9 +2,8 @@
 
 共 **236** 首；其中有节奏游戏谱面 **154** 首（各 4 难度），有曲绘 **236** 首。
 
-来源：`4L/masterdata/Musics.yaml`、`4L/masterdata/MusicScores.yaml`、`4L/cache/catalog.json`、`4L/cache/plain/rhythmgame_chart_*.bytes`。
+来源：曲目主数据、曲目列表与谱面索引。
 
-> 注：`4L/data/llll/music_charts/` 不是节奏游戏谱面，那是段落/情绪分析数据。
 > 难度等级取自 `MusicScores.yaml`（游戏读它），不是从音符数推算的。
 
 | # | 曲目 Id | 曲名 | 分类 | 组合 | 难度等级 | 曲绘 | 时长 |

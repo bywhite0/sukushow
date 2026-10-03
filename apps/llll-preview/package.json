@@ -1,0 +1,30 @@
+{
+  "name": "@sukushow/llll-preview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "smoke:export": "node ./scripts/export-smoke.mjs",
+    "verify:export-memory": "node ./scripts/export-memory.mjs",
+    "verify:corpus": "tsx scripts/verify-corpus.ts",
+    "metadata:fever": "tsx scripts/build-fever-metadata.ts"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "mediabunny": "1.61.0",
+    "three": "^0.183.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.0.0",
+    "@types/three": "^0.183.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.11"
+  }
+}
