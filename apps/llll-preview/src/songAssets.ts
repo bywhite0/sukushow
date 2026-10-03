@@ -114,6 +114,11 @@ export async function fetchBytes(url: string | null): Promise<Uint8Array | null>
       console.warn(`[llll-preview] 资源缺失（${response.status}）：${url}`)
       return null
     }
+    const contentType = response.headers?.get?.('content-type') ?? ''
+    if (contentType.includes('text/html')) {
+      console.warn(`[llll-preview] 资源路径返回了 HTML：${url}`)
+      return null
+    }
     return new Uint8Array(await response.arrayBuffer())
   } catch (error) {
     console.warn('[llll-preview] 资源下载失败：', url, error)

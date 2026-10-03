@@ -12,7 +12,6 @@
  *     → wasm（PJSK 渲染，60 轨）
  */
 import './pjsk.css'
-import './pjsk-workspace.css'
 import { MmwWasmPlayer } from '../../../pjsk-preview/src/lib/mmwWasm'
 import type { PreviewRuntimeConfig } from '../../../pjsk-preview/src/lib/types'
 import { buildAssetManifest } from '../../../pjsk-preview/src/assetManifest'
@@ -20,18 +19,38 @@ import { parseChart, decodeChart, type Chart } from '../../../pjsk-preview/src/l
 import { chartToMusicScore } from '../../../pjsk-preview/src/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from './pjsk/url'
-import { findSong, songAssets, fetchBytes, loadSongList, findSongCredits, creditsToMetadata } from '../../../pjsk-preview/src/llll/songAssets'
-import { createSongPicker } from './pjsk/songPicker'
+import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata } from '../../../pjsk-preview/src/llll/songAssets'
 import { feverForSong } from '../../../pjsk-preview/src/llll/fever'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
+import type { SongSelectionStore } from '../songSelection'
 
-const app = document.querySelector<HTMLDivElement>('#app')
-if (!app) {
-  throw new Error('缺少 #app 容器。')
+declare global {
+  interface Window {
+    __LLL_PJSK__?: {
+      player: MmwWasmPlayer
+      loadChart: (...args: any[]) => Promise<void>
+      demoChart: () => Chart
+      renderLoop: () => void
+      getChart: () => Chart | null
+      exportDialog: ReturnType<typeof installExportDialog>
+      probeExportConfigs: typeof probeAllConfigs
+    }
+  }
 }
 
-app.innerHTML = `
-<header class="workspace-header"><a class="brand" href="./" aria-label="llll × PJSK 预览首页"><span class="brand-mark" aria-hidden="true">llll</span><span>渲染预览<small>PJSK PIPELINE · 60 LANES</small></span></a><div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div><div class="file-toolbar" aria-label="打开谱面与音频"><button id="open-chart" class="file-action" type="button">＋ 打开谱面</button><input class="sr-only" id="chart-file" type="file" accept=".json,.bytes" aria-label="选择谱面文件"><button id="open-audio" class="quiet" type="button">添加音频</button><input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频"><button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button></div><span class="local-badge">本地运行 · 文件不上传</span></header>
+export type PjskMountOptions = {
+  root: HTMLElement
+  toolbar?: HTMLElement
+  songSelection: SongSelectionStore
+}
+
+export type PjskViewHandle = {
+  dispose: () => void
+}
+
+export function mount({ root, toolbar, songSelection }: PjskMountOptions): PjskViewHandle {
+  let toolbarHost = toolbar
+  root.innerHTML = `
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
@@ -78,9 +97,28 @@ app.innerHTML = `
 </section></div>
 <div class="inspector-footer">设置仅影响预览，不会修改源文件。</div>
 </aside>
-</main><footer><span>非官方研究工具 · llll 原生谱面 · PJSK 渲染管线</span><span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span></footer>`
+</main>`
 
-const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
+  if (!toolbarHost) {
+    toolbarHost = document.createElement('div')
+    toolbarHost.className = 'file-toolbar'
+    toolbarHost.setAttribute('aria-label', '打开谱面与音频')
+    toolbarHost.innerHTML = `
+      <div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div>
+      <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
+      <input class="sr-only" id="chart-file" type="file" accept=".json,.bytes,application/json" aria-label="选择谱面文件">
+      <button id="open-audio" class="quiet" type="button">添加音频</button>
+      <input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="选择本地音频">
+      <button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button>`
+    root.prepend(toolbarHost)
+  }
+
+  const el = <T extends HTMLElement = HTMLElement>(id: string) => {
+    const selector = `#${id}`
+    const node = root.querySelector<T>(selector) ?? toolbarHost?.querySelector<T>(selector)
+    if (!node) throw new Error(`缺少元素 #${id}`)
+    return node
+  }
 const input = (id: string) => el<HTMLInputElement>(id)
 const select = (id: string) => el<HTMLSelectElement>(id)
 const message = (text: string, error = false) => {
@@ -93,7 +131,7 @@ el('open-chart').onclick = () => input('chart-file').click()
 el('open-audio').onclick = () => input('audio-file').click()
 
 // ---- 设置分页（方向键 / Home / End 导航）----
-const settingTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+const settingTabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
 function selectSettingsTab(tab: HTMLButtonElement) {
   for (const item of settingTabs) {
     const selected = item === tab
@@ -121,6 +159,8 @@ for (const [index, tab] of settingTabs.entries()) {
 }
 
 const player = new MmwWasmPlayer()
+  let disposed = false
+  let unsubscribeSongSelection = () => {}
 let runtimeReady = false
 let currentChart: Chart | null = null
 let rafHandle = 0
@@ -221,7 +261,7 @@ for (const id of [
 ]) {
   const node = input(id)
   const handler = () => {
-    const output = document.getElementById(`${id}-value`)
+    const output = root.querySelector<HTMLOutputElement>(`#${id}-value`)
     if (output && node.type === 'range') output.textContent = String(Math.round(Number(node.value) * 10) / 10)
     applyRuntimeConfig()
     persistSettings()
@@ -252,9 +292,9 @@ function applyFeverWindow(songId: string | null) {
     player.setFeverWindow(-1, -1)
   }
   // FeverChance 不再用时间窗，改走充能（见 applyFeverCharge / tickFeverCharge）。
-  const status = document.getElementById('fever-status')
+  const status = root.querySelector<HTMLElement>('#fever-status')
   if (status) {
-    const n = currentChartForCharge
+    const n = currentChartForCharge && window
       ? currentChartForCharge.notes.filter((note) => note.time < window!.start).length
       : 0
     status.innerHTML = window
@@ -299,18 +339,22 @@ async function preloadAll(onProgress: (text: string) => void) {
   const entries = buildAssetManifest()
   let done = 0
   for (const entry of entries) {
+    if (disposed) return
     try {
       const response = await fetch(entry.url)
+      if (disposed) return
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.arrayBuffer())
       if (entry.kind === 'asset') await player.preloadAsset(entry.key, bytes)
       else if (entry.kind === 'font') await player.preloadFont(entry.key, bytes)
       else await player.preloadSound(entry.key, bytes)
     } catch (error) {
+      if (disposed) return
       // 音效缺失不该阻断渲染；贴图/字体缺失则上抛。
       if (entry.kind !== 'sound') throw error
       console.warn('[llll-pjsk] 音效加载失败：', entry.url, error)
     }
+    if (disposed) return
     done += 1
     onProgress(`预载资源 ${done}/${entries.length}…`)
   }
@@ -322,6 +366,10 @@ let currentSongAssets: { bgmUrl: string | null; coverUrl: string | null } = {
   coverUrl: null,
 }
 
+// The wasm session expects a decodable cover image even when the catalog has
+// no local jacket asset. This bundled texture keeps the renderer usable.
+const EMPTY_COVER_URL = '/in_game_difficulty_bg_101.png'
+
 async function loadChart(
   chart: Chart,
   label: string,
@@ -330,6 +378,7 @@ async function loadChart(
   difficulty: string | null = null,
   credits: { lyricist: string | null; composer: string | null; arranger: string | null; vocal: string | null } | null = null,
 ) {
+  if (disposed) return
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
   // 充能分母要在加载谱面时就备好；曲目 Id 在 loadChart 里拿不到，
@@ -342,10 +391,12 @@ async function loadChart(
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
-  const [bgmBytes, coverBytes] = await Promise.all([
+  const [bgmBytes, loadedCoverBytes] = await Promise.all([
     fetchBytes(bgmUrl),
     fetchBytes(coverUrl),
   ])
+  if (disposed) return
+  const coverBytes = loadedCoverBytes ?? await fetchBytes(EMPTY_COVER_URL)
   currentSongAssets = { bgmUrl, coverUrl }
 
   await player.loadSession({
@@ -370,6 +421,7 @@ async function loadChart(
       scoreCreator: null,
     },
   })
+  if (disposed) return
   currentChart = chart
   const config = readRuntimeConfig()
   player.setPreviewConfig(config)
@@ -383,14 +435,16 @@ async function loadChart(
   el('chart-name').textContent = uiLabel
   const parts = [`音符 ${score.NoteList.length} 个（Hold 展开后）`, `最大轨道 ${maxLane}`]
   parts.push(bgmBytes ? 'BGM ✓' : 'BGM —')
-  parts.push(coverBytes ? '曲绘 ✓' : '曲绘 —')
+  parts.push(loadedCoverBytes ? '曲绘 ✓' : '曲绘 —')
   el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
   message(`${uiLabel}　${parts.join('　')}`)
 }
 
 /** 按曲目 Id 打开：加载谱面 + BGM + 曲绘。 */
 async function loadSongById(songId: string, difficulty: string, sourceOffsetMs = 0) {
+  if (disposed) return
   const song = await findSong(songId)
+  if (disposed) return
   if (!song) {
     throw new Error(`曲目列表里没有 Id ${songId}`)
   }
@@ -400,11 +454,13 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
   }
   message(`正在下载谱面 ${chartFile}…`)
   const response = await fetch(`/assets/chart/${chartFile}`)
+  if (disposed) return
   if (!response.ok) {
     throw new Error(`谱面下载失败（${response.status}）：${chartFile}`)
   }
   // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
   const chart = decodeChart(new Uint8Array(await response.arrayBuffer()))
+  if (disposed) return
   // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
   let credits = null
   try {
@@ -414,6 +470,7 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
   }
   // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
   await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
+  if (disposed) return
   applyFeverWindow(songId)
 }
 
@@ -446,7 +503,7 @@ function demoChart(): Chart {
 let liveRenderingSuspended = false
 
 function renderLoop() {
-  if (!runtimeReady || liveRenderingSuspended) return
+  if (disposed || !runtimeReady || liveRenderingSuspended) return
   player.renderFrame()
   const snapshot = player.getStateSnapshot()
   if (currentChart) {
@@ -459,6 +516,7 @@ function renderLoop() {
 
 /** 从 URL 参数加载谱面（`?chart=<url>`，或 config/cfg 里的 chart/llll）。 */
 async function loadFromUrlParams(): Promise<boolean> {
+  if (disposed) return false
   let params
   try {
     params = parseUrlPreviewParams(new URL(window.location.href))
@@ -471,10 +529,12 @@ async function loadFromUrlParams(): Promise<boolean> {
 
   message(`正在下载谱面 ${url}…`)
   const response = await fetch(url)
+  if (disposed) return false
   if (!response.ok) {
     throw new Error(`谱面下载失败（${response.status}）：${url}`)
   }
   const bytes = new Uint8Array(await response.arrayBuffer())
+  if (disposed) return false
   const asText = new TextDecoder().decode(bytes)
   const chart = asText.trimStart().startsWith('{')
     ? parseChart(JSON.parse(asText.replace(/^\ufeff/, '')))
@@ -482,11 +542,13 @@ async function loadFromUrlParams(): Promise<boolean> {
 
   const label = params.title ?? params.scoreTitle ?? url.split('/').pop() ?? 'URL 谱面'
   await loadChart(chart, label, params.rawOffsetMs ?? 0)
+  if (disposed) return false
   applyFeverWindow(null)
   return true
 }
 
 async function boot() {
+  if (disposed) return
   const canvas = el<HTMLCanvasElement>('chart-canvas')
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const rect = canvas.parentElement!.getBoundingClientRect()
@@ -497,29 +559,24 @@ async function boot() {
 
   message('正在初始化渲染器…')
   await player.init(canvas, width, height, dpr)
+  if (disposed) return
   runtimeReady = true
   applyRuntimeConfig()
 
   await preloadAll((text) => message(text))
+  if (disposed) return
   message('渲染器就绪。')
-
-  // 曲目选择器：列表加载失败不该阻断渲染。
-  let songPicker: Awaited<ReturnType<typeof initSongPicker>> | null = null
-  try {
-    songPicker = await initSongPicker()
-  } catch (error) {
-    console.warn('[llll-pjsk] 曲目列表加载失败：', error)
-  }
 
   // 优先级：?song= > ?chart= > 演示谱。
   const search = new URLSearchParams(location.search)
-  const songId = search.get('song')
-  if (songId && songPicker) {
-    const difficulty = search.get('difficulty') ?? 'MASTER'
+  const selected = songSelection.get()
+  if (selected) {
+    const songId = selected.songId
+    const difficulty = selected.difficulty
     // select 不触发 onChange，由这里自己 await，保证 URL 进来时不会重复加载。
-    songPicker.select(songId, difficulty, false)
     try {
-      await loadSongById(songId, songPicker.currentDifficulty() ?? difficulty, Number(search.get('offset') ?? 0))
+      await loadSongById(songId, difficulty, Number(search.get('offset') ?? 0))
+      if (disposed) return
       renderLoop()
       return
     } catch (error) {
@@ -530,6 +587,7 @@ async function boot() {
   // 有 URL 参数就用它，否则回落到演示谱。
   try {
     if (await loadFromUrlParams()) {
+      if (disposed) return
       renderLoop()
       return
     }
@@ -538,6 +596,7 @@ async function boot() {
   }
 
   await loadChart(demoChart(), '演示谱面')
+  if (disposed) return
   applyFeverWindow(null)
   renderLoop()
 }
@@ -614,7 +673,7 @@ input('audio-file').onchange = async () => {
       sourceOffsetMs: 0,
       effectiveLeadInMs: 9000,
       bgmBytes: bytes,
-      coverBytes: await fetchBytes(currentSongAssets.coverUrl),
+      coverBytes: (await fetchBytes(currentSongAssets.coverUrl)) ?? await fetchBytes(EMPTY_COVER_URL),
       metadata: {
         title: el('chart-name').textContent ?? '本地音频',
         lyricist: null,
@@ -644,49 +703,29 @@ el('demo').onclick = async () => {
   el('audio-name').textContent = '未加载音频 · 可以无声预览'
 }
 
-/* ── 曲目选择器：可搜索下拉框 + 难度徽章（谱面 / BGM / 曲绘一并加载） ── */
-
-async function initSongPicker() {
-  const list = await loadSongList()
-  const mount = el('song-picker-mount')
-
-  const picker = createSongPicker({
-    list,
-    onChange: (songId, difficulty) => {
-      void openSong(songId, difficulty)
-    },
-  })
-  picker.setDisabled(true)
-  mount.replaceChildren(picker.root)
-
-  // 由 URL 参数进来时不重复触发 onChange（boot 会自己 await 加载）。
-  const openSong = async (songId: string, difficulty: string) => {
-    try {
-      await loadSongById(songId, difficulty)
-      const url = new URL(location.href)
-      url.searchParams.set('song', songId)
-      url.searchParams.set('difficulty', difficulty)
-      url.searchParams.delete('chart')
-      history.replaceState(null, '', url)
-    } catch (error) {
-      message(`曲目加载失败：${String(error)}`, true)
-    }
+/* ── 曲目选择器由统一壳层持有；此处只响应选择变化 ── */
+const openSong = async (songId: string, difficulty: string) => {
+  try {
+    await loadSongById(songId, difficulty)
+  } catch (error) {
+    if (!disposed) message(`曲目加载失败：${String(error)}`, true)
   }
-
-  picker.setDisabled(false)
-  return picker
 }
+unsubscribeSongSelection = songSelection.subscribe((selection) => {
+  if (selection) void openSong(selection.songId, selection.difficulty)
+}, false)
 
 el('fullscreen').onclick = async () => {
   try {
     if (document.fullscreenElement) await document.exitFullscreen()
-    else await el('stage').closest('.viewer')?.requestFullscreen()
+    else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen()
   } catch {
     message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。', true)
   }
 }
 
-document.addEventListener('keydown', (event) => {
+const onKeydown = (event: KeyboardEvent) => {
+  if (disposed) return
   if ((event.target as HTMLElement).closest('input,select,button,textarea,a')) return
   if (event.code === 'Space') {
     event.preventDefault()
@@ -698,7 +737,8 @@ document.addEventListener('keydown', (event) => {
     player.seek(snapshot.currentTimeSec + (event.code === 'ArrowRight' ? 5 : -5))
     player.renderFrame()
   }
-})
+}
+document.addEventListener('keydown', onKeydown)
 
 function resizeCanvasToStage() {
   const canvas = el<HTMLCanvasElement>('chart-canvas')
@@ -707,11 +747,13 @@ function resizeCanvasToStage() {
   player.resize(Math.max(1, Math.round(rect.width)), Math.max(1, Math.round(rect.height)), dpr)
 }
 
-window.addEventListener('resize', () => {
+const onResize = () => {
+  if (disposed) return
   // 导出期间画布固定为预设尺寸，结束后会按舞台尺寸恢复。
   if (liveRenderingSuspended) return
   resizeCanvasToStage()
-})
+}
+window.addEventListener('resize', onResize)
 
 const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), {
   player,
@@ -727,31 +769,12 @@ const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), 
   },
   restoreCanvasSize: resizeCanvasToStage,
   restorePlaybackRate: () => player.setPlaybackRate(Number(select('rate').value)),
-  lockTargets: () => [document.querySelector('aside')!, document.querySelector<HTMLElement>('.transport')!, document.querySelector<HTMLElement>('.workspace-header')!],
+  lockTargets: () => [toolbarHost!, root.querySelector<HTMLElement>('aside')!, root.querySelector<HTMLElement>('.transport')!],
   title: () => el('chart-name').textContent ?? 'pjsk-preview',
   message,
 })
 
-window.addEventListener('pagehide', () => {
-  cancelAnimationFrame(rafHandle)
-}, { once: true })
-
 /** 调试钩子：便于自动化验证（例如 60 轨坐标探针）。 */
-declare global {
-  interface Window {
-    __LLL_PJSK__?: {
-      player: MmwWasmPlayer
-      loadChart: typeof loadChart
-      demoChart: typeof demoChart
-      renderLoop: () => void
-      /** 当前谱面（自动化验证用：充能分母需要按谱面算）。 */
-      getChart: () => Chart | null
-      /** 视频导出（自动化验证用）。 */
-      exportDialog: typeof exportDialog
-      probeExportConfigs: typeof probeAllConfigs
-    }
-  }
-}
 window.__LLL_PJSK__ = {
   player,
   loadChart,
@@ -761,7 +784,33 @@ window.__LLL_PJSK__ = {
   exportDialog,
   probeExportConfigs: probeAllConfigs,
 }
-boot().catch((error) => {
+  const onPagehide = () => dispose()
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    unsubscribeSongSelection()
+    liveRenderingSuspended = true
+    el('open-chart').onclick = null
+    el('open-audio').onclick = null
+    el('demo').onclick = null
+    el('chart-file').onchange = null
+    el('audio-file').onchange = null
+    el('fullscreen').onclick = null
+    cancelAnimationFrame(rafHandle)
+    document.removeEventListener('keydown', onKeydown)
+    window.removeEventListener('resize', onResize)
+    window.removeEventListener('pagehide', onPagehide)
+    exportDialog.dialog.close()
+    exportDialog.dialog.remove()
+    player.dispose()
+    if (window.__LLL_PJSK__?.player === player) delete window.__LLL_PJSK__
+    root.replaceChildren()
+  }
+  window.addEventListener('pagehide', onPagehide, { once: true })
+  void boot().catch((error) => {
+    if (disposed) return
   message(`启动失败：${String(error)}`, true)
   console.error(error)
 })
+  return { dispose }
+}

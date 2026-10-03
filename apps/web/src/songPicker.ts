@@ -9,7 +9,7 @@
  * 无谱面的曲目默认隐藏（它们打不开），需要时用「含无谱面」勾选框放出来。
  * 列表按分类分组、组内保持曲目列表原有的 orderId 顺序。
  */
-import type { SongEntry, SongList } from '../../../../llll-preview/src/songAssets'
+import type { SongEntry, SongList } from '../../llll-preview/src/songAssets'
 
 export const DIFFICULTY_ORDER = ['NORMAL', 'HARD', 'EXPERT', 'MASTER'] as const
 export type DifficultyName = (typeof DIFFICULTY_ORDER)[number]
@@ -81,6 +81,7 @@ export type SongPickerHandle = {
   select: (songId: string, difficulty?: string | null, notify?: boolean) => void
   /** 曲目列表就绪前禁用。 */
   setDisabled: (disabled: boolean) => void
+  dispose: () => void
 }
 
 export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
@@ -377,9 +378,10 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   }
 
   // 点到控件之外就收面板。
-  document.addEventListener('pointerdown', (event) => {
+  const onDocumentPointerDown = (event: PointerEvent) => {
     if (!root.contains(event.target as Node)) closePanel()
-  })
+  }
+  document.addEventListener('pointerdown', onDocumentPointerDown)
 
   renderList()
   renderDifficulty()
@@ -407,6 +409,10 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       field.disabled = disabled
       root.classList.toggle('is-disabled', disabled)
       if (disabled) closePanel()
+    },
+    dispose: () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown)
+      root.remove()
     },
   }
 }
