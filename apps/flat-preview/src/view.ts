@@ -52,6 +52,16 @@ export function scrollToBottom(time: number, lay: Layout, viewportH: number): nu
   return lay.padY + (lay.duration - time) * lay.pxPerSec - viewportH;
 }
 
+/**
+ * 让某时刻落在视口中的判定线位置。
+ *
+ * 2D 播放时与 3D 走带保持同一语义：当前时刻不随镜头上下漂移，
+ * 而是通过推进 `scrollPx` 让未来音符向固定判定线靠近。
+ */
+export function scrollToLine(time: number, lay: Layout, lineY: number): number {
+  return lay.padY + (lay.duration - time) * lay.pxPerSec - lineY;
+}
+
 /** 轨道栏总宽（像素）。 */
 export function trackWidth(lay: Layout): number {
   return LANES * lay.lanePx;
