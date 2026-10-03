@@ -1,0 +1,21 @@
+:root { color: #eaf2ff; background: #080d18; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-width: 320px; min-height: 100%; background: #080d18; }
+body { overflow-x: hidden; }
+a { color: inherit; }
+#navigation { position: sticky; top: 0; z-index: 1000; display: flex; align-items: center; gap: 24px; min-height: 66px; padding: 10px clamp(16px, 4vw, 52px); border-bottom: 1px solid #23324f; background: #0b1220ee; box-shadow: 0 10px 28px #03060e55; backdrop-filter: blur(18px); }
+.nav-brand { display: inline-flex; align-items: baseline; gap: 10px; text-decoration: none; white-space: nowrap; }
+.nav-mark { color: #ff65b1; font: 800 18px ui-monospace, monospace; letter-spacing: -.08em; }
+.nav-title { color: #eaf2ff; font-size: 14px; font-weight: 700; }
+.nav-views { display: flex; align-items: stretch; gap: 4px; min-width: 0; }
+.nav-item { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid transparent; border-radius: 10px; color: #8da2c3; text-decoration: none; }
+.nav-item strong { font-size: 13px; line-height: 1.2; }
+.nav-item small { font-size: 10px; white-space: nowrap; }
+.nav-item:hover, .nav-item.is-active { border-color: #3c5a84; color: #eaf2ff; background: #18243a; }
+.nav-item.is-active { box-shadow: inset 0 -2px #ff65b1; }
+.nav-local { margin-left: auto; color: #7183a4; font: 10px ui-monospace, monospace; letter-spacing: .08em; white-space: nowrap; }
+.load-error { max-width: 680px; margin: 15vh auto; padding: 24px; border: 1px solid #6d355c; border-radius: 16px; background: #161326; }
+.load-error h1 { margin: 0 0 10px; font-size: 24px; }
+.load-error p { color: #b5c3dc; overflow-wrap: anywhere; }
+@media (max-width: 780px) { #navigation { gap: 12px; padding-inline: 14px; } .nav-title, .nav-local { display: none; } .nav-views { flex: 1; justify-content: flex-end; } .nav-item { padding-inline: 8px; } }
+@media (max-width: 480px) { .nav-item small { display: none; } .nav-item strong { font-size: 12px; } }

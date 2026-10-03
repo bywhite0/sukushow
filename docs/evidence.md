@@ -12,7 +12,7 @@
 ## 权威来源
 
 - 行为与布局以客户端二进制与场景序列化为准；与重建工程冲突时以二进制为准。
-- 不修改上游 Unity 工程。预览用贴图 / FX / 字体放在 public/rg/（权利见 README 免责声明），不作为对原权利人的授权声明。
+- 不修改上游 Unity 工程。预览用贴图 / FX / 字体放在 `apps/web/public/rg/`（权利见 README 免责声明），不作为对原权利人的授权声明。
 
 ## 预览皮肤 / FX
 
@@ -20,7 +20,7 @@
 - HitFx：`limited`/`full` 接 LimitVelocity（授权 dampen≈0.55–0.65、lim≈1、startSpeed 40–80）；`v=lim+(v0−lim)e^(−κt)`、`κ=−ln(1−dampen)×50`；每帧约 40% 路程先积分再限速、余下再积分（略冲、无出生强刹）；`current` 不限速。`current`/`full` 接 rotol/拖尾。
 
 
-- 仓库跟踪 public/rg/（sprites / fx / fonts / sprite_meta）。可用 scripts/copy-rg-assets.mjs --unity … --meta …（或 RG_UNITY_ROOT / RG_SPRITE_META）从本机资源树刷新。
+- 仓库跟踪 `apps/web/public/rg/`（sprites / fx / fonts / sprite_meta）。
 - 有资源时：9-slice note / 判定线、Plane Fade、Sprites/Default HoldMesh、hit FX（节点 TRS / SetWidth / bursts、Local·billboard；仍非完整 ParticleSystem）、SafeArea HUD 贴图。
 - **纹理颜色空间**：sprite / FX 自定义 shader 直接在显示颜色上运算，不做线性空间输出转换，因此对应贴图使用 `NoColorSpace`，避免额外 sRGB 解码造成偏暗；不将此规则泛化到其他材质。
 - **Hold 头部光效**：`holdLoop` 的 `core` 角色与名为 `Core` 的节点跟随当前 Hold 头部，`setLoop` 同步平移已有核心粒子；飞散粒子保留世界坐标，不随头部一起横移。
@@ -43,7 +43,7 @@
 
 ## 非原版一致部分
 
-不宣称像素级还原。有本地 `public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever 与局内 SE；未实现完整手动判定状态机、结算、角色技能、语音和 MV，不能视为完整对局客户端。
+不宣称像素级还原。有 `apps/web/public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever 与局内 SE；未实现完整手动判定状态机、结算、角色技能、语音和 MV，不能视为完整对局客户端。
 
 JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端扩大视角和输入大小限制属于预览器行为。
 
@@ -70,8 +70,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **TMP SDF 描边**：双层 .hud-ol / .hud-face 同尺寸对齐；**整层** scale(0.92)（避免字面单独缩放造成描边双侧偏移）；underlayer stroke 2×outlinePx。
 - **JudgeRoot/Condition**：(0, −210 + FastSlowY×70，同档时判定字 +60) 180×64；精灵 hantei_fast/slow/flick；与判定字同 0.7 s 硬切 + 0.5→1 缓出。ToCondition(diff==0)⇒Slow；shouldShowFastSlow 门控（Off 永不；UnderGreat type≤3；UnderPerfect type≤4）。AutoPlay 精确过线在 UnderPerfect 下显示 SLOW。
 - **Combo 固定槽**：按 `UpdateCombo` 四槽 Sprite0..3（[0]=个位、row-reverse）；`<10` 全隐；`setSprite` 原地换图，未激活槽不参与 HLG 排布。
-- **零长 hold 段**：串链按 `ChartResolver.Prepare` @0x48694A4（数组序逐 unit `FirstOrDefault(units, IsCombine)`，`prev.Next=x; x.Prev=prev` 后写覆盖）与 `RhythmGameConsts.IsCombine` @0x485CFFC（双 Hold、`x.Uid>prev.Uid`、`prev.L2==x.L1`、`prev.R2==x.R1`、`LooseEquals(prev.Holds[^1], x.Just)`），不看段长；零长段（`holds[^1]==Just`，链中瞬移点）照常串接。本地 617 谱全量对照：预览链接与该谓词 132,132 处 0 差异；零长段 8 处 / 4 谱（103204 HARD ×4、405122 EXPERT ×2、405131 EXPERT、405137 MASTER），均为同一条链内 prev→零长→next，无跨 hold 串接。渲染 `HoldNoteView.EmitSegment`（HOLD_MESH §4）不因 `HoldLength==0` 跳过，零长段发射零纵深一段并占住「第 2 个已发射段」，第 1↔2 段缝合接到它的头排；预览此前 `length<=0` 直接跳过，缝合落到瞬移后那段，第 1 段尾端被拉到下一段 lane 上（405131 EXPERT t≈16.5 可见）。0/0 时 Unity 得 NaN，预览取 0（兜底）。
-- **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。`GetHolds` 按 4.12.0 `RhythmGameConsts.GetHolds` @0x485D11C 全程 float32：步长 `(60f/(float)Bpm)*0.5f` 单精度累加，`LooseEquals` 容差 0x38D1B717（≈9.9999997e-5f，@0x1AA0E84），尾部 `(long)(|end−last|×10000f) <= 1`（fcvtzs 截断，即 |Δ| < 2e-4）删末样点；BPM 段查找 `Get` @0x485D410 为 float 比较、早于首段回落末段。本地 616 谱逐一对照 MusicScores.yaml 的 *MaxCombo：旧 double 实现 6 谱不符（5 谱为尾裁剪阈值写成 ≤1e-4、1 谱为 BPM 急变段 double 累加漂移），改后 0 不符。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
+- **零长 hold 段**：串链按 `ChartResolver.Prepare` @0x48694A4（数组序逐 unit `FirstOrDefault(units, IsCombine)`，`prev.Next=x; x.Prev=prev` 后写覆盖）与 `RhythmGameConsts.IsCombine` @0x485CFFC（双 Hold、`x.Uid>prev.Uid`、`prev.L2==x.L1`、`prev.R2==x.R1`、`LooseEquals(prev.Holds[^1], x.Just)`），不看段长；零长段（`holds[^1]==Just`，链中瞬移点）照常串接。617 张谱面语料中，预览链接与该谓词 132,132 处一致；零长段 8 处 / 4 谱（103204 HARD ×4、405122 EXPERT ×2、405131 EXPERT、405137 MASTER），均为同一条链内 prev→零长→next，无跨 hold 串接。渲染 `HoldNoteView.EmitSegment`（HOLD_MESH §4）发射零纵深一段并占住「第 2 个已发射段」，第 1↔2 段缝合接到它的头排。0/0 时 Unity 得 NaN，预览取 0。
+- **Combo 计数 / AllNoteSize**：Prepare Pass2 语义——多段 Hold 链头判定点 = `GetHolds(Just, tailEnd)` 半拍网格（不改写渲染用 holds）；`countHeads` / `chartAllNoteSize` 只计根节点 Just+采样；103119_04 = 1404。`GetHolds` 按 4.12.0 `RhythmGameConsts.GetHolds` @0x485D11C 全程 float32：步长 `(60f/(float)Bpm)*0.5f` 单精度累加，`LooseEquals` 容差 0x38D1B717（≈9.9999997e-5f，@0x1AA0E84），尾部 `(long)(|end−last|×10000f) <= 1`（fcvtzs 截断，即 |Δ| < 2e-4）删末样点；BPM 段查找 `Get` @0x485D410 为 float 比较、早于首段回落末段。616 张谱面语料与 MusicScores.yaml 的 *MaxCombo 逐一一致。COMBO 数字行锚点与标签同为 x=−40；槽间距 `column-gap:−13px`。
 - **Mental 开局满血**：value=maxValue=TotalMental；预览永生无扣血，显示 1000/1000（预览默认 TotalMental）+ 条满。 Fill 为青渐变 (29,235,199)→(118,240,224)；`value ≤ ceil(max×0.2)` 时切红 (235,37,78)→(255,114,143)（预览满血不触发）。
 - **AP / Voltage / Fever 实况**：ApResolver 驱动 AP 环；Voltage 点仅技能产（预览恒 0）。原始谱面不提供分段，不再读取 `Sections` 或按曲长估算。Fever 由歌曲元数据索引或当前谱面的手动起止秒数驱动：索引使用 `Musics.FeverSectionNo` 选择 `musicscore_<Id>.csv` 中四个 `key_type=20` 边界所划分的段，第五段终点采用 CSV 原始顺序中最后一个 `key_type=99`（MusicEnd）的时间，统一从毫秒转秒；分段事件按时间升序排列，不使用 `Musics.PlayTime` 或“末音符 + 2 秒”作为 Fever 终点。4.12.0 二进制已核实：`FeverResolver.Inject @0x4990388` 在 `0x4990540` 取 `QuestLiveMusicScore +0x34`（MusicEndTime）；`LoadCsv @0x41A537C` 在 `0x41A5C44–0x41A5C54` 将最后一个 MusicEnd 的 SongTime 写入该字段，谓词 `0x41A5FC0` 比较 `KeyType==99`；分段谓词 `0x41A5F88` 比较 `KeyType==20`，`0x41A5B94` 按 SongTime 排序。四个边界的严格校验是预览器策略，不是客户端强制校验。无元数据或输入无效时不启用 Fever。`EnableFeverDisplay` 仅门控 LineBase 彩虹、LineMove 单程 0.8s / 往返 1.6s 亮条（长 4.4% 边线）与两侧粒子，不改变逻辑 `IsFever`（VL 翻倍）；跳转后恢复粒子，关闭击中特效保留 Fever 粒子。
 
@@ -178,7 +178,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 ## SE（SeResolver）
 
-- 资产：`public/se/*.wav` 自 `rhythm.acb`（vgmstream）；cue id 与 `SE_SYSTEM.md` 一致（flick=4 hold=5 bad/good/great/perfect=6–9 trace=10 touch=22 start=21 finish=11–14）。
+- 资产：`apps/web/public/se/*.wav` 自 `rhythm.acb`（vgmstream）；cue id 与 `SE_SYSTEM.md` 一致（flick=4 hold=5 bad/good/great/perfect=6–9 trace=10 touch=22 start=21 finish=11–14）。
 - 逻辑：`src/se.ts` 移植 `Process` 三帧窗 ×1.5、`AddSingle`/`AddFlick`/`AddHold`/`ApplyHold`；AutoPlay 路径 Single/Hold 首尾/Trace→`AddSingle`（Hold 中间计分采样不发按键音，持续音由 `AddHold`/`ApplyHold` 维护），Flick→`AddFlick`（AutoTrace 不用 `AddTrace`）。
 - 同时押：`buildLineHashTables`（|Δ|<0.004 且 Count≥2 → trunc(t×1e7)）。
 - 音量：打击音走 NoteTap（`vol-tap`），开场/曲终走 SE（`vol-se`）；与原版 CRI category 出口乘子对应。
@@ -202,10 +202,9 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **HUD 入场**：原版无独立入场动画。`MainLogicResolver.EnableCanvases @0x499231C` 在 ReadyAsync 中以 `false` 调用，只 SetActive 三块全局画布（静态单例 +0x50/+0x38/+0x40），与 HUD 无关；HUD 层级（hud_hierarchy）根节点无 Animator/CanvasGroup，sharedassets56 也无 HUD 入场 clip。HUD 场景加载即存在，被过场 Canvas（sortingOrder 30，不透明黑底）盖住，随 3.0–3.667 s 整体淡出露出——预览同此。
 - **点缀条渲染**：right/btm 两条按 MaskRight / MaskBtm 裁出可见矩形后合成一条 SVG 路径填充（alpha 两条逐帧相同），拼接边在同一路径内抵消；两遮罩贴封面内缘各多伸 1px 到封面下。避免 DOM 双层抗锯齿在交界处出现亮线/色点（Unity 按像素栅格化无此问题）。
 
-## 选曲与本地资源
+## 选曲数据
 
-- 与 llll-pjsk-preview 相同：`public/song-list.json` 由 `scripts/gen-song-list.py` 从 4L masterdata（Musics / Units / MusicScores）与资源目录生成，236 首里 154 首有谱面；难度等级只取 MusicScores。
-- 谱面、BGM、封面体积大且不可再分发，不进版本库。`python scripts/link-assets.py` 把它们链接或复制进 `public/assets/{chart,audio,jacket}`；来源目录取环境变量 `LLLL_CHART_DIR` / `LLLL_AUDIO_DIR` / `LLLL_JACKET_DIR`，或 gitignore 掉的 `scripts/link-assets.local.json`。
+- `apps/web/public/song-list.json` 由曲目主数据生成，包含曲目、难度和资源 Id；难度等级只取 MusicScores。
 - BGM 与封面按曲目条目的 `soundId` / `jacketId` 取（翻唱或改编版本与曲目 Id 不同，不拼接猜测）。
 - 选曲后：谱面走 `decodeChart`；Fever 由谱面文件名 `rhythmgame_chart_<id>_<n>.bytes` 自动匹配；开场过场拿到曲名、难度（决定难度色）和封面。手动打开的谱面若是同名文件，也会按曲目列表补上这三项。
 - URL：`?song=<id>&difficulty=<NORMAL|HARD|EXPERT|MASTER>&offset=<毫秒>`；选曲时同步回 URL，`offset` 只作用于本次打开，不写入设置。
