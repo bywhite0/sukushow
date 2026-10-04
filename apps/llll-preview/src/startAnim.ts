@@ -26,7 +26,7 @@ export { START_CLIP_DURATION };
  */
 export const START_IDLE_TIME = 1.75;
 
-const BASE01_URL = '/rg/sprites/ui_sc2_result_base_01.png';
+export const START_BASE01_URL = '/rg/sprites/ui_sc2_result_base_01.png';
 
 /** ColorPreset.GetDifficultyColor（表 @0x1AA4430）。 */
 export const DIFFICULTY_COLORS: Record<string, readonly [number, number, number]> = {
@@ -107,7 +107,7 @@ export class StartAnimation {
   private shown: number | 'idle' | null = null;
 
   constructor() {
-    void preloadImages([BASE01_URL]);
+    void preloadImages([START_BASE01_URL]);
     this.setInfo({ title: '', difficulty: null, jacketUrl: null });
   }
 
@@ -175,7 +175,7 @@ export class StartAnimation {
     fillRoundRect(ctx, -114, -416, 228, 64, 50, rgba([255, 255, 255], f.white_a));
     fillRoundRect(ctx, -110, -412, 220, 56, 50, rgba(c, f.difficultyColor_a));
     // Base01：anchor/pivot (0.5,0)，218×36，贴 DifficultyColor 底边；不受圆角裁切
-    const base01 = image(BASE01_URL);
+    const base01 = image(START_BASE01_URL);
     if (base01 && f.base01_a > 0) {
       ctx.globalAlpha = clamp01(f.base01_a);
       ctx.drawImage(base01, -110 + 2, -412 + 20, 218, 36);

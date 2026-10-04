@@ -60,6 +60,12 @@ export type SongAssets = {
   coverUrl: string | null
 }
 
+export type BinaryLoadProgress = {
+  phase: 'download' | 'ready'
+  downloadedBytes?: number
+  totalBytes?: number
+}
+
 const BGM_BASE = '/assets/audio'
 const JACKET_BASE = '/assets/jacket'
 
@@ -68,10 +74,30 @@ export const SONG_LIST_URL = '/song-list.json'
 /** 加载曲目列表（带进程内缓存）。 */
 let songListPromise: Promise<SongList> | null = null
 
-export function loadSongList(): Promise<SongList> {
+export type SongListLoadProgress = {
+  phase: 'download' | 'ready'
+  downloadedBytes?: number
+  totalBytes?: number
+}
+
+export function loadSongList(onProgress?: (progress: SongListLoadProgress) => void): Promise<SongList> {
   songListPromise ??= fetch(SONG_LIST_URL).then(async (response) => {
     if (!response.ok) {
       throw new Error(`曲目列表加载失败（${response.status}）：${SONG_LIST_URL}`)
+    }
+    if (onProgress) {
+      const totalBytes = Number(response.headers?.get?.('content-length'))
+      onProgress({
+        phase: 'download',
+        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
+      })
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      onProgress({
+        phase: 'ready',
+        downloadedBytes: bytes.byteLength,
+        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
+      })
+      return JSON.parse(new TextDecoder().decode(bytes)) as SongList
     }
     return await response.json() as SongList
   })
@@ -104,7 +130,7 @@ export async function findSong(id: string): Promise<SongEntry | null> {
 }
 
 /** 下载二进制资源；失败时返回 null（资源缺失不该阻断渲染）。 */
-export async function fetchBytes(url: string | null): Promise<Uint8Array | null> {
+export async function fetchBytes(url: string | null, onProgress?: (progress: BinaryLoadProgress) => void): Promise<Uint8Array | null> {
   if (!url) {
     return null
   }
@@ -114,12 +140,23 @@ export async function fetchBytes(url: string | null): Promise<Uint8Array | null>
       console.warn(`[llll-preview] 资源缺失（${response.status}）：${url}`)
       return null
     }
+    const totalBytes = Number(response.headers?.get?.('content-length'))
+    onProgress?.({
+      phase: 'download',
+      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
+    })
     const contentType = response.headers?.get?.('content-type') ?? ''
     if (contentType.includes('text/html')) {
       console.warn(`[llll-preview] 资源路径返回了 HTML：${url}`)
       return null
     }
-    return new Uint8Array(await response.arrayBuffer())
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    onProgress?.({
+      phase: 'ready',
+      downloadedBytes: bytes.byteLength,
+      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
+    })
+    return bytes
   } catch (error) {
     console.warn('[llll-preview] 资源下载失败：', url, error)
     return null

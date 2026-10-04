@@ -11,8 +11,8 @@ import { LiveHud } from '../../../llll-preview/src/hud';
 import { imagesSettled, loadHudFonts, preloadImages } from '../../../llll-preview/src/canvasKit';
 import type { ExportFrameSource } from '../../../llll-preview/src/export/exporter';
 import { installExportDialog, probeAllConfigs } from './llll/exportDialog';
-import { StageCompositor, type StageView } from '../../../llll-preview/src/stageCompositor';
-import { StartAnimation, START_CLIP_DURATION } from '../../../llll-preview/src/startAnim';
+import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '../../../llll-preview/src/stageCompositor';
+import { StartAnimation, START_BASE01_URL, START_CLIP_DURATION } from '../../../llll-preview/src/startAnim';
 import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from '../../../llll-preview/src/comboResult';
 import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from '../../../llll-preview/src/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
@@ -22,6 +22,7 @@ import {
   savePreviewSettings,
   type PreviewSettings,
 } from './llll/settingsPersist';
+import { createResourceLoading, formatResourceSize } from '../resourceLoading';
 export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore };
 
 export function mount({ root, toolbar, songSelection }: LlllMountContext) {
@@ -37,6 +38,14 @@ app.innerHTML=`
    <span class="stage-mode-label">显示</span>
    <button type="button" data-stage-mode="3d" aria-pressed="true">3D</button>
    <button type="button" data-stage-mode="2d" aria-pressed="false">2D</button>
+  </div>
+  <div class="resource-loading" data-resource-loading role="status" aria-live="polite">
+   <div class="resource-loading-card">
+    <strong data-resource-loading-title>正在准备 LLLL 预览</strong>
+    <progress data-resource-loading-progress max="1" value="0" aria-label="预览资源加载进度"></progress>
+    <div class="resource-loading-meta"><span data-resource-loading-detail>正在连接资源…</span><output data-resource-loading-percent>0%</output></div>
+    <span class="resource-loading-size" data-resource-loading-size hidden></span>
+   </div>
   </div>
  </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
@@ -217,10 +226,14 @@ const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&
 function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart.duration);}metadata();
 const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
-void comboResult.load();
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
 const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
 const stage=el<HTMLDivElement>('stage');
+const loading=createResourceLoading(stage,root.querySelector<HTMLElement>('.transport')!);
+const hudTextureUrls=LiveHud.textureUrls();
+const initialResourceTask=loading.begin('正在准备 LLLL 预览',hudTextureUrls.length+7);
+let initialResourceDone=0;
+const initialResourceStep=(detail:string)=>initialResourceTask.update(++initialResourceDone,detail);
 type LlllStageMode='3d'|'2d';
 const stageModeButtons=Array.from(root.querySelectorAll<HTMLButtonElement>('.stage-mode-switch button[data-stage-mode]'));
 function setStageMode(mode:LlllStageMode){
@@ -283,18 +296,35 @@ input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();}
 input('volume').oninput=()=>{player?.setVolume(Number(input('volume').value));persistSettings();};
 input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}player?.setOffset(Number(input('offset').value)/1000);persistSettings();};
 input('chart-file').onchange=async()=>{
- const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;
- try{if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- chart=next;finishTime=finishTimeForFile(file.name);comboResult.hide();setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{input('chart-file').value='';}
+ const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;const task=loading.begin(`正在读取 ${file.name}`,2);
+ try{task.update(1,'读取谱面文件…',{downloadedBytes:0,totalBytes:file.size});if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
+ task.update(2,`应用谱面（${formatResourceSize(file.size)}）…`,{downloadedBytes:file.size,totalBytes:file.size});chart=next;finishTime=finishTimeForFile(file.name);comboResult.hide();setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();message(`已加载 ${file.name}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{task.finish();input('chart-file').value='';}
 };
-input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;try{if(await player.load(file)){el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{input('audio-file').value='';}};
+input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;const task=loading.begin(`正在读取 ${file.name}`,2);try{task.update(1,'读取音频文件…',{downloadedBytes:0,totalBytes:file.size});if(await player.load(file)){task.update(2,`完成音频解码（${formatResourceSize(file.size)}）…`,{downloadedBytes:file.size,totalBytes:file.size});el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{task.finish();input('audio-file').value='';}};
 el('demo').onclick=()=>{generation++;chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
 document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
-void loadHudFonts();
-void preloadImages(LiveHud.textureUrls());
+void (async()=>{
+ try{
+	 await Promise.all([
+	  preloadImages([START_BASE01_URL]).then(()=>initialResourceStep('开场过场贴图已就绪')),
+	  loadHudFonts().then(()=>initialResourceStep('字体已就绪')),
+   ...hudTextureUrls.map((url)=>preloadImages([url]).then(()=>initialResourceStep(`HUD 贴图：${url.split('/').pop()??url}`))),
+   comboResult.load().then(()=>initialResourceStep('结果动画已就绪')),
+   (renderer?.whenReady()??Promise.resolve()).then(()=>initialResourceStep('轨道贴图已就绪')),
+   (seOut?.ensureLoaded()??Promise.resolve()).then(()=>initialResourceStep('打击音效已就绪')),
+   preloadImages([LIVE_BG_URL,LIVE_BG_DOT_URL]).then(()=>initialResourceStep('舞台背景已就绪')),
+  ]);
+  await imagesSettled();
+  initialResourceStep('全部舞台资源已就绪');
+  initialResourceTask.finish('预览资源已就绪');
+ }catch(error){
+  initialResourceTask.fail(`基础资源加载失败：${String(error)}`);
+  message(`基础资源加载失败：${String(error)}`,true);
+ }
+})();
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
 let baseDuration = chart.duration;
@@ -584,27 +614,42 @@ function startInfoForFile(name:string){
 }
 /** 按曲目 Id 打开：谱面 + BGM；封面 / 曲名 / 难度色交给开场过场。 */
 async function loadSongById(songId:string,difficulty:string){
- const song=await findSong(songId);
- if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
- const chartFile=song.charts[difficulty];
- if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
- const id=++generation;
- message(`正在加载 ${song.title} [${difficulty}]…`);
- const res=await fetch(`/assets/chart/${chartFile}`);
- if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);
- const next=decodeChart(new Uint8Array(await res.arrayBuffer()));
- const {bgmUrl,coverUrl}=songAssets(song);
- const bgm=await fetchBytes(bgmUrl);
- if(id!==generation)return;
- chart=next;player?.clear();finishTime=song.playTime>0?song.playTime/1000:null;comboResult.hide();setChartFever(chartFile);
- el('chart-name').textContent=`${song.title} [${difficulty}]`;
- setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
- player?.transport.setDuration(chart.duration);metadata();
- let hasBgm=false;
- if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
- if(id!==generation)return;
- el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
- message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}），点击播放。`);
+ const task=loading.begin(`正在加载曲目 ${songId} [${difficulty}]`,4);
+ try{
+  task.update(0,'查找曲目资源…');
+  const song=await findSong(songId);
+  if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
+  const chartFile=song.charts[difficulty];
+  if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
+  task.setLabel(`正在加载 ${song.title} [${difficulty}]`);
+  const id=++generation;
+  message(`正在加载 ${song.title} [${difficulty}]…`);
+  const res=await fetch(`/assets/chart/${chartFile}`);
+  if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);
+  const chartTotalBytes=Number(res.headers?.get?.('content-length'));
+  task.update(1,'正在下载谱面…',{downloadedBytes:0,totalBytes:Number.isFinite(chartTotalBytes)&&chartTotalBytes>0?chartTotalBytes:undefined});
+  const chartBytes=new Uint8Array(await res.arrayBuffer());
+  const chartSize=Number(res.headers?.get?.('content-length'));
+  const next=decodeChart(chartBytes);
+  task.update(2,`谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在下载 BGM…`,{downloadedBytes:chartBytes.byteLength,totalBytes:Number.isFinite(chartSize)&&chartSize>0?chartSize:chartBytes.byteLength});
+  const {bgmUrl,coverUrl}=songAssets(song);
+  const bgm=await fetchBytes(bgmUrl,(state)=>task.update(2,state.phase==='download'?'正在下载 BGM…':'BGM 已下载',{downloadedBytes:state.downloadedBytes,totalBytes:state.totalBytes}));
+  if(id!==generation)return;
+  chart=next;player?.clear();finishTime=song.playTime>0?song.playTime/1000:null;comboResult.hide();setChartFever(chartFile);
+  el('chart-name').textContent=`${song.title} [${difficulty}]`;
+  setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
+  player?.transport.setDuration(chart.duration);metadata();
+  task.update(3,`正在解码 BGM${bgm?`（${formatResourceSize(bgm.byteLength)}）`:''}…`,bgm?{downloadedBytes:bgm.byteLength,totalBytes:bgm.byteLength}:undefined);
+  let hasBgm=false;
+  if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
+  if(id!==generation)return;
+  task.update(3,'正在加载曲绘…',bgm?{downloadedBytes:bgm.byteLength,totalBytes:bgm.byteLength}:undefined);
+  if(coverUrl)await preloadImages([coverUrl]);
+  if(id!==generation)return;
+  el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
+  task.update(4,'预览已更新');
+  message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}），点击播放。`);
+ }finally{task.finish();}
 }
 void loadSongList().then((list)=>{if(!disposed)songList=list}).catch((error)=>{
  console.warn('[llll-preview] 曲目列表加载失败：',error);
