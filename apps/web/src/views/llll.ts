@@ -22,7 +22,7 @@ import {
   savePreviewSettings,
   type PreviewSettings,
 } from './llll/settingsPersist';
-import { createResourceLoading, formatResourceSize } from '../resourceLoading';
+import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize } from '../resourceLoading';
 export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore };
 
 export function mount({ root, toolbar, songSelection }: LlllMountContext) {
@@ -621,33 +621,42 @@ async function loadSongById(songId:string,difficulty:string){
   if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
   const chartFile=song.charts[difficulty];
   if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
+  const chartUrl=`/assets/chart/${chartFile}`;
+  const {bgmUrl,coverUrl}=songAssets(song);
+  task.update(0,'正在统计曲目资源大小…');
+  const downloadSizes=await measureResourceSizes([chartUrl,bgmUrl,coverUrl]);
+  const downloadTotalBytes=totalResourceSize(downloadSizes);
+  const downloads=new Map<string,number>();
+  const downloadedBytes=()=>[...downloads.values()].reduce((sum,value)=>sum+value,0);
   task.setLabel(`正在加载 ${song.title} [${difficulty}]`);
   const id=++generation;
   message(`正在加载 ${song.title} [${difficulty}]…`);
-  const res=await fetch(`/assets/chart/${chartFile}`);
+  const res=await fetch(chartUrl);
   if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);
-  const chartTotalBytes=Number(res.headers?.get?.('content-length'));
-  task.update(1,'正在下载谱面…',{downloadedBytes:0,totalBytes:Number.isFinite(chartTotalBytes)&&chartTotalBytes>0?chartTotalBytes:undefined});
+  task.update(1,'正在下载谱面…',{downloadedBytes:0,totalBytes:downloadTotalBytes});
   const chartBytes=new Uint8Array(await res.arrayBuffer());
-  const chartSize=Number(res.headers?.get?.('content-length'));
+  downloads.set(chartUrl,chartBytes.byteLength);
   const next=decodeChart(chartBytes);
-  task.update(2,`谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在下载 BGM…`,{downloadedBytes:chartBytes.byteLength,totalBytes:Number.isFinite(chartSize)&&chartSize>0?chartSize:chartBytes.byteLength});
-  const {bgmUrl,coverUrl}=songAssets(song);
-  const bgm=await fetchBytes(bgmUrl,(state)=>task.update(2,state.phase==='download'?'正在下载 BGM…':'BGM 已下载',{downloadedBytes:state.downloadedBytes,totalBytes:state.totalBytes}));
+  task.update(2,`谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在下载 BGM…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
+  const bgm=await fetchBytes(bgmUrl,(state)=>{
+   if(state.downloadedBytes!==undefined&&bgmUrl)downloads.set(bgmUrl,state.downloadedBytes);
+   task.update(2,state.phase==='download'?'正在下载 BGM…':'BGM 已下载',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
+  });
   if(id!==generation)return;
   chart=next;player?.clear();finishTime=song.playTime>0?song.playTime/1000:null;comboResult.hide();setChartFever(chartFile);
   el('chart-name').textContent=`${song.title} [${difficulty}]`;
   setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
   player?.transport.setDuration(chart.duration);metadata();
-  task.update(3,`正在解码 BGM${bgm?`（${formatResourceSize(bgm.byteLength)}）`:''}…`,bgm?{downloadedBytes:bgm.byteLength,totalBytes:bgm.byteLength}:undefined);
+  task.update(3,`正在解码 BGM${bgm?`（${formatResourceSize(bgm.byteLength)}）`:''}…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   let hasBgm=false;
   if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
   if(id!==generation)return;
-  task.update(3,'正在加载曲绘…',bgm?{downloadedBytes:bgm.byteLength,totalBytes:bgm.byteLength}:undefined);
+  task.update(3,'正在加载曲绘…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   if(coverUrl)await preloadImages([coverUrl]);
   if(id!==generation)return;
+  if(coverUrl&&downloadSizes.has(coverUrl))downloads.set(coverUrl,downloadSizes.get(coverUrl)!);
   el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
-  task.update(4,'预览已更新');
+  task.update(4,'预览已更新',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}），点击播放。`);
  }finally{task.finish();}
 }
