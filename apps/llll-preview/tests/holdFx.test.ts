@@ -101,6 +101,30 @@ describe('Hold 头光效跟随', () => {
     expectShift(before, vertices(fx), 0);
   });
 
+  it.each([80, 120])('普通音符粒子按轨宽整体缩放（%s%%）', laneWidth => {
+    const fx = createFx('head', 'holdStart');
+    fx.spawn('holdStart', -2, 6, false, 1);
+    const base = vertices(fx);
+    fx.setLaneWidth(laneWidth);
+    const scaled = vertices(fx);
+    const scale = laneWidth / 100;
+    expect(scaled).toHaveLength(base.length);
+    for (let i = 0; i < base.length; i++) {
+      expect(scaled[i][0]).toBeCloseTo(base[i][0] * scale, 5);
+      expect(scaled[i][1]).toBeCloseTo(base[i][1], 5);
+      expect(scaled[i][2]).toBeCloseTo(base[i][2], 5);
+    }
+  });
+
+  it('非默认轨宽下 Hold 头仍按基准坐标跟随', () => {
+    const fx = createFx('head');
+    fx.setLaneWidth(80);
+    fx.spawn('holdLoop', -2, 6, true, 1);
+    const before = vertices(fx);
+    fx.setLoop(1, 2);
+    expectShift(before, vertices(fx), 4 * 0.8);
+  });
+
   it('清理或关闭后不再绘制核心', () => {
     const fx = createFx('head');
     fx.spawn('holdLoop', -2, 6, true, 1);

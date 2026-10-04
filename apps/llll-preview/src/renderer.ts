@@ -476,11 +476,12 @@ export class PreviewRenderer {
     return 1;
   }
   private symbolOld(lane: number, z: number, width: number, type: number) {
-    const x = worldX(lane, this.laneWidthOpt), w = ((width - 6) * .2 + 1.15) * .75, h = type === 3 ? .22 : .34, color = COLORS[type];
+    const scaleX = this.laneWidthOpt / 100;
+    const x = worldX(lane, this.laneWidthOpt), w = worldWidthOf(width, this.laneWidthOpt), h = type === 3 ? .22 : .34, color = COLORS[type];
     this.oldNotes.quad(x, Y, z, w, h, color, .98);
     this.oldNotes.quad(x, Y + .035, z, w * .94, h * .18, [1, 1, 1], .9);
-    if (type === 2) { this.oldNotes.quad(x - .12, Y + .40, z, .06, .24, [1, .8, .92]); this.oldNotes.quad(x + .12, Y + .40, z, .06, .24, [1, .8, .92]); }
-    if (type === 3) this.oldNotes.quad(x, Y, z, Math.min(w, .12), h * 1.6, [1, 1, 1], 1);
+    if (type === 2) { this.oldNotes.quad(x - .12 * scaleX, Y + .40, z, .06 * scaleX, .24, [1, .8, .92]); this.oldNotes.quad(x + .12 * scaleX, Y + .40, z, .06 * scaleX, .24, [1, .8, .92]); }
+    if (type === 3) this.oldNotes.quad(x, Y, z, Math.min(w, .12 * scaleX), h * 1.6, [1, 1, 1], 1);
   }
   private renderField(chart: Chart, time: number, speed: number, mirror: boolean, simultaneous: boolean) {
     const lib = this.lib!;
@@ -515,7 +516,7 @@ export class PreviewRenderer {
       const [l, r] = edges(head, progress, mirror);
       const hx = worldX((l + r) / 2, this.laneWidthOpt);
       this.noteSprite(hx, Math.max(slope.zAt(head.time - time), BORDER), r - l + 1, 1, lib, time);
-      this.fx?.setLoop(root.uid, hx);
+      this.fx?.setLoop(root.uid, worldX((l + r) / 2));
       visible++;
       if (tail.end - time <= slope.duration && tail.end - time >= 0) {
         const [tl, tr] = edges(tail, 1, mirror);
@@ -580,11 +581,12 @@ export class PreviewRenderer {
     const name = SPRITE[type] || SPRITE[0];
     const batch = this.sheet(name, 20);
     if (!batch) return;
-    const w = worldWidthOf(width), h = worldDepth(type);
-    batch.n = pushSlicedNote(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, Y, z, w, h, lib.meta[name]);
+    const w = worldWidthOf(width, this.laneWidthOpt), h = worldDepth(type);
+    batch.n = pushSlicedNote(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, Y, z, w, h, lib.meta[name], undefined, .75 * (this.laneWidthOpt / 100));
     if (type === 2) this.flick(x, z, w, lib, time);
   }
   private flick(x: number, z: number, worldW: number, lib: RgLibrary, time: number) {
+    const scaleX = this.laneWidthOpt / 100;
     const arrowName = 'ui_sc2_ingame_notes_texture_arrow';
     const arrow = this.sheet(arrowName, 21);
     const meta = lib.meta[arrowName];
@@ -600,13 +602,13 @@ export class PreviewRenderer {
     const symbolName = 'ui_sc2_ingame_notes_icon_flick';
     const symbol = this.sheet(symbolName, 25);
     const sm = lib.meta[symbolName];
-    if (symbol && sm) symbol.n = pushBillboard(symbol.pos, symbol.uv, symbol.col, symbol.n, symbol.cap, x, Y, z, sm.rect[2] / sm.ppu * 0.6, sm.rect[3] / sm.ppu * 0.6, [1, 1, 1, 1]);
+    if (symbol && sm) symbol.n = pushBillboard(symbol.pos, symbol.uv, symbol.col, symbol.n, symbol.cap, x, Y, z, sm.rect[2] / sm.ppu * 0.6 * scaleX, sm.rect[3] / sm.ppu * 0.6, [1, 1, 1, 1]);
     const signName = 'ui_sc2_ingame_flick_sign';
     const sign = this.sheet(signName, 25);
     const gm = lib.meta[signName];
     if (sign && gm) {
       const bob = flickSignY(time);
-      sign.n = pushBillboard(sign.pos, sign.uv, sign.col, sign.n, sign.cap, x, Y + Math.cos(PITCH) * bob, z + Math.sin(PITCH) * bob, gm.rect[2] / gm.ppu * 0.8, gm.rect[3] / gm.ppu * 0.8, [1, 1, 1, 1]);
+      sign.n = pushBillboard(sign.pos, sign.uv, sign.col, sign.n, sign.cap, x, Y + Math.cos(PITCH) * bob, z + Math.sin(PITCH) * bob, gm.rect[2] / gm.ppu * 0.8 * scaleX, gm.rect[3] / gm.ppu * 0.8, [1, 1, 1, 1]);
     }
   }
   /**
