@@ -23,7 +23,8 @@ import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata } 
 import { feverForSong } from '../../../pjsk-preview/src/llll/fever'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
 import type { SongSelectionStore } from '../songSelection'
-import { createResourceLoading, formatResourceSize } from '../resourceLoading'
+import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize, type ResourceLoadingTask } from '../resourceLoading'
+import { mmwWasmFilename } from '../../../pjsk-preview/src/generated/mmwWasmAsset'
 
 declare global {
   interface Window {
@@ -349,15 +350,30 @@ function applyFeverCharge(chart: Chart | null, songId: string | null) {
 type PreloadProgress = {
   done: number
   total: number
-  entry: ReturnType<typeof buildAssetManifest>[number]
-  phase: 'download' | 'ready'
+  entry?: ReturnType<typeof buildAssetManifest>[number]
+  phase: 'measure' | 'download' | 'ready'
   bytes?: number
+  downloadedBytes?: number
   totalBytes?: number
 }
 
-async function preloadAll(onProgress: (progress: PreloadProgress) => void) {
+async function preloadAll(
+  sizes: ReadonlyMap<string, number>,
+  totalBytes: number | undefined,
+  initialDownloadedBytes: number,
+  onProgress: (progress: PreloadProgress) => void,
+) {
   const entries = buildAssetManifest()
   let done = 0
+  let downloadedBytes = initialDownloadedBytes
+  onProgress({
+    done,
+    total: entries.length,
+    entry: entries[0],
+    phase: 'measure',
+    downloadedBytes,
+    totalBytes,
+  })
   for (const entry of entries) {
     if (disposed) return
     let byteLength: number | undefined
@@ -365,16 +381,20 @@ async function preloadAll(onProgress: (progress: PreloadProgress) => void) {
       const response = await fetch(entry.url)
       if (disposed) return
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const totalBytes = Number(response.headers.get('content-length'))
       onProgress({
         done,
         total: entries.length,
         entry,
         phase: 'download',
-        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
+        downloadedBytes,
+        totalBytes,
       })
       const bytes = new Uint8Array(await response.arrayBuffer())
       byteLength = bytes.byteLength
+      const expectedBytes = sizes.get(entry.url)
+      if (expectedBytes !== undefined) {
+        downloadedBytes = Math.min(totalBytes ?? Number.POSITIVE_INFINITY, downloadedBytes + byteLength)
+      }
       if (entry.kind === 'asset') await player.preloadAsset(entry.key, bytes)
       else if (entry.kind === 'font') await player.preloadFont(entry.key, bytes)
       else await player.preloadSound(entry.key, bytes)
@@ -386,14 +406,23 @@ async function preloadAll(onProgress: (progress: PreloadProgress) => void) {
     }
     if (disposed) return
     done += 1
-    onProgress({ done, total: entries.length, entry, phase: 'ready', bytes: byteLength })
+    onProgress({ done, total: entries.length, entry, phase: 'ready', bytes: byteLength, downloadedBytes, totalBytes })
   }
+  return downloadedBytes
 }
 
 /** 当前曲目的 BGM / 曲绘 URL（供「添加音频」与曲目切换复用）。 */
 let currentSongAssets: { bgmUrl: string | null; coverUrl: string | null } = {
   bgmUrl: null,
   coverUrl: null,
+}
+
+type LoadChartOptions = {
+  task?: ResourceLoadingTask
+  stepOffset?: number
+  downloadSizes?: ReadonlyMap<string, number>
+  downloadTotalBytes?: number
+  downloads?: Map<string, number>
 }
 
 // The wasm session expects a decodable cover image even when the catalog has
@@ -407,9 +436,12 @@ async function loadChart(
   assets: { bgmUrl?: string | null; coverUrl?: string | null } = {},
   difficulty: string | null = null,
   credits: { lyricist: string | null; composer: string | null; arranger: string | null; vocal: string | null } | null = null,
+  options: LoadChartOptions = {},
 ) {
   if (disposed) return
-  const resourceTask = loading.begin(`正在准备 ${label} 的预览`, 3)
+  const ownsTask = !options.task
+  const resourceTask = options.task ?? loading.begin(`正在准备 ${label} 的预览`, 3)
+  const step = (value: number) => value + (options.stepOffset ?? 0)
   try {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
@@ -423,26 +455,32 @@ async function loadChart(
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
-  resourceTask.update(0, bgmUrl || coverUrl ? '正在下载曲目资源…' : '正在初始化谱面…')
-  const downloads = new Map<string, { downloadedBytes: number; totalBytes: number }>()
+  const downloadSizes = options.downloadSizes ?? await measureResourceSizes([bgmUrl, coverUrl ?? EMPTY_COVER_URL])
+  const downloadTotalBytes = options.downloadTotalBytes ?? totalResourceSize(downloadSizes)
+  const downloads = options.downloads ?? new Map<string, number>()
+  resourceTask.update(step(0), bgmUrl || coverUrl ? '正在下载曲目资源…' : '正在初始化谱面…', {
+    downloadedBytes: [...downloads.values()].reduce((sum, item) => sum + item, 0),
+    totalBytes: downloadTotalBytes,
+  })
   const updateDownload = (name: string, state: { phase: 'download' | 'ready'; downloadedBytes?: number; totalBytes?: number }) => {
-    const current = downloads.get(name) ?? { downloadedBytes: 0, totalBytes: 0 }
-    if (state.downloadedBytes !== undefined) current.downloadedBytes = state.downloadedBytes
-    if (state.totalBytes !== undefined) current.totalBytes = state.totalBytes
-    downloads.set(name, current)
-    const downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
-    const totalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
+    if (state.downloadedBytes !== undefined) downloads.set(name, state.downloadedBytes)
+    const downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
     resourceTask.setLabel(`下载 ${name}`)
-    resourceTask.update(0, state.phase === 'download' ? `正在下载 ${name}…` : `${name} 已下载`, { downloadedBytes, totalBytes })
+    resourceTask.update(step(0), state.phase === 'download' ? `正在下载 ${name}…` : `${name} 已下载`, {
+      downloadedBytes,
+      totalBytes: downloadTotalBytes,
+    })
   }
   const [bgmBytes, loadedCoverBytes] = await Promise.all([
     fetchBytes(bgmUrl, (state) => updateDownload('BGM', state)),
     fetchBytes(coverUrl, (state) => updateDownload('曲绘', state)),
   ])
   if (disposed) return
-  const downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
-  const totalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
-  resourceTask.update(1, loadedCoverBytes ? '曲目资源已下载，正在准备曲绘…' : '曲绘缺失，正在下载占位图…', { downloadedBytes, totalBytes })
+  let downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
+  resourceTask.update(step(1), loadedCoverBytes ? '曲目资源已下载，正在准备曲绘…' : '曲绘缺失，正在下载占位图…', {
+    downloadedBytes,
+    totalBytes: downloadTotalBytes,
+  })
   const coverBytes = loadedCoverBytes ?? await fetchBytes(EMPTY_COVER_URL, (state) => updateDownload('占位曲绘', state))
   currentSongAssets = { bgmUrl, coverUrl }
 
@@ -469,9 +507,8 @@ async function loadChart(
     },
   })
   if (disposed) return
-  const sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
-  const sessionTotalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
-  resourceTask.update(2, '资源已注入，正在绘制首帧…', { downloadedBytes: sessionDownloadedBytes, totalBytes: sessionTotalBytes })
+  const sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
+  resourceTask.update(step(2), '资源已注入，正在绘制首帧…', { downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes })
   currentChart = chart
   const config = readRuntimeConfig()
   player.setPreviewConfig(config)
@@ -488,23 +525,20 @@ async function loadChart(
   parts.push(loadedCoverBytes ? '曲绘 ✓' : '曲绘 —')
   el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
   message(`${uiLabel}　${parts.join('　')}`)
-  resourceTask.update(3, '预览已就绪')
+  resourceTask.update(step(3), '预览已就绪', { downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes })
   } finally {
-    resourceTask.finish()
+    if (ownsTask) resourceTask.finish()
   }
 }
 
 /** 按曲目 Id 打开：加载谱面 + BGM + 曲绘。 */
 async function loadSongById(songId: string, difficulty: string, sourceOffsetMs = 0) {
   if (disposed) return
-  const resourceTask = loading.begin(`正在加载曲目 ${songId} [${difficulty}]`, 3)
+  const resourceTask = loading.begin(`正在加载曲目 ${songId} [${difficulty}]`, 5)
   try {
     const song = await findSong(songId, (state) => {
       resourceTask.setLabel('加载曲目库')
-      resourceTask.update(0, state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…', {
-        downloadedBytes: state.downloadedBytes,
-        totalBytes: state.totalBytes,
-      })
+      resourceTask.update(0, state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…')
     })
     if (disposed) return
     if (!song) {
@@ -516,23 +550,30 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
     if (!chartFile) {
       throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`)
     }
+    const chartUrl = `/assets/chart/${chartFile}`
+    const songAssetUrls = songAssets(song)
+    const downloadSizes = await measureResourceSizes([chartUrl, songAssetUrls.bgmUrl, songAssetUrls.coverUrl ?? EMPTY_COVER_URL])
+    const downloadTotalBytes = totalResourceSize(downloadSizes)
+    const downloads = new Map<string, number>()
+    const downloadedBytes = () => [...downloads.values()].reduce((sum, value) => sum + value, 0)
+    resourceTask.update(1, '正在查找谱面…', { downloadedBytes: 0, totalBytes: downloadTotalBytes })
     message(`正在下载谱面 ${chartFile}…`)
-    const response = await fetch(`/assets/chart/${chartFile}`)
+    const response = await fetch(chartUrl)
     if (disposed) return
     if (!response.ok) {
       throw new Error(`谱面下载失败（${response.status}）：${chartFile}`)
     }
-    const chartTotalBytes = Number(response.headers?.get?.('content-length'))
     resourceTask.update(1, `正在下载谱面 ${chartFile}…`, {
       downloadedBytes: 0,
-      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : undefined,
+      totalBytes: downloadTotalBytes,
     })
     // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
     const chartBytes = new Uint8Array(await response.arrayBuffer())
+    downloads.set(chartUrl, chartBytes.byteLength)
     const chart = decodeChart(chartBytes)
     resourceTask.update(2, `谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在读取曲目资料…`, {
-      downloadedBytes: chartBytes.byteLength,
-      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : chartBytes.byteLength,
+      downloadedBytes: downloadedBytes(),
+      totalBytes: downloadTotalBytes,
     })
     if (disposed) return
     // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
@@ -543,10 +584,12 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
       console.warn('[llll-pjsk] 曲目详情加载失败：', error)
     }
     // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
-    await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
-    resourceTask.update(3, '曲目预览已就绪', {
-      downloadedBytes: chartBytes.byteLength,
-      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : chartBytes.byteLength,
+    await loadChart(chart, song.title, sourceOffsetMs, songAssetUrls, difficulty, credits, {
+      task: resourceTask,
+      stepOffset: 2,
+      downloadSizes,
+      downloadTotalBytes,
+      downloads,
     })
     if (disposed) return
     applyFeverWindow(songId)
@@ -645,9 +688,16 @@ async function loadFromUrlParams(): Promise<boolean> {
 
 async function boot() {
   if (disposed) return
-  const manifestTotal = buildAssetManifest().length
+  const entries = buildAssetManifest()
+  const manifestTotal = entries.length
   const bootTask = loading.begin('正在准备 PJSK 预览', manifestTotal + 2)
   try {
+  const wasmUrl = `/wasm/${mmwWasmFilename}`
+  bootTask.update(0, '正在统计 PJSK 资源大小…')
+  const sizes = await measureResourceSizes([wasmUrl, ...entries.map((entry) => entry.url)])
+  const totalBytes = totalResourceSize(sizes)
+  const wasmBytes = sizes.get(wasmUrl) ?? 0
+  bootTask.update(0, '资源大小已统计，正在下载 wasm 渲染器…', { downloadedBytes: 0, totalBytes })
   const canvas = el<HTMLCanvasElement>('chart-canvas')
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const rect = canvas.parentElement!.getBoundingClientRect()
@@ -660,32 +710,29 @@ async function boot() {
   message('正在初始化渲染器…')
   await player.init(canvas, width, height, dpr)
   if (disposed) return
-  bootTask.update(1, 'wasm 渲染器已加载')
+  bootTask.update(1, 'wasm 渲染器已加载', { downloadedBytes: wasmBytes, totalBytes })
   runtimeReady = true
   applyRuntimeConfig()
 
-  const assetTotals = new Map<string, number>()
-  const assetDownloaded = new Map<string, number>()
-  await preloadAll((progress) => {
-    const { entry } = progress
-    if (progress.totalBytes !== undefined) assetTotals.set(entry.key, progress.totalBytes)
-    if (progress.bytes !== undefined) {
-      assetDownloaded.set(entry.key, progress.bytes)
-      assetTotals.set(entry.key, progress.totalBytes ?? progress.bytes)
+  const downloadedBytes = await preloadAll(sizes, totalBytes, wasmBytes, (progress) => {
+    if (progress.phase === 'measure') {
+      bootTask.setLabel('统计 PJSK 资源')
+      bootTask.update(1, '正在统计 PJSK 资源大小…', { downloadedBytes: progress.downloadedBytes, totalBytes: progress.totalBytes })
+      return
     }
-    const downloadedBytes = [...assetDownloaded.values()].reduce((sum, value) => sum + value, 0)
-    const totalBytes = [...assetTotals.values()].reduce((sum, value) => sum + value, 0)
+    const { entry } = progress
+    if (!entry) return
     const kind = entry.kind === 'asset' ? '贴图' : entry.kind === 'font' ? '字体' : '音效'
     const label = `${kind} ${entry.key}`
     const detail = progress.phase === 'download'
       ? `正在下载 ${label}…`
       : `已加载 ${label}`
     bootTask.setLabel(progress.phase === 'download' ? '下载 PJSK 资源' : '准备 PJSK 资源')
-    bootTask.update(1 + progress.done, detail, { downloadedBytes, totalBytes })
+    bootTask.update(1 + progress.done, detail, { downloadedBytes: progress.downloadedBytes, totalBytes: progress.totalBytes })
     message(`${detail}　${progress.done}/${progress.total}`)
   })
   if (disposed) return
-  bootTask.update(manifestTotal + 1, '渲染资源已就绪，正在载入曲目…')
+  bootTask.update(manifestTotal + 1, '渲染资源已就绪，正在载入曲目…', { downloadedBytes, totalBytes })
   message('渲染器就绪。')
 
   // 优先级：?song= > ?chart= > 演示谱。

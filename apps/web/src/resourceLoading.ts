@@ -10,6 +10,30 @@ export type ResourceLoadingController = {
   cancel: () => void
 }
 
+/**
+ * 预先读取一组资源的 Content-Length，供下载进度使用固定分母。
+ * 同源静态资源支持 HEAD 时，后续下载不会再因为发现新资源而改变总量。
+ */
+export async function measureResourceSizes(urls: readonly (string | null | undefined)[]): Promise<Map<string, number>> {
+  const uniqueUrls = [...new Set(urls.filter((url): url is string => Boolean(url)))]
+  const measured = await Promise.all(uniqueUrls.map(async (url) => {
+    try {
+      const response = await fetch(url, { method: 'HEAD' })
+      if (!response.ok) return [url, null] as const
+      const value = Number(response.headers.get('content-length'))
+      return [url, Number.isFinite(value) && value > 0 ? Math.ceil(value) : null] as const
+    } catch {
+      return [url, null] as const
+    }
+  }))
+  return new Map(measured.filter((entry): entry is readonly [string, number] => entry[1] !== null))
+}
+
+export function totalResourceSize(sizes: ReadonlyMap<string, number>): number | undefined {
+  const total = [...sizes.values()].reduce((sum, value) => sum + value, 0)
+  return total > 0 ? total : undefined
+}
+
 type TaskState = {
   id: number
   label: string
@@ -102,8 +126,8 @@ export function createResourceLoading(stage: HTMLElement, lockTarget?: HTMLEleme
     setControlsLocked(true)
     title.textContent = hasError && current.failed ? '资源加载失败' : current.label
     detail.textContent = current.detail
-    const downloadedBytes = states.reduce((sum, task) => sum + (task.downloadedBytes ?? 0), 0)
     const totalBytes = states.reduce((sum, task) => sum + (task.totalBytes ?? 0), 0)
+    const downloadedBytes = Math.min(totalBytes || Number.POSITIVE_INFINITY, states.reduce((sum, task) => sum + (task.downloadedBytes ?? 0), 0))
     if (totalBytes > 0) {
       size.hidden = false
       size.textContent = `(已下载 ${formatResourceSize(downloadedBytes)} / ${formatResourceSize(totalBytes)})`
@@ -149,8 +173,6 @@ export function createResourceLoading(stage: HTMLElement, lockTarget?: HTMLEleme
     const setLabel = (nextLabel: string) => {
       if (!state.active || state.failed) return
       state.label = nextLabel
-      state.downloadedBytes = null
-      state.totalBytes = null
       refresh()
     }
 
