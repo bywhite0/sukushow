@@ -317,7 +317,15 @@ export function drawGroup(ctx: Ctx, opts: GroupOptions, draw: (g: Ctx) => void):
   const g = scratch.getContext('2d')!;
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(box.x, box.y, box.w, box.h);
+  // Scratch canvases are pooled between groups. A filtered group is
+  // composited from the whole scratch canvas (the filter can expand pixels
+  // beyond `box`), so clearing only the current bounds would retain pixels
+  // from the previous group and leak them into the HUD. This is especially
+  // visible when the combo-over-100 flash reuses a scratch that previously
+  // contained another sprite row. Unfiltered groups copy only `box` below,
+  // so they can keep the cheaper bounds-only clear.
+  if (opts.filter) g.clearRect(0, 0, cw, ch);
+  else g.clearRect(box.x, box.y, box.w, box.h);
   g.beginPath();
   g.rect(box.x, box.y, box.w, box.h);
   g.clip();
