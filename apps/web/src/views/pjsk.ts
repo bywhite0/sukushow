@@ -23,6 +23,7 @@ import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata } 
 import { feverForSong } from '../../../pjsk-preview/src/llll/fever'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
 import type { SongSelectionStore } from '../songSelection'
+import { createResourceLoading, formatResourceSize } from '../resourceLoading'
 
 declare global {
   interface Window {
@@ -54,7 +55,16 @@ export function mount({ root, toolbar, songSelection }: PjskMountOptions): PjskV
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
- <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas></div></div>
+ <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas>
+  <div class="resource-loading" data-resource-loading role="status" aria-live="polite">
+   <div class="resource-loading-card">
+    <strong data-resource-loading-title>正在准备 PJSK 预览</strong>
+    <progress data-resource-loading-progress max="1" value="0" aria-label="预览资源加载进度"></progress>
+    <div class="resource-loading-meta"><span data-resource-loading-detail>正在连接资源…</span><output data-resource-loading-percent>0%</output></div>
+    <span class="resource-loading-size" data-resource-loading-size hidden></span>
+   </div>
+  </div>
+ </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">正在初始化渲染器…</div>
  <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button><button id="export-video" class="quiet" type="button">导出视频</button></div></div>
 </section>
@@ -119,8 +129,8 @@ export function mount({ root, toolbar, songSelection }: PjskMountOptions): PjskV
     if (!node) throw new Error(`缺少元素 #${id}`)
     return node
   }
-const input = (id: string) => el<HTMLInputElement>(id)
-const select = (id: string) => el<HTMLSelectElement>(id)
+  const input = (id: string) => el<HTMLInputElement>(id)
+  const select = (id: string) => el<HTMLSelectElement>(id)
 const message = (text: string, error = false) => {
   const node = el('message')
   node.textContent = text
@@ -158,7 +168,8 @@ for (const [index, tab] of settingTabs.entries()) {
   }
 }
 
-const player = new MmwWasmPlayer()
+  const loading = createResourceLoading(el<HTMLDivElement>('stage'), root.querySelector<HTMLElement>('.transport')!)
+  const player = new MmwWasmPlayer()
   let disposed = false
   let unsubscribeSongSelection = () => {}
 let runtimeReady = false
@@ -335,16 +346,35 @@ function applyFeverCharge(chart: Chart | null, songId: string | null) {
 }
 
 // ---- 资源预载 ----
-async function preloadAll(onProgress: (text: string) => void) {
+type PreloadProgress = {
+  done: number
+  total: number
+  entry: ReturnType<typeof buildAssetManifest>[number]
+  phase: 'download' | 'ready'
+  bytes?: number
+  totalBytes?: number
+}
+
+async function preloadAll(onProgress: (progress: PreloadProgress) => void) {
   const entries = buildAssetManifest()
   let done = 0
   for (const entry of entries) {
     if (disposed) return
+    let byteLength: number | undefined
     try {
       const response = await fetch(entry.url)
       if (disposed) return
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const totalBytes = Number(response.headers.get('content-length'))
+      onProgress({
+        done,
+        total: entries.length,
+        entry,
+        phase: 'download',
+        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
+      })
       const bytes = new Uint8Array(await response.arrayBuffer())
+      byteLength = bytes.byteLength
       if (entry.kind === 'asset') await player.preloadAsset(entry.key, bytes)
       else if (entry.kind === 'font') await player.preloadFont(entry.key, bytes)
       else await player.preloadSound(entry.key, bytes)
@@ -356,7 +386,7 @@ async function preloadAll(onProgress: (text: string) => void) {
     }
     if (disposed) return
     done += 1
-    onProgress(`预载资源 ${done}/${entries.length}…`)
+    onProgress({ done, total: entries.length, entry, phase: 'ready', bytes: byteLength })
   }
 }
 
@@ -379,6 +409,8 @@ async function loadChart(
   credits: { lyricist: string | null; composer: string | null; arranger: string | null; vocal: string | null } | null = null,
 ) {
   if (disposed) return
+  const resourceTask = loading.begin(`正在准备 ${label} 的预览`, 3)
+  try {
   const score = chartToMusicScore(chart)
   const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
   // 充能分母要在加载谱面时就备好；曲目 Id 在 loadChart 里拿不到，
@@ -391,12 +423,27 @@ async function loadChart(
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
+  resourceTask.update(0, bgmUrl || coverUrl ? '正在下载曲目资源…' : '正在初始化谱面…')
+  const downloads = new Map<string, { downloadedBytes: number; totalBytes: number }>()
+  const updateDownload = (name: string, state: { phase: 'download' | 'ready'; downloadedBytes?: number; totalBytes?: number }) => {
+    const current = downloads.get(name) ?? { downloadedBytes: 0, totalBytes: 0 }
+    if (state.downloadedBytes !== undefined) current.downloadedBytes = state.downloadedBytes
+    if (state.totalBytes !== undefined) current.totalBytes = state.totalBytes
+    downloads.set(name, current)
+    const downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
+    const totalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
+    resourceTask.setLabel(`下载 ${name}`)
+    resourceTask.update(0, state.phase === 'download' ? `正在下载 ${name}…` : `${name} 已下载`, { downloadedBytes, totalBytes })
+  }
   const [bgmBytes, loadedCoverBytes] = await Promise.all([
-    fetchBytes(bgmUrl),
-    fetchBytes(coverUrl),
+    fetchBytes(bgmUrl, (state) => updateDownload('BGM', state)),
+    fetchBytes(coverUrl, (state) => updateDownload('曲绘', state)),
   ])
   if (disposed) return
-  const coverBytes = loadedCoverBytes ?? await fetchBytes(EMPTY_COVER_URL)
+  const downloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
+  const totalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
+  resourceTask.update(1, loadedCoverBytes ? '曲目资源已下载，正在准备曲绘…' : '曲绘缺失，正在下载占位图…', { downloadedBytes, totalBytes })
+  const coverBytes = loadedCoverBytes ?? await fetchBytes(EMPTY_COVER_URL, (state) => updateDownload('占位曲绘', state))
   currentSongAssets = { bgmUrl, coverUrl }
 
   await player.loadSession({
@@ -422,6 +469,9 @@ async function loadChart(
     },
   })
   if (disposed) return
+  const sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item.downloadedBytes, 0)
+  const sessionTotalBytes = [...downloads.values()].reduce((sum, item) => sum + item.totalBytes, 0)
+  resourceTask.update(2, '资源已注入，正在绘制首帧…', { downloadedBytes: sessionDownloadedBytes, totalBytes: sessionTotalBytes })
   currentChart = chart
   const config = readRuntimeConfig()
   player.setPreviewConfig(config)
@@ -438,40 +488,71 @@ async function loadChart(
   parts.push(loadedCoverBytes ? '曲绘 ✓' : '曲绘 —')
   el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
   message(`${uiLabel}　${parts.join('　')}`)
+  resourceTask.update(3, '预览已就绪')
+  } finally {
+    resourceTask.finish()
+  }
 }
 
 /** 按曲目 Id 打开：加载谱面 + BGM + 曲绘。 */
 async function loadSongById(songId: string, difficulty: string, sourceOffsetMs = 0) {
   if (disposed) return
-  const song = await findSong(songId)
-  if (disposed) return
-  if (!song) {
-    throw new Error(`曲目列表里没有 Id ${songId}`)
-  }
-  const chartFile = song.charts[difficulty]
-  if (!chartFile) {
-    throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`)
-  }
-  message(`正在下载谱面 ${chartFile}…`)
-  const response = await fetch(`/assets/chart/${chartFile}`)
-  if (disposed) return
-  if (!response.ok) {
-    throw new Error(`谱面下载失败（${response.status}）：${chartFile}`)
-  }
-  // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
-  const chart = decodeChart(new Uint8Array(await response.arrayBuffer()))
-  if (disposed) return
-  // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
-  let credits = null
+  const resourceTask = loading.begin(`正在加载曲目 ${songId} [${difficulty}]`, 3)
   try {
-    credits = creditsToMetadata(await findSongCredits(songId))
-  } catch (error) {
-    console.warn('[llll-pjsk] 曲目详情加载失败：', error)
+    const song = await findSong(songId, (state) => {
+      resourceTask.setLabel('加载曲目库')
+      resourceTask.update(0, state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…', {
+        downloadedBytes: state.downloadedBytes,
+        totalBytes: state.totalBytes,
+      })
+    })
+    if (disposed) return
+    if (!song) {
+      throw new Error(`曲目列表里没有 Id ${songId}`)
+    }
+    resourceTask.setLabel(`正在加载 ${song.title} [${difficulty}]`)
+    resourceTask.update(1, '正在查找谱面…')
+    const chartFile = song.charts[difficulty]
+    if (!chartFile) {
+      throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`)
+    }
+    message(`正在下载谱面 ${chartFile}…`)
+    const response = await fetch(`/assets/chart/${chartFile}`)
+    if (disposed) return
+    if (!response.ok) {
+      throw new Error(`谱面下载失败（${response.status}）：${chartFile}`)
+    }
+    const chartTotalBytes = Number(response.headers?.get?.('content-length'))
+    resourceTask.update(1, `正在下载谱面 ${chartFile}…`, {
+      downloadedBytes: 0,
+      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : undefined,
+    })
+    // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
+    const chartBytes = new Uint8Array(await response.arrayBuffer())
+    const chart = decodeChart(chartBytes)
+    resourceTask.update(2, `谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在读取曲目资料…`, {
+      downloadedBytes: chartBytes.byteLength,
+      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : chartBytes.byteLength,
+    })
+    if (disposed) return
+    // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
+    let credits = null
+    try {
+      credits = creditsToMetadata(await findSongCredits(songId))
+    } catch (error) {
+      console.warn('[llll-pjsk] 曲目详情加载失败：', error)
+    }
+    // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
+    await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
+    resourceTask.update(3, '曲目预览已就绪', {
+      downloadedBytes: chartBytes.byteLength,
+      totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : chartBytes.byteLength,
+    })
+    if (disposed) return
+    applyFeverWindow(songId)
+  } finally {
+    resourceTask.finish()
   }
-  // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
-  await loadChart(chart, song.title, sourceOffsetMs, songAssets(song), difficulty, credits)
-  if (disposed) return
-  applyFeverWindow(songId)
 }
 
 /** 60 轨全域演示谱：覆盖 Single / Flick / Hold / Trace 与最宽音符。 */
@@ -527,28 +608,46 @@ async function loadFromUrlParams(): Promise<boolean> {
   const url = params.chart || params.customScoreJson
   if (!url) return false
 
+  const resourceTask = loading.begin(`正在下载 URL 谱面`, 2)
+  resourceTask.setLabel(`下载 ${url.split('/').pop() ?? url}`)
+  try {
   message(`正在下载谱面 ${url}…`)
   const response = await fetch(url)
   if (disposed) return false
   if (!response.ok) {
     throw new Error(`谱面下载失败（${response.status}）：${url}`)
   }
+  const chartTotalBytes = Number(response.headers?.get?.('content-length'))
+  resourceTask.update(0, `正在下载 ${url.split('/').pop() ?? url}…`, {
+    downloadedBytes: 0,
+    totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : undefined,
+  })
   const bytes = new Uint8Array(await response.arrayBuffer())
   if (disposed) return false
   const asText = new TextDecoder().decode(bytes)
   const chart = asText.trimStart().startsWith('{')
     ? parseChart(JSON.parse(asText.replace(/^\ufeff/, '')))
     : decodeChart(bytes)
+  resourceTask.update(1, `谱面已下载（${formatResourceSize(bytes.byteLength)}），正在建立预览…`, {
+    downloadedBytes: bytes.byteLength,
+    totalBytes: Number.isFinite(chartTotalBytes) && chartTotalBytes > 0 ? chartTotalBytes : bytes.byteLength,
+  })
 
   const label = params.title ?? params.scoreTitle ?? url.split('/').pop() ?? 'URL 谱面'
   await loadChart(chart, label, params.rawOffsetMs ?? 0)
   if (disposed) return false
   applyFeverWindow(null)
   return true
+  } finally {
+    resourceTask.finish()
+  }
 }
 
 async function boot() {
   if (disposed) return
+  const manifestTotal = buildAssetManifest().length
+  const bootTask = loading.begin('正在准备 PJSK 预览', manifestTotal + 2)
+  try {
   const canvas = el<HTMLCanvasElement>('chart-canvas')
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const rect = canvas.parentElement!.getBoundingClientRect()
@@ -557,14 +656,36 @@ async function boot() {
   canvas.width = width * dpr
   canvas.height = height * dpr
 
+  bootTask.update(0, '正在下载 wasm 渲染器…')
   message('正在初始化渲染器…')
   await player.init(canvas, width, height, dpr)
   if (disposed) return
+  bootTask.update(1, 'wasm 渲染器已加载')
   runtimeReady = true
   applyRuntimeConfig()
 
-  await preloadAll((text) => message(text))
+  const assetTotals = new Map<string, number>()
+  const assetDownloaded = new Map<string, number>()
+  await preloadAll((progress) => {
+    const { entry } = progress
+    if (progress.totalBytes !== undefined) assetTotals.set(entry.key, progress.totalBytes)
+    if (progress.bytes !== undefined) {
+      assetDownloaded.set(entry.key, progress.bytes)
+      assetTotals.set(entry.key, progress.totalBytes ?? progress.bytes)
+    }
+    const downloadedBytes = [...assetDownloaded.values()].reduce((sum, value) => sum + value, 0)
+    const totalBytes = [...assetTotals.values()].reduce((sum, value) => sum + value, 0)
+    const kind = entry.kind === 'asset' ? '贴图' : entry.kind === 'font' ? '字体' : '音效'
+    const label = `${kind} ${entry.key}`
+    const detail = progress.phase === 'download'
+      ? `正在下载 ${label}…`
+      : `已加载 ${label}`
+    bootTask.setLabel(progress.phase === 'download' ? '下载 PJSK 资源' : '准备 PJSK 资源')
+    bootTask.update(1 + progress.done, detail, { downloadedBytes, totalBytes })
+    message(`${detail}　${progress.done}/${progress.total}`)
+  })
   if (disposed) return
+  bootTask.update(manifestTotal + 1, '渲染资源已就绪，正在载入曲目…')
   message('渲染器就绪。')
 
   // 优先级：?song= > ?chart= > 演示谱。
@@ -578,6 +699,8 @@ async function boot() {
       await loadSongById(songId, difficulty, Number(search.get('offset') ?? 0))
       if (disposed) return
       renderLoop()
+      bootTask.update(manifestTotal + 2, '预览已就绪')
+      bootTask.finish()
       return
     } catch (error) {
       message(`曲目 ${songId} 加载失败：${String(error)}。已回落到演示谱。`, true)
@@ -589,6 +712,8 @@ async function boot() {
     if (await loadFromUrlParams()) {
       if (disposed) return
       renderLoop()
+      bootTask.update(manifestTotal + 2, '预览已就绪')
+      bootTask.finish()
       return
     }
   } catch (error) {
@@ -599,6 +724,12 @@ async function boot() {
   if (disposed) return
   applyFeverWindow(null)
   renderLoop()
+  bootTask.update(manifestTotal + 2, '预览已就绪')
+  bootTask.finish()
+  } catch (error) {
+    bootTask.fail(`PJSK 资源加载失败：${String(error)}`)
+    throw error
+  }
 }
 
 el('play').onclick = async () => {
@@ -643,9 +774,11 @@ input('offset').onchange = () => {
 input('chart-file').onchange = async () => {
   const file = input('chart-file').files?.[0]
   if (!file) return
+  const resourceTask = loading.begin(`正在读取 ${file.name}`, 1)
   try {
     if (file.size > 16 * 1024 * 1024) throw new Error('文件超过 16 MiB')
     const bytes = new Uint8Array(await file.arrayBuffer())
+    resourceTask.update(1, `谱面已读取（${formatResourceSize(file.size)}）`, { downloadedBytes: file.size, totalBytes: file.size })
     const asText = new TextDecoder().decode(bytes)
     // .json 走文本解析；raw-deflate .bytes 走 decodeChart。
     const chart = asText.trimStart().startsWith('{')
@@ -657,6 +790,7 @@ input('chart-file').onchange = async () => {
   } catch (error) {
     message(`谱面读取失败：${String(error)}。原谱面已保留。`, true)
   } finally {
+    resourceTask.finish()
     input('chart-file').value = ''
   }
 }
@@ -664,8 +798,10 @@ input('chart-file').onchange = async () => {
 input('audio-file').onchange = async () => {
   const file = input('audio-file').files?.[0]
   if (!file) return
+  const resourceTask = loading.begin(`正在读取 ${file.name}`, 2)
   try {
     const bytes = new Uint8Array(await file.arrayBuffer())
+    resourceTask.update(1, `音频已读取（${formatResourceSize(file.size)}），正在注入…`, { downloadedBytes: file.size, totalBytes: file.size })
     // 音频走同一条注入链路：重新 loadSession，BGM 缺失时静默退回无声预览。
     await player.loadSession({
       scoreText: JSON.stringify(chartToMusicScore(currentChart ?? demoChart())),
@@ -691,9 +827,11 @@ input('audio-file').onchange = async () => {
     player.setAudioVolumes(config.bgmVolume, config.soundVolume)
     el('audio-name').textContent = `本地音频：${file.name}`
     message(`已注入音频 ${file.name}（${(bytes.length / 1024 / 1024).toFixed(1)} MB）`)
+    resourceTask.update(2, '音频已注入', { downloadedBytes: file.size, totalBytes: file.size })
   } catch (error) {
     message(`音频读取失败：${String(error)}`, true)
   } finally {
+    resourceTask.finish()
     input('audio-file').value = ''
   }
 }

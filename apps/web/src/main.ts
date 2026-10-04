@@ -2,6 +2,7 @@ import './style.css'
 import { loadSongList } from '../../llll-preview/src/songAssets'
 import { createSongPicker, DIFFICULTY_ORDER, type SongPickerHandle } from './songPicker'
 import { SongSelectionStore, type SongSelection } from './songSelection'
+import { formatResourceSize } from './resourceLoading'
 
 type ViewId = 'llll' | 'pjsk'
 
@@ -54,7 +55,13 @@ app.innerHTML = `
         `).join('')}
       </nav>
       <div class="view-toolbar" id="view-toolbar" aria-label="谱面来源与预览选项">
-        <div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div>
+        <div id="song-picker-mount" class="song-picker" aria-label="选择曲目">
+          <div class="picker-loading" role="status">
+            <span class="picker-loading-detail" data-picker-loading-detail>正在下载 song-list.json…</span>
+            <progress data-picker-loading-progress max="1" aria-label="曲目库下载进度"></progress>
+            <span class="picker-loading-size" data-picker-loading-size hidden></span>
+          </div>
+        </div>
         <div id="aspect-mount" class="aspect-mount"></div>
         <div class="file-toolbar" aria-label="打开谱面与音频">
           <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
@@ -122,7 +129,24 @@ function updateSongUrl(selection: SongSelection | null) {
 async function initSharedSongPicker() {
   const mount = app!.querySelector<HTMLElement>('#song-picker-mount')!
   try {
-    const list = await loadSongList()
+    const detail = mount.querySelector<HTMLElement>('[data-picker-loading-detail]')
+    const progress = mount.querySelector<HTMLProgressElement>('[data-picker-loading-progress]')
+    const size = mount.querySelector<HTMLElement>('[data-picker-loading-size]')
+    const list = await loadSongList((state) => {
+      if (!detail || !progress || !size) return
+      detail.textContent = state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…'
+      if (state.totalBytes !== undefined) {
+        progress.max = state.totalBytes
+        progress.value = state.downloadedBytes ?? 0
+        size.hidden = false
+        size.textContent = `(已下载 ${formatResourceSize(state.downloadedBytes ?? 0)} / ${formatResourceSize(state.totalBytes)})`
+      } else if (state.phase === 'ready' && state.downloadedBytes !== undefined) {
+        progress.max = state.downloadedBytes
+        progress.value = state.downloadedBytes
+        size.hidden = false
+        size.textContent = `(已下载 ${formatResourceSize(state.downloadedBytes)} / ${formatResourceSize(state.downloadedBytes)})`
+      }
+    })
     const picker: SongPickerHandle = createSongPicker({
       list,
       onChange: (songId, difficulty) => {
@@ -135,7 +159,7 @@ async function initSharedSongPicker() {
     const initial = songSelection.get()
     if (initial) picker.select(initial.songId, initial.difficulty, false)
   } catch (error) {
-    mount.innerHTML = '<span class="picker-status" role="status">曲目列表暂不可用</span>'
+    mount.innerHTML = '<span class="picker-status" role="status">song-list.json 加载失败，曲目库暂不可用</span>'
     console.warn('[sukushow] 曲目列表加载失败：', error)
   }
 }
@@ -161,10 +185,19 @@ async function showView(view: ViewId, push = false) {
   if (push) updateUrl(view, true)
   await disposeActive()
   if (token !== transition) return
-  viewRoot.innerHTML = '<div class="view-loading" role="status">正在切换预览模式…</div>'
+  viewRoot.innerHTML = `<div class="view-loading" role="status"><div class="view-loading-card"><strong>正在加载页面资源…</strong><progress data-view-loading-progress aria-label="页面资源加载进度"></progress><div class="view-loading-meta"><span data-view-loading-detail>预览模块：views/${view}.ts</span><output data-view-loading-percent>加载中…</output></div><span class="view-loading-item">页面容器　✓</span><span class="view-loading-item">预览模块　${view}</span></div></div>`
   try {
     const module = await modules[view]()
     if (token !== transition) return
+    const loadingDetail = viewRoot.querySelector<HTMLElement>('[data-view-loading-detail]')
+    const loadingProgress = viewRoot.querySelector<HTMLProgressElement>('[data-view-loading-progress]')
+    const loadingPercent = viewRoot.querySelector<HTMLOutputElement>('[data-view-loading-percent]')
+    if (loadingDetail) loadingDetail.textContent = `预览模块已下载，正在启动 ${view.toUpperCase()} 渲染器…`
+    if (loadingProgress) {
+      loadingProgress.max = 1
+      loadingProgress.value = 1
+    }
+    if (loadingPercent) loadingPercent.textContent = '启动中…'
     const handle = await module.mount({ root: viewRoot, toolbar, songSelection })
     if (token !== transition) {
       resolveDispose(handle)?.()
