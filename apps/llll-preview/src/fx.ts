@@ -83,7 +83,7 @@ interface Spark {
   trail: { x: number; y: number; z: number; t: number }[];
 }
 interface Live {
-  uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
+  id: string; uid: number; age: number; dur: number; loop: boolean; x: number; width: number; specs: Spec[]; sparks: Spark[];
   abs?: boolean; fever?: boolean;
   coreSide?: 'left' | 'right';
   /** 本次启动的随机源：确定性模式下按（特效 id、uid、位置、启动时刻）播种，同一时刻重放得到同样的粒子。 */
@@ -249,7 +249,7 @@ export class HitFx {
   readonly group = new THREE.Group();
   private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private feverOn = false;
-  /** Particles stay in base lane coordinates; apply the lane X scale after rotation at draw time. */
+  /** 粒子保持默认轨道坐标，绘制时统一应用轨道宽度的 X 缩放。 */
   private laneWidthScale = 1;
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
@@ -265,9 +265,13 @@ export class HitFx {
   setLaneWidth(laneWidthOpt: number): void {
     this.laneWidthScale = laneWidthOpt / 100;
   }
-  private scaleLaneVertices(positions: Float32Array, from: number, to: number): void {
-    if (this.laneWidthScale === 1) return;
-    for (let i = from * 3; i < to * 3; i += 3) positions[i] *= this.laneWidthScale;
+  private scaleLaneVertices(positions: Float32Array, from: number, to: number, scale = this.laneWidthScale): void {
+    if (scale === 1) return;
+    for (let i = from * 3; i < to * 3; i += 3) positions[i] *= scale;
+  }
+  /** 两侧入场爆发是固定在屏幕侧的大粒子，不随轨道边线宽度变换。 */
+  private laneScaleFor(live: Live): number {
+    return live.id === 'feverLeft' || live.id === 'feverRight' ? 1 : this.laneWidthScale;
   }
   private batchFor(mat: FxMat | undefined, order: number): string | undefined {
     if (!mat || !this.tex[mat.tex]) return undefined;
@@ -698,7 +702,7 @@ export class HitFx {
     const live: Live = {
       // 发射器周期 = `lengthInSec`。原包里彗星层是 0.1s、LineBase 1.6s、LineMove 0.8s，
       // 不能兜底成 1：那会把 0.1s 的层撑成 1s，整条时间轴都错。
-      uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 0.05),
+      id, uid, age: 0, dur: specs.reduce((m, s) => Math.max(m, s.dur), 0.05),
       loop, x, width, specs, sparks: [], abs, fever, coreSide, rnd,
     };
     // Fire bursts at t=0 immediately (most note FX bursts are at 0).
@@ -828,7 +832,7 @@ export class HitFx {
     }
     this.live = next;
   }
-  /** `x` is the current Hold head position at the default lane width. */
+  /** `x` 使用默认轨宽下的 Hold 头部坐标。 */
   setLoop(uid: number, x: number) {
     for (const live of this.live) {
       if (!live.loop || live.uid !== uid) continue;
@@ -870,7 +874,7 @@ export class HitFx {
         // View billboard, or Local with Corehorizon pitch ≈ camera 33.2°.
         batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, z, sx, sy, color, 1, 1, s.spin);
       }
-      this.scaleLaneVertices(batch.pos, before, batch.n);
+      this.scaleLaneVertices(batch.pos, before, batch.n, this.laneScaleFor(live));
       // 9Slice shader wants pre-transform startSizeX (TexW units), not world size.
       const slice = s.slice ? s.sliceSize * mulX : 0;
       for (let i = before; i < batch.n; i++) batch.slice[i] = slice;
@@ -929,7 +933,7 @@ export class HitFx {
           [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(tailPhase), tailColor,
           widthAt(headPhase), headColor,
         );
-        this.scaleLaneVertices(batch.pos, before, batch.n);
+        this.scaleLaneVertices(batch.pos, before, batch.n, this.laneScaleFor(live));
         for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
       }
     }

@@ -974,3 +974,33 @@ it('Fever 边线粒子与拖尾共享轨道宽度变换，保持边线方向', (
     }
   } finally { fx.dispose(); texture.dispose(); }
 });
+
+it.each(['feverLeft', 'feverRight'] as const)('Fever %s 入场喷发大粒子保持原始尺寸与位置', id => {
+  const data = loadFeverFixture();
+  const prefab = data.fever!.find(p => p.id === id)!;
+  prefab.nodes = [prefab.nodes[0]];
+  data.prefabs = [];
+  data.fever = [prefab];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  const positions = () => {
+    fx.draw();
+    return fx.group.children.flatMap(child => {
+      const geometry = (child as THREE.Mesh).geometry;
+      const count = geometry.drawRange.count;
+      return Array.from(geometry.getAttribute('position').array as Float32Array).slice(0, count * 3);
+    });
+  };
+  try {
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.2, false);
+    const base = positions();
+    expect(base.length).toBeGreaterThan(0);
+    fx.setLaneWidth(80);
+    const unchanged = positions();
+    expect(unchanged).toHaveLength(base.length);
+    for (let i = 0; i < base.length; i++) expect(unchanged[i]).toBeCloseTo(base[i], 5);
+  } finally { fx.dispose(); texture.dispose(); }
+});
