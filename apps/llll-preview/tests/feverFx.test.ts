@@ -942,3 +942,35 @@ it('ForceOverLifetime 按加速度积分，并在出生时采样一次', () => {
     expect(s.vz - before.vz).toBeCloseTo(s.forceZ * dt, 6);
   } finally { fx.dispose(); texture.dispose(); }
 });
+
+it('Fever 边线粒子与拖尾共享轨道宽度变换，保持边线方向', () => {
+  const data = loadFeverFixture();
+  data.prefabs = [];
+  data.fever = [data.fever!.find(p => p.id === 'feverLineLeft')!];
+  const texture = new THREE.Texture();
+  const fx = new HitFx(data, Object.fromEntries(data.mats.map(m => [m.tex, texture])));
+  const chart = parseChart({ Notes: [], Bpms: [] });
+  const vertices = () => fx.group.children.flatMap(child => {
+    const geometry = (child as THREE.Mesh).geometry;
+    const count = geometry.drawRange.count;
+    return Array.from(geometry.getAttribute('position').array as Float32Array).slice(0, count * 3);
+  });
+  try {
+    fx.setMode('off');
+    fx.sync(chart, 0, false);
+    fx.setFever(true);
+    fx.sync(chart, 0.2, false);
+    fx.draw();
+    const base = vertices();
+    expect(base.length).toBeGreaterThan(0);
+    fx.setLaneWidth(80);
+    fx.draw();
+    const scaled = vertices();
+    expect(scaled).toHaveLength(base.length);
+    for (let i = 0; i < base.length; i += 3) {
+      expect(scaled[i]).toBeCloseTo(base[i] * 0.8, 5);
+      expect(scaled[i + 1]).toBeCloseTo(base[i + 1], 5);
+      expect(scaled[i + 2]).toBeCloseTo(base[i + 2], 5);
+    }
+  } finally { fx.dispose(); texture.dispose(); }
+});

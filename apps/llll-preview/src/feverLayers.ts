@@ -11,10 +11,13 @@ export class FeverLayers {
   private masks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
   private lines: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; kind: 'base' | 'move'; side: 'left' | 'right' }[] = [];
   private quaternions: Record<'left' | 'right', THREE.Quaternion>;
-  constructor(base: THREE.Texture, move: THREE.Texture, mask: THREE.Texture) {
+  /** X position multiplier shared with the lane geometry (`LaneWidth / 100`). */
+  private laneWidthScale = 1;
+  constructor(base: THREE.Texture, move: THREE.Texture, mask: THREE.Texture, laneWidthOpt = 100) {
     // 原始 `LineParticle` 链（WorldRoot > Fever > FeverEffectSet_001 > LineParticle）逐级均为
     // 单位变换 ⇒ 边线层位于世界原点。旧值 -5.99 来自同级的 sc2_ingeame_feverEffect_L/R_001。
     this.group.position.set(0, 0, 0);
+    this.setLaneWidth(laneWidthOpt);
     this.quaternions = {
       left: new THREE.Quaternion().fromArray(mirrorRotationToThree(FEVER_EDGE_ROTATION.left)),
       right: new THREE.Quaternion().fromArray(mirrorRotationToThree(FEVER_EDGE_ROTATION.right)),
@@ -33,7 +36,7 @@ export class FeverLayers {
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = `mask-${side}`;
-      mesh.position.set(source.position[0], source.position[1], -source.position[2]);
+      this.setWorldPosition(mesh, source.position);
       mesh.quaternion.copy(this.quaternions[side]);
       mesh.renderOrder = 1039;
       mesh.frustumCulled = false;
@@ -42,6 +45,17 @@ export class FeverLayers {
       for (const kind of ['base', 'move'] as const) this.addLine(kind, side, kind === 'base' ? base : move);
     }
     this.group.visible = false;
+  }
+  /** Keep Fever edge effect positions attached to the current track width. */
+  setLaneWidth(laneWidthOpt: number): void {
+    this.laneWidthScale = laneWidthOpt / 100;
+    // Apply the same affine transform to the whole edge frame. Scaling only
+    // mesh positions leaves the old tangent/rotation behind and breaks the
+    // alignment between masks, LineBase and LineMove.
+    this.group.scale.set(this.laneWidthScale, 1, 1);
+  }
+  private setWorldPosition(mesh: THREE.Object3D, position: readonly number[]): void {
+    mesh.position.set(position[0], position[1], -position[2]);
   }
   private addLine(kind: 'base' | 'move', side: 'left' | 'right', map: THREE.Texture) {
     const count = kind === 'base' ? 2 : 1;
@@ -67,11 +81,11 @@ export class FeverLayers {
     this.masks.forEach((mesh, i) => {
       const source = feverMaskGeometry(i === 0 ? 'left' : 'right', elapsed);
       mesh.scale.fromArray(source.scale);
-      mesh.position.set(source.position[0], source.position[1], -source.position[2]);
+      this.setWorldPosition(mesh, source.position);
     });
     for (const { mesh, kind, side } of this.lines) {
       const state = feverLineParticle(kind, side, elapsed);
-      mesh.position.set(state.position[0], state.position[1], -state.position[2]);
+      this.setWorldPosition(mesh, state.position);
       mesh.scale.set(state.size[0], state.size[1], 1);
       mesh.material.color.setRGB(state.color[0], state.color[1], state.color[2], THREE.LinearSRGBColorSpace);
       mesh.material.opacity = state.color[3];
