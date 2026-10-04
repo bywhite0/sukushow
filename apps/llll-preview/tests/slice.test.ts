@@ -58,6 +58,11 @@ describe('音符轮廓尺寸', () => {
     expect(worldWidthOf(12)).toBeCloseTo(((12 - 6) * 0.2 + 1.15) * 0.75);
   });
 
+  it('音符宽度按轨宽比例缩放', () => {
+    expect(worldWidthOf(6, 80)).toBeCloseTo(worldWidthOf(6) * 0.8);
+    expect(worldWidthOf(12, 120)).toBeCloseTo(worldWidthOf(12) * 1.2);
+  });
+
   it('深度：普通 0.45，Trace 0.35', () => {
     expect(worldDepth(0)).toBe(0.45);
     expect(worldDepth(1)).toBe(0.45);
@@ -101,5 +106,12 @@ describe('水平 9-slice', () => {
     expect(caps.right).toBeCloseTo((81 / 100) * 0.75);
     expect(caps.mid).toBeGreaterThan(0);
     expect(caps.left + caps.mid + caps.right).toBeCloseTo(3);
+  });
+
+  it('9-slice cap 与音符主体同步缩放', () => {
+    const scale = 0.8;
+    const caps = sliceCaps(tapLine, worldWidthOf(12, 80), 0.75 * scale);
+    expect(caps.left).toBeCloseTo((81 / 100) * 0.75 * scale);
+    expect(caps.right).toBeCloseTo((81 / 100) * 0.75 * scale);
   });
 });

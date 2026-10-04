@@ -17,8 +17,8 @@ export interface SpriteMeta {
   ppu: number;
 }
 
-export function worldWidthOf(widthUnits: number) {
-  return ((widthUnits - 6) * 0.2 + 1.15) * 0.75;
+export function worldWidthOf(widthUnits: number, laneWidthOpt = 100) {
+  return ((widthUnits - 6) * 0.2 + 1.15) * 0.75 * (laneWidthOpt / 100);
 }
 
 export function worldDepth(type: number) {
