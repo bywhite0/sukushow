@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Chart, Note } from './chart';
-import { BORDER, SPAWN, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
+import { BORDER, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';
 import { FeverLayers } from './feverLayers';
@@ -87,6 +87,12 @@ class TexBatch {
 const SPRITE = ['ui_sc2_ingame_notes_tap', 'ui_sc2_ingame_notes_hold', 'ui_sc2_ingame_notes_flick', 'ui_sc2_ingame_notes_trace'];
 const LINE = [1, 0.2274509817, 0.6, 1];
 
+export type CameraMode = '3d' | '2d';
+const CAMERA_2D_PITCH = -Math.PI / 2;
+/** Keep the 2D camera at the 3D judgement-line height and only change its view angle. */
+const CAMERA_2D_Y = 9;
+const CAMERA_2D_Z = -BORDER;
+
 export class PreviewRenderer {
   readonly gl: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -94,11 +100,14 @@ export class PreviewRenderer {
   private ui = new THREE.Scene();
   private notes = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(60, 16 / 9, .3, 1000);
+  private cameraMode: CameraMode = '3d';
   private uiCam = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
   private uiRoot = new THREE.Group();
   /** Under uiRoot; X = LaneWidth/100 like RhythmGameWorldScaler (BorderLine + OutLine). */
   private laneUi = new THREE.Group();
   private track = new OldBatch(1000, 0);
+  /** 2D-only projection of the two existing 3D lane edges; no fill or dividers. */
+  private worldLaneEdges = new OldBatch(24, 0);
   private holds = new OldBatch(600000, 1);
   private lines = new OldBatch(300000, 2);
   private oldNotes = new OldBatch(900000, 3);
@@ -109,6 +118,7 @@ export class PreviewRenderer {
   private planeMesh: THREE.Mesh | null = null;
   private planeMat: THREE.ShaderMaterial | null = null;
   private laneLines = new THREE.Group();
+  private laneOutline: THREE.Mesh | null = null;
   private noteStartZ = 0;
   private laneWidthOpt = 100;
   private gridCountOpt = 0;
@@ -138,8 +148,8 @@ export class PreviewRenderer {
     this.gl.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.gl.setClearColor(0x000000, 0);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
-    this.camera.position.set(0, 9, 8.65); this.camera.rotation.x = -PITCH;
-    for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) this.scene.add(batch.mesh);
+    this.camera.position.set(0, 9, 8.65); this.setCameraMode('3d');
+    for (const batch of [this.track, this.worldLaneEdges, this.holds, this.lines, this.oldNotes]) this.scene.add(batch.mesh);
     this.ui.add(this.uiRoot);
     this.uiRoot.add(this.laneUi);
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(canvas); this.resize();
@@ -158,6 +168,8 @@ export class PreviewRenderer {
     this.notes.add(this.lines.mesh);
     const plane = this.plane();
     this.field.add(plane);
+    this.field.add(this.worldLaneEdges.mesh);
+    this.worldLaneEdges.mesh.visible = this.cameraMode === '2d';
     // LaneLine shares Plane transform (level56); WorldScaler X = LaneWidth/100
     plane.add(this.laneLines);
     this.rebuildLaneLines();
@@ -274,6 +286,8 @@ export class PreviewRenderer {
     outline.frustumCulled = false;
     outline.renderOrder = 0;
     this.laneUi.add(outline);
+    this.laneOutline = outline;
+    outline.visible = this.cameraMode === '3d';
 
     // LineBase fever rainbow overlay (same outline geometry; tint updated each frame).
     const fcol = new Float32Array(12 * 4);
@@ -389,6 +403,38 @@ export class PreviewRenderer {
     if (!this.lib) { this.renderOld(chart, time, speed, mirror, simultaneous); return; }
     this.renderField(chart, time, speed, mirror, simultaneous);
   }
+
+  /** Switch the single 3D scene between the gameplay angle and a top-down 2D angle. */
+  setCameraMode(mode: CameraMode): void {
+    this.cameraMode = mode;
+    if (mode === '2d') {
+      this.camera.position.set(0, CAMERA_2D_Y, CAMERA_2D_Z);
+      this.camera.rotation.set(CAMERA_2D_PITCH, 0, 0);
+    } else {
+      this.camera.position.set(0, 9, 8.65);
+      this.camera.rotation.set(-PITCH, 0, 0);
+    }
+    this.camera.updateMatrixWorld(true);
+    if (this.laneOutline) this.laneOutline.visible = mode === '3d';
+    if (this.worldLaneEdges.mesh.parent) this.worldLaneEdges.mesh.visible = mode === '2d';
+    this.canvas.dataset.cameraMode = mode;
+    this.canvas.dataset.cameraAngle = this.camera.rotation.x.toFixed(4);
+  }
+
+  getCameraMode(): CameraMode {
+    return this.cameraMode;
+  }
+
+  /** Draw only the two lane edges in 3D world coordinates for the top-down view. */
+  private drawWorldLaneEdges(slopeSpawn: number): void {
+    this.worldLaneEdges.reset();
+    const pitch = lanePitch(this.laneWidthOpt);
+    const half = pitch * 30;
+    const spanZ = slopeSpawn - BORDER;
+    const midZ = (slopeSpawn + BORDER) / 2;
+    this.worldLaneEdges.quad(-half, Y, midZ, .025, spanZ, LINE.slice(0, 3), LINE[3], false);
+    this.worldLaneEdges.quad(half, Y, midZ, .025, spanZ, LINE.slice(0, 3), LINE[3], false);
+  }
   private renderOld(chart: Chart, time: number, speed: number, mirror: boolean, simultaneous: boolean) {
     const slope = createSlope(speed, this.noteStartZ);
     for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.reset();
@@ -439,6 +485,7 @@ export class PreviewRenderer {
     this.ribbon.reset();
     for (const batch of this.sheets.values()) batch.reset();
     this.drawTrack(slope.spawn);
+    this.drawWorldLaneEdges(slope.spawn);
     this.lines.reset();
     this.paintFeverOutline(time);
     this.fx?.sync(chart, time, mirror, this.playing);
@@ -479,6 +526,7 @@ export class PreviewRenderer {
       this.lines.quad((min + max) / 2, Y, z, max - min, .035, [.85, .94, 1], .6);
     }
     this.fx?.draw();
+    this.worldLaneEdges.flush();
     this.ribbon.flush();
     for (const batch of this.sheets.values()) batch.flush();
     this.lines.flush();
@@ -659,7 +707,7 @@ export class PreviewRenderer {
   dispose() {
     this.disposed = true;
     this.observer.disconnect();
-    for (const b of [this.track, this.holds, this.lines, this.oldNotes]) b.dispose();
+    for (const b of [this.track, this.worldLaneEdges, this.holds, this.lines, this.oldNotes]) b.dispose();
     this.ribbon?.dispose();
     for (const batch of this.sheets.values()) batch.dispose();
     this.fx?.dispose();

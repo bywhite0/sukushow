@@ -3,12 +3,11 @@ import { loadSongList } from '../../llll-preview/src/songAssets'
 import { createSongPicker, DIFFICULTY_ORDER, type SongPickerHandle } from './songPicker'
 import { SongSelectionStore, type SongSelection } from './songSelection'
 
-type ViewId = 'llll' | 'pjsk' | 'flat'
+type ViewId = 'llll' | 'pjsk'
 
 const views: { id: ViewId; label: string; detail: string }[] = [
-  { id: 'llll', label: '舞台', detail: 'LLLL 原生 3D' },
+  { id: 'llll', label: '舞台', detail: 'LLLL 3D / 2D' },
   { id: 'pjsk', label: 'PJSK', detail: '60 轨渲染' },
-  { id: 'flat', label: '平面', detail: '2D 读谱' },
 ]
 
 type ViewContext = {
@@ -83,7 +82,6 @@ const modeTabs = [...app.querySelectorAll<HTMLButtonElement>('.mode-tab')]
 const modules: Record<ViewId, () => Promise<ViewModule>> = {
   llll: () => import('./views/llll') as Promise<ViewModule>,
   pjsk: () => import('./views/pjsk') as Promise<ViewModule>,
-  flat: () => import('./views/flat') as Promise<ViewModule>,
 }
 
 function viewFromUrl(): ViewId {

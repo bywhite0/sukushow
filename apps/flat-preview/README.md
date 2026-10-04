@@ -1,4 +1,4 @@
-# flat-preview · llll 平面谱面预览
+# flat-preview · 2D 几何与契约校验核心
 
 把 Link! Like! LoveLive! 的原格式谱面画成**平面图**：横轴 = 60 格轨道，纵轴 = 时间**向上递增**——
 和游戏一样是下落式朝向，上方是更晚的时刻。
@@ -7,7 +7,7 @@
 
 ![平面谱面](docs/shots/flat.png)
 
-## 运行
+## 使用
 
 要求 Node.js 22.12+ 与 pnpm。
 
@@ -16,7 +16,7 @@ pnpm install
 pnpm --filter @sukushow/web dev
 ```
 
-打开终端显示的地址，点「导入谱面」或把文件拖进画布。支持原格式 JSON 与 raw-deflate `.bytes`；文件不上传。
+该包提供 2D 谱面解析、几何和 Canvas 渲染的独立校验核心。LLLL 工作台的 2D / 3D 切换使用 `apps/llll-preview` 的同一 WebGL 场景，只改变相机角度；支持原格式 JSON 与 raw-deflate `.bytes` 的解析校验。
 
 ```bash
 pnpm test          # 解析与几何单测
@@ -40,7 +40,7 @@ pnpm verify:corpus   # 对 workspace 谱面跑解析与几何校验
 
 ## 实现边界
 
-`apps/flat-preview` 提供二维解析、几何与 Canvas 渲染；`apps/llll-preview` 提供 LLLL 3D 解析与渲染，`apps/web` 负责统一导航和页面工作台。
+`apps/flat-preview` 提供二维解析、几何与 Canvas 渲染校验核心；`apps/llll-preview` 提供 LLLL 解析、WebGL 渲染与导出，`apps/web` 负责统一工作台和相机角度切换。
 
 平面视图以矩形、九宫格贴图和时间轴表达谱面形状，契约校验由 `scripts/cross-check.ts` 维护。
 
