@@ -5,6 +5,13 @@
 /* 舞台：背景（Canvas-Bg，PLAN §51）/ 3D / HUD / 过场 / 曲终横幅都由 src/stageCompositor.ts 画进 #stage-canvas。 */
 .view-llll .stage{position:relative;isolation:isolate;background:#1a1d24;overflow:hidden}
 .view-llll .stage canvas{position:relative;z-index:1;background:transparent}
-/* 3D 画布只作合成源（布局 / 测试仍按它的盒子量尺寸），画面由 #stage-canvas 输出。 */
-.view-llll .stage #chart-canvas{opacity:0}
+/* WebGL 画布作为舞台合成源（布局 / 测试仍按它的盒子量尺寸），画面由 #stage-canvas 输出。
+   保持 opacity=1：Chromium 会把 opacity=0 的 canvas 当作透明源，drawImage 无法复制 WebGL 帧。 */
+.view-llll .stage #chart-canvas{opacity:1}
 .view-llll .stage #stage-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:2}
+.stage-mode-switch{position:absolute;top:12px;right:12px;z-index:5;display:inline-flex;align-items:center;gap:3px;padding:4px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(13,17,26,.78);box-shadow:0 6px 18px rgba(0,0,0,.24);backdrop-filter:blur(8px)}
+.stage-mode-label{padding:0 5px;color:rgba(255,255,255,.62);font-size:10px;line-height:28px}
+.stage-mode-switch button{min-width:36px;height:28px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:rgba(255,255,255,.72);font:700 11px/1 "Segoe UI",sans-serif;cursor:pointer}
+.stage-mode-switch button:hover{background:rgba(255,255,255,.1);color:#fff}
+.stage-mode-switch button.is-active{background:#f48bb7;color:#251525;box-shadow:0 2px 8px rgba(244,139,183,.3)}
+@media (max-width:560px){.stage-mode-switch{top:8px;right:8px}.stage-mode-label{display:none}.stage-mode-switch button{min-width:34px;padding:0 7px}}

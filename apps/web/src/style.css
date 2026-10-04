@@ -65,10 +65,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .quiet:hover, .file-action:hover { border-color: oklch(44% .012 285); background: var(--shell-line); }
 .text-button { min-height: 40px; padding: 8px 8px; border: 0; background: transparent; color: var(--shell-muted); font-size: 12px; white-space: nowrap; }
 .text-button:hover { color: var(--shell-text); }
-.workspace[data-view="flat"] #aspect-mount,
-.workspace[data-view="flat"] #open-audio,
-.workspace[data-view="flat"] #audio-file,
-.workspace[data-view="flat"] #demo,
 .workspace[data-view="pjsk"] #aspect-mount { display: none; }
 
 .workspace-content { min-width: 0; min-height: 0; overflow: hidden; }
@@ -219,8 +215,8 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 @media (max-width: 900px) {
   body { overflow: auto; }
   .workspace { height: auto; min-height: 100%; overflow: visible; }
-  .workspace-header { height: 76px; min-height: 76px; max-height: 76px; padding-inline: 12px; gap: 8px; }
-  .view-toolbar { flex-basis: 0; overflow: visible; }
+  .workspace-header { height: auto; min-height: 76px; max-height: none; flex-wrap: wrap; align-content: center; padding-inline: 12px; gap: 8px; }
+  .view-toolbar { flex: 1 1 100%; flex-basis: 100%; width: 100%; overflow: visible; }
   .workspace-content { overflow: visible; }
   #view-root.workspace-content > main { height: auto; min-height: 0; grid-template-columns: 1fr; }
   #view-root.workspace-content > main > aside { border-top: 1px solid var(--shell-line); border-left: 0; }

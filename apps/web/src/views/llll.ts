@@ -30,7 +30,15 @@ app.innerHTML=`
 <main>
 <section class="viewer" aria-label="谱面预览">
  <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
- <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-hidden="true"></canvas><canvas id="stage-canvas" aria-label="谱面预览画面"></canvas></div></div>
+ <div class="stage-shell"><div class="stage" id="stage" data-stage-mode="3d">
+  <canvas id="chart-canvas" aria-hidden="true"></canvas>
+  <canvas id="stage-canvas" aria-label="LLLL 舞台谱面预览画面" aria-hidden="false"></canvas>
+  <div class="stage-mode-switch" role="group" aria-label="谱面显示模式">
+   <span class="stage-mode-label">显示</span>
+   <button type="button" data-stage-mode="3d" aria-pressed="true">3D</button>
+   <button type="button" data-stage-mode="2d" aria-pressed="false">2D</button>
+  </div>
+ </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
  <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="export-video" class="quiet" type="button">导出视频</button><button id="fullscreen" class="quiet">全屏预览</button></div></div>
 </section>
@@ -212,6 +220,22 @@ const comboResult=new ComboResult();
 void comboResult.load();
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
 const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
+const stage=el<HTMLDivElement>('stage');
+type LlllStageMode='3d'|'2d';
+const stageModeButtons=Array.from(root.querySelectorAll<HTMLButtonElement>('.stage-mode-switch button[data-stage-mode]'));
+function setStageMode(mode:LlllStageMode){
+ stage.dataset.stageMode=mode;
+ renderer?.setCameraMode(mode);
+ for(const button of stageModeButtons){
+  const active=button.dataset.stageMode===mode;
+  button.classList.toggle('is-active',active);
+  button.setAttribute('aria-pressed',String(active));
+ }
+}
+for(const button of stageModeButtons){
+ button.onclick=()=>setStageMode(button.dataset.stageMode==='2d'?'2d':'3d');
+}
+setStageMode('3d');
 comboResult.setKind(readSettings().comboResult);
 let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
@@ -397,7 +421,7 @@ function liveView():StageView{
  const stage=el('stage');
  return {cssW:stage.clientWidth,cssH:stage.clientHeight,dpr:Math.min(2,globalThis.devicePixelRatio||1)};
 }
-/** 3D 画布 render() 之后立即合成（preserveDrawingBuffer 关闭，缓冲只在本帧内有效）。 */
+/** 3D 画布 render() 之后立即合成（缓冲只在本帧内有效）。 */
 function composeStage(view:StageView){
  compositor.draw(view,{gl:el<HTMLCanvasElement>('chart-canvas'),hud,startAnim,comboResult});
  const c=el('stage-canvas');

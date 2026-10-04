@@ -11,9 +11,9 @@ pnpm install --frozen-lockfile
 pnpm --filter @sukushow/web dev
 ```
 
-打开统一前端的本地地址，在导航中选择 LLLL 3D 视图。默认提供原创演示谱；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。
+打开统一前端的本地地址，在导航中选择 LLLL 舞台；舞台右上角可切换 3D / 2D 相机角度。默认提供原创演示谱；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。
 
-此包属于 `sukushow` 根工作区；PJSK、交互式 2D 和 SVG 图片导出分别位于 `apps/` 的其他 workspace 包。目录、许可边界和贴图同步策略见 [工作区说明](../../docs/workspace.md)。
+此包属于 `sukushow` 根工作区；LLLL 的 2D 模式与 3D 模式共用同一套 WebGL 场景，只切换相机角度；`apps/flat-preview` 保留为独立的解析、几何与契约校验包。PJSK 与 SVG 图片导出仍由 `apps/` 的其他 workspace 包提供。目录、许可边界和贴图同步策略见 [工作区说明](../../docs/workspace.md)。
 
 ```powershell
 pnpm dev
