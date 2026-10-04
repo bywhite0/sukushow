@@ -130,3 +130,29 @@ it('世界空间边线受动画遮罩控制，关闭后所有层隐藏', () => {
     expect(masks.every(m => m.scale.y === 0)).toBe(true);
   } finally { layers.dispose(); texture.dispose(); }
 });
+
+it('轨道宽度变化时 Fever 边线层的位置随轨道边缩放', () => {
+  const texture = new THREE.Texture();
+  const layers = new FeverLayers(texture, texture, texture);
+  try {
+    layers.update(true, 0.4);
+    layers.group.updateMatrixWorld(true);
+    const defaultX = new Map(
+      layers.group.children.map(mesh => [mesh.name, mesh.getWorldPosition(new THREE.Vector3()).x]),
+    );
+
+    layers.setLaneWidth(80);
+    layers.update(true, 0.4);
+    layers.group.updateMatrixWorld(true);
+    for (const mesh of layers.group.children) {
+      expect(mesh.getWorldPosition(new THREE.Vector3()).x).toBeCloseTo(defaultX.get(mesh.name)! * 0.8, 6);
+    }
+
+    layers.setLaneWidth(120);
+    layers.update(true, 0.4);
+    layers.group.updateMatrixWorld(true);
+    for (const mesh of layers.group.children) {
+      expect(mesh.getWorldPosition(new THREE.Vector3()).x).toBeCloseTo(defaultX.get(mesh.name)! * 1.2, 6);
+    }
+  } finally { layers.dispose(); texture.dispose(); }
+});

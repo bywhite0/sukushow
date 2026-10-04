@@ -177,6 +177,7 @@ export class PreviewRenderer {
     this.applyLaneWidthScale();
     if (lib.fx) {
       this.fx = new HitFx(lib.fx, lib.fxTex);
+      this.fx.setLaneWidth(this.laneWidthOpt);
       this.fx.setMode(this.hitEffectMode);
       // 粒子随机数按启动参数播种：拖动 / 重放 / 导出在同一时刻得到同一组粒子。
       this.fx.setDeterministic(true);
@@ -185,7 +186,7 @@ export class PreviewRenderer {
       const move = lib.fxTex.sc2_feverLine01;
       const mask = lib.fxTex.fever_mask;
       if (base && move && mask) {
-        this.feverLayers = new FeverLayers(base, move, mask);
+        this.feverLayers = new FeverLayers(base, move, mask, this.laneWidthOpt);
         this.notes.add(this.feverLayers.group);
       }
     }
@@ -213,6 +214,8 @@ export class PreviewRenderer {
     const s = this.laneWidthOpt / 100;
     if (this.planeMesh) this.planeMesh.scale.set(s, 1, 1);
     this.laneUi.scale.set(s, 1, 1);
+    this.feverLayers?.setLaneWidth(this.laneWidthOpt);
+    this.fx?.setLaneWidth(this.laneWidthOpt);
   }
 
   /** ChangePlaneAlpha: _Color = (0,0,0, 0.8 × LaneDarkness/100). */

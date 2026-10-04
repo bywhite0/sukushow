@@ -249,6 +249,8 @@ export class HitFx {
   readonly group = new THREE.Group();
   private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private feverOn = false;
+  /** X scale shared with the lane edge frame; applied to Fever vertices at draw time. */
+  private laneWidthScale = 1;
   private specs = new Map<string, Spec[]>();
   private live: Live[] = [];
   private batches = new Map<string, FxBatch>();
@@ -259,6 +261,13 @@ export class HitFx {
     const mats = new Map(fx.mats.map(m => [m.id, m]));
     for (const prefab of fx.prefabs) this.specs.set(prefab.id, this.compile(prefab, mats));
     for (const prefab of fx.fever || []) this.specs.set(prefab.id, this.compile(prefab, mats));
+  }
+  setLaneWidth(laneWidthOpt: number): void {
+    this.laneWidthScale = laneWidthOpt / 100;
+  }
+  private scaleFeverVertices(positions: Float32Array, from: number, to: number): void {
+    if (this.laneWidthScale === 1) return;
+    for (let i = from * 3; i < to * 3; i += 3) positions[i] *= this.laneWidthScale;
   }
   private batchFor(mat: FxMat | undefined, order: number): string | undefined {
     if (!mat || !this.tex[mat.tex]) return undefined;
@@ -860,6 +869,7 @@ export class HitFx {
         // View billboard, or Local with Corehorizon pitch ≈ camera 33.2°.
         batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, z, sx, sy, color, 1, 1, s.spin);
       }
+      if (s.fever) this.scaleFeverVertices(batch.pos, before, batch.n);
       // 9Slice shader wants pre-transform startSizeX (TexW units), not world size.
       const slice = s.slice ? s.sliceSize * mulX : 0;
       for (let i = before; i < batch.n; i++) batch.slice[i] = slice;
@@ -918,6 +928,7 @@ export class HitFx {
           [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(tailPhase), tailColor,
           widthAt(headPhase), headColor,
         );
+        if (s.fever) this.scaleFeverVertices(batch.pos, before, batch.n);
         for (let j = before; j < batch.n; j++) batch.slice[j] = 0;
       }
     }
