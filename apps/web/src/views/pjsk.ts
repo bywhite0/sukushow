@@ -19,12 +19,13 @@ import { parseChart, decodeChart, type Chart } from '../../../pjsk-preview/src/l
 import { chartToMusicScore } from '../../../pjsk-preview/src/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from './pjsk/url'
-import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata } from '../../../pjsk-preview/src/llll/songAssets'
+import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '../../../pjsk-preview/src/llll/songAssets'
 import { feverForSong } from '../../../pjsk-preview/src/llll/fever'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
 import type { SongSelectionStore } from '../songSelection'
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize, type ResourceLoadingTask } from '../resourceLoading'
 import { mmwWasmFilename } from '../../../pjsk-preview/src/generated/mmwWasmAsset'
+import { readResponseBytes } from '../../../llll-preview/src/resourceDownload'
 
 declare global {
   interface Window {
@@ -389,9 +390,20 @@ async function preloadAll(
         downloadedBytes,
         totalBytes,
       })
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      byteLength = bytes.byteLength
       const expectedBytes = sizes.get(entry.url)
+      const entryStartBytes = downloadedBytes
+      const bytes = await readResponseBytes(response, (state) => {
+        const currentBytes = expectedBytes === undefined ? 0 : Math.min(expectedBytes, state.downloadedBytes)
+        onProgress({
+          done,
+          total: entries.length,
+          entry,
+          phase: 'download',
+          downloadedBytes: entryStartBytes + currentBytes,
+          totalBytes,
+        })
+      })
+      byteLength = bytes.byteLength
       if (expectedBytes !== undefined) {
         downloadedBytes = Math.min(totalBytes ?? Number.POSITIVE_INFINITY, downloadedBytes + byteLength)
       }
@@ -455,7 +467,9 @@ async function loadChart(
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
-  const downloadSizes = options.downloadSizes ?? await measureResourceSizes([bgmUrl, coverUrl ?? EMPTY_COVER_URL])
+  const downloadSizes = options.downloadSizes ? new Map(options.downloadSizes) : await measureResourceSizes([bgmUrl, coverUrl, EMPTY_COVER_URL])
+  // 有曲绘时只会请求曲绘；占位图仅在目录明确没有曲绘时才会下载。
+  if (coverUrl) downloadSizes.delete(EMPTY_COVER_URL)
   const downloadTotalBytes = options.downloadTotalBytes ?? totalResourceSize(downloadSizes)
   const downloads = options.downloads ?? new Map<string, number>()
   resourceTask.update(step(0), bgmUrl || coverUrl ? '正在下载曲目资源…' : '正在初始化谱面…', {
@@ -535,10 +549,17 @@ async function loadChart(
 async function loadSongById(songId: string, difficulty: string, sourceOffsetMs = 0) {
   if (disposed) return
   const resourceTask = loading.begin(`正在加载曲目 ${songId} [${difficulty}]`, 5)
+  const downloads = new Map<string, number>()
+  const downloadedBytes = () => [...downloads.values()].reduce((sum, value) => sum + value, 0)
+  let downloadTotalBytes: number | undefined
   try {
     const song = await findSong(songId, (state) => {
+      if (state.downloadedBytes !== undefined) downloads.set(SONG_LIST_URL, state.downloadedBytes)
       resourceTask.setLabel('加载曲目库')
-      resourceTask.update(0, state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…')
+      resourceTask.update(0, state.phase === 'download' ? '正在下载 song-list.json…' : '曲目库已下载，正在建立索引…', {
+        downloadedBytes: downloadedBytes(),
+        totalBytes: downloadTotalBytes,
+      })
     })
     if (disposed) return
     if (!song) {
@@ -552,11 +573,18 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
     }
     const chartUrl = `/assets/chart/${chartFile}`
     const songAssetUrls = songAssets(song)
-    const downloadSizes = await measureResourceSizes([chartUrl, songAssetUrls.bgmUrl, songAssetUrls.coverUrl ?? EMPTY_COVER_URL])
-    const downloadTotalBytes = totalResourceSize(downloadSizes)
-    const downloads = new Map<string, number>()
-    const downloadedBytes = () => [...downloads.values()].reduce((sum, value) => sum + value, 0)
-    resourceTask.update(1, '正在查找谱面…', { downloadedBytes: 0, totalBytes: downloadTotalBytes })
+    const downloadSizes = await measureResourceSizes([
+      SONG_LIST_URL,
+      SONG_CREDITS_URL,
+      chartUrl,
+      songAssetUrls.bgmUrl,
+      songAssetUrls.coverUrl,
+      EMPTY_COVER_URL,
+    ])
+    // 有曲绘时只会请求曲绘；占位图仅在目录明确没有曲绘时才会下载。
+    if (songAssetUrls.coverUrl) downloadSizes.delete(EMPTY_COVER_URL)
+    downloadTotalBytes = totalResourceSize(downloadSizes)
+    resourceTask.update(1, '正在查找谱面…', { downloadedBytes: downloadedBytes(), totalBytes: downloadTotalBytes })
     message(`正在下载谱面 ${chartFile}…`)
     const response = await fetch(chartUrl)
     if (disposed) return
@@ -568,8 +596,16 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
       totalBytes: downloadTotalBytes,
     })
     // 谱面是 raw-deflate 的 .bytes；decodeChart 自动识别 JSON / 压缩两种形态。
-    const chartBytes = new Uint8Array(await response.arrayBuffer())
-    downloads.set(chartUrl, chartBytes.byteLength)
+    const chartStartBytes = downloadedBytes()
+    const chartSize = downloadSizes.get(chartUrl)
+    const chartBytes = await readResponseBytes(response, (state) => {
+      const current = chartSize === undefined ? 0 : Math.min(chartSize, state.downloadedBytes)
+      resourceTask.update(1, `正在下载谱面 ${chartFile}…`, {
+        downloadedBytes: chartStartBytes + current,
+        totalBytes: downloadTotalBytes,
+      })
+    })
+    if (chartSize !== undefined) downloads.set(chartUrl, Math.min(chartSize, chartBytes.byteLength))
     const chart = decodeChart(chartBytes)
     resourceTask.update(2, `谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在读取曲目资料…`, {
       downloadedBytes: downloadedBytes(),
@@ -579,9 +615,17 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
     // 词曲编（wiki）+ vocal（masterdata）；缺失不该阻断加载。
     let credits = null
     try {
-      credits = creditsToMetadata(await findSongCredits(songId))
+      credits = creditsToMetadata(await findSongCredits(songId, (state) => {
+        if (state.downloadedBytes !== undefined) downloads.set(SONG_CREDITS_URL, state.downloadedBytes)
+        resourceTask.setLabel('加载曲目资料')
+        resourceTask.update(2, state.phase === 'download' ? '正在下载 song-credits.json…' : '曲目资料已下载，正在建立预览…', {
+          downloadedBytes: downloadedBytes(),
+          totalBytes: downloadTotalBytes,
+        })
+      }))
     } catch (error) {
       console.warn('[llll-pjsk] 曲目详情加载失败：', error)
+      downloads.set(SONG_CREDITS_URL, 0)
     }
     // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
     await loadChart(chart, song.title, sourceOffsetMs, songAssetUrls, difficulty, credits, {

@@ -13,8 +13,11 @@ import type { ExportFrameSource } from '../../../llll-preview/src/export/exporte
 import { installExportDialog, probeAllConfigs } from './llll/exportDialog';
 import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '../../../llll-preview/src/stageCompositor';
 import { StartAnimation, START_BASE01_URL, START_CLIP_DURATION } from '../../../llll-preview/src/startAnim';
-import { ComboResult, COMBO_RESULT_CLIP_DURATION, type ResultKind } from '../../../llll-preview/src/comboResult';
-import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, type SongList } from '../../../llll-preview/src/songAssets';
+import { ComboResult, BANNER_TEX_BASE, COMBO_RESULT_CLIP_DURATION, type ComboResultLoadProgress, type ResultKind } from '../../../llll-preview/src/comboResult';
+import { RG_RESOURCE_URLS, type RgLoadProgress } from '../../../llll-preview/src/rgAssets';
+import { SE_RESOURCE_URLS, type SeLoadProgress } from '../../../llll-preview/src/se';
+import { COMBO_RESULT_TEXTURES } from '../../../llll-preview/src/comboResultClip';
+import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, SONG_LIST_URL, type SongList } from '../../../llll-preview/src/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
 import type { SongSelectionStore } from '../songSelection';
 import {
@@ -220,20 +223,53 @@ applyAspect(aspectId);
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
 /** 视频导出进行中：实时循环已暂停，走带 / 键盘操作无效。 */
 let exporting=false;
+const stage=el<HTMLDivElement>('stage');
+const loading=createResourceLoading(stage,root.querySelector<HTMLElement>('.transport')!);
+const hudTextureUrls=LiveHud.textureUrls();
+const initialResourceUrls=[...new Set([
+ START_BASE01_URL,LIVE_BG_URL,LIVE_BG_DOT_URL,
+ ...hudTextureUrls,
+ ...COMBO_RESULT_TEXTURES.map((name)=>`${BANNER_TEX_BASE}${name}.png`),
+ '/rg/fonts/FOT-RODINPRO-B.otf','/rg/fonts/FOT-RODINPRO-EB.otf',
+ ...SE_RESOURCE_URLS,...RG_RESOURCE_URLS,
+])];
+const initialResourceTask=loading.begin('正在准备 LLLL 预览',initialResourceUrls.length);
+const initialResourceSizes=new Map<string,number>();
+const initialResourceDownloads=new Map<string,number>();
+const initialResourceDone=new Set<string>();
+const resourceName=(url:string)=>url.split('/').pop()??url;
+const initialResourceTotal=()=>totalResourceSize(initialResourceSizes);
+const reportInitialResource=(url:string,phase:'download'|'ready',downloaded?:number,detail=`资源 ${resourceName(url)}`)=>{
+ if(phase==='download'&&!initialResourceDownloads.has(url))initialResourceDownloads.set(url,0);
+ if(downloaded!==undefined)initialResourceDownloads.set(url,Math.max(0,downloaded));
+ if(phase==='ready'){
+  initialResourceDone.add(url);
+  initialResourceDownloads.set(url,initialResourceSizes.get(url)??initialResourceDownloads.get(url)??0);
+ }
+ const totalBytes=initialResourceTotal();
+ const downloadedBytes=[...initialResourceDownloads.values()].reduce((sum,value)=>sum+value,0);
+ initialResourceTask.setLabel(phase==='ready'?`已加载 ${detail}`:`下载 ${detail}`);
+ initialResourceTask.update(initialResourceDone.size,phase==='ready'?`${detail} 已就绪`:`正在下载 ${detail}…`,{downloadedBytes,totalBytes});
+};
+const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((sizes)=>{
+ for(const [url,size] of sizes)initialResourceSizes.set(url,size);
+ for(const url of initialResourceDone){
+  const size=initialResourceSizes.get(url);
+  if(size!==undefined)initialResourceDownloads.set(url,size);
+ }
+ const totalBytes=initialResourceTotal();
+ const downloadedBytes=[...initialResourceDownloads.values()].reduce((sum,value)=>sum+value,0);
+ initialResourceTask.update(initialResourceDone.size,'资源大小已统计，正在加载场景与 HUD…',{downloadedBytes,totalBytes});
+ return sizes;
+});
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
-try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);void seOut.ensureLoaded();se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
+try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
 function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart.duration);}metadata();
 const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
 const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
-const stage=el<HTMLDivElement>('stage');
-const loading=createResourceLoading(stage,root.querySelector<HTMLElement>('.transport')!);
-const hudTextureUrls=LiveHud.textureUrls();
-const initialResourceTask=loading.begin('正在准备 LLLL 预览',hudTextureUrls.length+7);
-let initialResourceDone=0;
-const initialResourceStep=(detail:string)=>initialResourceTask.update(++initialResourceDone,detail);
 type LlllStageMode='3d'|'2d';
 const stageModeButtons=Array.from(root.querySelectorAll<HTMLButtonElement>('.stage-mode-switch button[data-stage-mode]'));
 function setStageMode(mode:LlllStageMode){
@@ -308,17 +344,23 @@ document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
 void (async()=>{
  try{
-	 await Promise.all([
-	  preloadImages([START_BASE01_URL]).then(()=>initialResourceStep('开场过场贴图已就绪')),
-	  loadHudFonts().then(()=>initialResourceStep('字体已就绪')),
-   ...hudTextureUrls.map((url)=>preloadImages([url]).then(()=>initialResourceStep(`HUD 贴图：${url.split('/').pop()??url}`))),
-   comboResult.load().then(()=>initialResourceStep('结果动画已就绪')),
-   (renderer?.whenReady()??Promise.resolve()).then(()=>initialResourceStep('轨道贴图已就绪')),
-   (seOut?.ensureLoaded()??Promise.resolve()).then(()=>initialResourceStep('打击音效已就绪')),
-   preloadImages([LIVE_BG_URL,LIVE_BG_DOT_URL]).then(()=>initialResourceStep('舞台背景已就绪')),
-  ]);
+  await initialResourceSizesReady;
+  const reportImage=(prefix:string)=>(progress:{url:string;phase:'download'|'ready'})=>reportInitialResource(progress.url,progress.phase,undefined,`${prefix} ${resourceName(progress.url)}`);
+  const reportGroupReady=(urls:readonly string[],prefix:string)=>{
+   for(const url of urls)if(!initialResourceDone.has(url))reportInitialResource(url,'ready',undefined,`${prefix} ${resourceName(url)}`);
+  };
+		 await Promise.all([
+		  preloadImages([START_BASE01_URL],reportImage('开场资源')),
+		  loadHudFonts().then(()=>reportGroupReady(['/rg/fonts/FOT-RODINPRO-B.otf','/rg/fonts/FOT-RODINPRO-EB.otf'],'字体')),
+	   ...hudTextureUrls.map((url)=>preloadImages([url],reportImage('HUD 贴图'))),
+	   comboResult.load((progress:ComboResultLoadProgress)=>reportInitialResource(progress.url,progress.phase,undefined,`结果动画 ${resourceName(progress.url)}`)),
+	   (renderer?.whenReady()??Promise.resolve()).then(()=>reportGroupReady(RG_RESOURCE_URLS,'场景资源')),
+	   (seOut?.ensureLoaded((progress:SeLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`SE ${resourceName(progress.url)}`))??Promise.resolve()),
+	   preloadImages([LIVE_BG_URL,LIVE_BG_DOT_URL],reportImage('舞台背景')),
+	  ]);
   await imagesSettled();
-  initialResourceStep('全部舞台资源已就绪');
+  reportGroupReady(initialResourceUrls,'资源');
+  initialResourceTask.update(initialResourceUrls.length,'全部舞台资源已就绪',{downloadedBytes:[...initialResourceDownloads.values()].reduce((sum,value)=>sum+value,0),totalBytes:initialResourceTotal()});
   initialResourceTask.finish('预览资源已就绪');
  }catch(error){
   initialResourceTask.fail(`基础资源加载失败：${String(error)}`);
@@ -615,27 +657,33 @@ function startInfoForFile(name:string){
 /** 按曲目 Id 打开：谱面 + BGM；封面 / 曲名 / 难度色交给开场过场。 */
 async function loadSongById(songId:string,difficulty:string){
  const task=loading.begin(`正在加载曲目 ${songId} [${difficulty}]`,4);
+ const downloads=new Map<string,number>();
+ const downloadedBytes=()=>[...downloads.values()].reduce((sum,value)=>sum+value,0);
+ let downloadTotalBytes: number|undefined;
+ const updateDownload=(url:string,name:string,state:{phase:'download'|'ready';downloadedBytes?:number})=>{
+  if(state.downloadedBytes!==undefined)downloads.set(url,state.downloadedBytes);
+  if(state.phase==='ready'&&!downloads.has(url))downloads.set(url,0);
+  task.setLabel(`加载 ${name}`);
+  task.update(0,state.phase==='download'?`正在下载 ${name}…`:`${name} 已下载`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
+ };
  try{
   task.update(0,'查找曲目资源…');
-  const song=await findSong(songId);
+  const song=await findSong(songId,(state)=>updateDownload(SONG_LIST_URL,'曲目库',state));
   if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
   const chartFile=song.charts[difficulty];
   if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
   const chartUrl=`/assets/chart/${chartFile}`;
   const {bgmUrl,coverUrl}=songAssets(song);
   task.update(0,'正在统计曲目资源大小…');
-  const downloadSizes=await measureResourceSizes([chartUrl,bgmUrl,coverUrl]);
-  const downloadTotalBytes=totalResourceSize(downloadSizes);
-  const downloads=new Map<string,number>();
-  const downloadedBytes=()=>[...downloads.values()].reduce((sum,value)=>sum+value,0);
+  const downloadSizes=await measureResourceSizes([SONG_LIST_URL,chartUrl,bgmUrl,coverUrl]);
+  downloadTotalBytes=totalResourceSize(downloadSizes);
   task.setLabel(`正在加载 ${song.title} [${difficulty}]`);
+  task.update(0,'正在查找谱面…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   const id=++generation;
   message(`正在加载 ${song.title} [${difficulty}]…`);
-  const res=await fetch(chartUrl);
-  if(!res.ok)throw new Error(`谱面下载失败（${res.status}）：${chartFile}。请先运行 python scripts/link-assets.py`);
-  task.update(1,'正在下载谱面…',{downloadedBytes:0,totalBytes:downloadTotalBytes});
-  const chartBytes=new Uint8Array(await res.arrayBuffer());
-  downloads.set(chartUrl,chartBytes.byteLength);
+  task.update(1,'正在下载谱面…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
+  const chartBytes=await fetchBytes(chartUrl,(state)=>updateDownload(chartUrl,'谱面',state));
+  if(!chartBytes)throw new Error(`谱面下载失败：${chartFile}。请先运行 python scripts/link-assets.py`);
   const next=decodeChart(chartBytes);
   task.update(2,`谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在下载 BGM…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   const bgm=await fetchBytes(bgmUrl,(state)=>{
@@ -652,7 +700,7 @@ async function loadSongById(songId:string,difficulty:string){
   if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
   if(id!==generation)return;
   task.update(3,'正在加载曲绘…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  if(coverUrl)await preloadImages([coverUrl]);
+  if(coverUrl)await preloadImages([coverUrl],(state)=>updateDownload(coverUrl,'曲绘',state));
   if(id!==generation)return;
   if(coverUrl&&downloadSizes.has(coverUrl))downloads.set(coverUrl,downloadSizes.get(coverUrl)!);
   el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';

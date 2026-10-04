@@ -149,7 +149,6 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 .view-loading-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--shell-muted); font-size: 10px; line-height: 1.4; }
 .view-loading-meta span { min-width: 0; overflow-wrap: anywhere; }
 .view-loading-meta output { flex: 0 0 auto; color: var(--shell-accent); font: 700 11px/1.2 Consolas, monospace; }
-.view-loading-item { display: block; margin-top: 9px; color: var(--shell-muted); font-size: 10px; }
 .picker-loading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 8px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--shell-line); border-radius: 6px; background: var(--shell-raised); color: var(--shell-muted); font-size: 11px; }
 .picker-loading-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-loading progress { width: 72px; height: 6px; accent-color: var(--shell-accent); }

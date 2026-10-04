@@ -20,6 +20,7 @@ export async function measureResourceSizes(urls: readonly (string | null | undef
     try {
       const response = await fetch(url, { method: 'HEAD' })
       if (!response.ok) return [url, null] as const
+      if (response.headers.get('content-encoding')) return [url, null] as const
       const value = Number(response.headers.get('content-length'))
       return [url, Number.isFinite(value) && value > 0 ? Math.ceil(value) : null] as const
     } catch {
@@ -126,9 +127,10 @@ export function createResourceLoading(stage: HTMLElement, lockTarget?: HTMLEleme
     setControlsLocked(true)
     title.textContent = hasError && current.failed ? '资源加载失败' : current.label
     detail.textContent = current.detail
+    const bytesDeterminate = states.every((task) => task.totalBytes !== null)
     const totalBytes = states.reduce((sum, task) => sum + (task.totalBytes ?? 0), 0)
     const downloadedBytes = Math.min(totalBytes || Number.POSITIVE_INFINITY, states.reduce((sum, task) => sum + (task.downloadedBytes ?? 0), 0))
-    if (totalBytes > 0) {
+    if (bytesDeterminate && totalBytes > 0) {
       size.hidden = false
       size.textContent = `(已下载 ${formatResourceSize(downloadedBytes)} / ${formatResourceSize(totalBytes)})`
     } else {
@@ -180,7 +182,9 @@ export function createResourceLoading(stage: HTMLElement, lockTarget?: HTMLEleme
       if (!state.active) return
       state.active = false
       if (nextDetail) state.detail = nextDetail
-      tasks.delete(state.id)
+      state.done = state.total ?? state.done
+      if (state.totalBytes !== null) state.downloadedBytes = state.totalBytes
+      if (![...tasks.values()].some((task) => task.active)) tasks.clear()
       refresh()
     }
 

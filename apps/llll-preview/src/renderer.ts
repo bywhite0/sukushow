@@ -11,7 +11,7 @@ import {
   feverMovePhase,
   feverMoveRgba,
 } from './fever';
-import { loadRgLibrary, whiteTexture, type RgLibrary } from './rgAssets';
+import { loadRgLibrary, whiteTexture, type RgLibrary, type RgLoadProgress } from './rgAssets';
 import { planeMaterial, spriteMaterial } from './shaders';
 import {
   HOLD_CENTER, HOLD_SIDE, PHASE_START, PITCH, flickSignY, holdAlpha, pushBillboard,
@@ -143,7 +143,7 @@ export class PreviewRenderer {
   private fixedSize: { w: number; h: number; dpr: number } | null = null;
   /** 本帧 hold 呼吸光推进的步数（实时 = 每帧 1 步；导出按 dt × 60 折算，见 setPhaseSteps）。 */
   private phaseSteps = 1;
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(private canvas: HTMLCanvasElement, onResourceProgress?: (progress: RgLoadProgress) => void) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, stencil: true });
     this.gl.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.gl.setClearColor(0x000000, 0);
@@ -153,7 +153,7 @@ export class PreviewRenderer {
     this.ui.add(this.uiRoot);
     this.uiRoot.add(this.laneUi);
     this.observer = new ResizeObserver(() => this.resize()); this.observer.observe(canvas); this.resize();
-    this.libReady = loadRgLibrary().then(lib => { if (!this.disposed && lib) this.useLibrary(lib); }).catch(() => undefined);
+    this.libReady = loadRgLibrary(onResourceProgress).then(lib => { if (!this.disposed && lib) this.useLibrary(lib); }).catch(() => undefined);
   }
   private readonly libReady: Promise<void>;
   /** 原包资源库加载结束（成功或失败）；导出前等待，避免前几帧退回简易绘制。 */
