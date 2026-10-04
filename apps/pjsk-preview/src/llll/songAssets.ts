@@ -12,6 +12,8 @@
  * 曲目列表（apps/web/public/song-list.json）的字段为准，不做拼接猜测。
  */
 
+import { cachedJsonResource, readResponseBytes, type DownloadProgress } from '../../../llll-preview/src/resourceDownload'
+
 /** apps/web/public/song-list.json 里的单首曲目。 */
 export type SongEntry = {
   id: string
@@ -60,11 +62,7 @@ export type SongAssets = {
   coverUrl: string | null
 }
 
-export type BinaryLoadProgress = {
-  phase: 'download' | 'ready'
-  downloadedBytes?: number
-  totalBytes?: number
-}
+export type BinaryLoadProgress = DownloadProgress
 
 const BGM_BASE = '/assets/audio'
 const JACKET_BASE = '/assets/jacket'
@@ -111,22 +109,16 @@ type SongCreditsFile = {
   songs: SongCredits[]
 }
 
-let songCreditsPromise: Promise<SongCreditsFile> | null = null
+const loadCachedSongCredits = cachedJsonResource<SongCreditsFile>(SONG_CREDITS_URL, '曲目详情')
 
 /** 加载曲目详情（带进程内缓存）。 */
-export function loadSongCredits(): Promise<SongCreditsFile> {
-  songCreditsPromise ??= fetch(SONG_CREDITS_URL).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`曲目详情加载失败（${response.status}）：${SONG_CREDITS_URL}`)
-    }
-    return await response.json() as SongCreditsFile
-  })
-  return songCreditsPromise
+export function loadSongCredits(onProgress?: (progress: DownloadProgress) => void): Promise<SongCreditsFile> {
+  return loadCachedSongCredits(onProgress)
 }
 
 /** 按曲目 Id 查词曲编 / vocal。 */
-export async function findSongCredits(id: string): Promise<SongCredits | null> {
-  const file = await loadSongCredits()
+export async function findSongCredits(id: string, onProgress?: (progress: DownloadProgress) => void): Promise<SongCredits | null> {
+  const file = await loadSongCredits(onProgress)
   return file.songs.find((song) => song.id === id) ?? null
 }
 
@@ -151,7 +143,7 @@ export function creditsToMetadata(credits: SongCredits | null): {
 }
 
 /** 加载曲目列表（带进程内缓存）。 */
-let songListPromise: Promise<SongList> | null = null
+const loadCachedSongList = cachedJsonResource<SongList>(SONG_LIST_URL, '曲目列表')
 
 export type SongListLoadProgress = {
   phase: 'download' | 'ready'
@@ -160,27 +152,7 @@ export type SongListLoadProgress = {
 }
 
 export function loadSongList(onProgress?: (progress: SongListLoadProgress) => void): Promise<SongList> {
-  songListPromise ??= fetch(SONG_LIST_URL).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`曲目列表加载失败（${response.status}）：${SONG_LIST_URL}`)
-    }
-    if (onProgress) {
-      const totalBytes = Number(response.headers?.get?.('content-length'))
-      onProgress({
-        phase: 'download',
-        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
-      })
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      onProgress({
-        phase: 'ready',
-        downloadedBytes: bytes.byteLength,
-        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
-      })
-      return JSON.parse(new TextDecoder().decode(bytes)) as SongList
-    }
-    return await response.json() as SongList
-  })
-  return songListPromise
+  return loadCachedSongList(onProgress)
 }
 
 /** 由曲目条目推导 BGM / 曲绘 URL。 */
@@ -209,22 +181,12 @@ export async function fetchBytes(url: string | null, onProgress?: (progress: Bin
       console.warn(`[llll-pjsk] 资源缺失（${response.status}）：${url}`)
       return null
     }
-    const totalBytes = Number(response.headers?.get?.('content-length'))
-    onProgress?.({
-      phase: 'download',
-      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
-    })
     const contentType = response.headers?.get?.('content-type') ?? ''
     if (contentType.includes('text/html')) {
       console.warn(`[llll-pjsk] 资源路径返回了 HTML：${url}`)
       return null
     }
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    onProgress?.({
-      phase: 'ready',
-      downloadedBytes: bytes.byteLength,
-      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
-    })
+    const bytes = await readResponseBytes(response, onProgress)
     return bytes
   } catch (error) {
     console.warn('[llll-pjsk] 资源下载失败：', url, error)

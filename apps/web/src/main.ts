@@ -185,7 +185,7 @@ async function showView(view: ViewId, push = false) {
   if (push) updateUrl(view, true)
   await disposeActive()
   if (token !== transition) return
-  viewRoot.innerHTML = `<div class="view-loading" role="status"><div class="view-loading-card"><strong>正在加载页面资源…</strong><progress data-view-loading-progress aria-label="页面资源加载进度"></progress><div class="view-loading-meta"><span data-view-loading-detail>预览模块：views/${view}.ts</span><output data-view-loading-percent>加载中…</output></div><span class="view-loading-item">页面容器　✓</span><span class="view-loading-item">预览模块　${view}</span></div></div>`
+  viewRoot.innerHTML = `<div class="view-loading" role="status"><div class="view-loading-card"><strong>正在加载页面资源…</strong><progress data-view-loading-progress aria-label="页面资源加载进度"></progress><div class="view-loading-meta"><span data-view-loading-detail>正在下载预览模块…</span><output data-view-loading-percent>加载中…</output></div></div></div>`
   try {
     const module = await modules[view]()
     if (token !== transition) return

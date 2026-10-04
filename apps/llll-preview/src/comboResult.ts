@@ -242,10 +242,14 @@ export const AP_PARTICLES: readonly BannerParticle[] = BANNERS[0]!.particles;
 // ── 贴图 ─────────────────────────────────────────────────────────
 type Tex = { img: HTMLImageElement; data: ImageData | null };
 
-function loadTex(name: string): Promise<Tex> {
+export type ComboResultLoadProgress = { url: string; phase: 'download' | 'ready' };
+
+function loadTex(name: string, onProgress?: (progress: ComboResultLoadProgress) => void): Promise<Tex> {
   return new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
+    const url = `${BANNER_TEX_BASE}${name}.png`;
+    onProgress?.({ url, phase: 'download' });
     img.onload = () => {
       let data: ImageData | null = null;
       try {
@@ -257,10 +261,14 @@ function loadTex(name: string): Promise<Tex> {
       } catch {
         data = null;
       }
+      onProgress?.({ url, phase: 'ready' });
       resolve({ img, data });
     };
-    img.onerror = () => resolve({ img, data: null });
-    img.src = `${BANNER_TEX_BASE}${name}.png`;
+    img.onerror = () => {
+      onProgress?.({ url, phase: 'ready' });
+      resolve({ img, data: null });
+    };
+    img.src = url;
   });
 }
 
@@ -306,9 +314,9 @@ export class ComboResult {
   private last: number | null = null;
 
   /** 预载贴图（首次调用时开始）。 */
-  load(): Promise<void> {
+  load(onProgress?: (progress: ComboResultLoadProgress) => void): Promise<void> {
     if (this.ready) return this.ready;
-    this.ready = Promise.all(COMBO_RESULT_TEXTURES.map(async (n) => this.tex.set(n, await loadTex(n)))).then(() => {
+    this.ready = Promise.all(COMBO_RESULT_TEXTURES.map(async (n) => this.tex.set(n, await loadTex(n, onProgress)))).then(() => {
       BANNERS.forEach((b, k) => b.clip.nodes.forEach((n, i) => {
         const t = n.sprite ? this.tex.get(n.sprite) : undefined;
         if (!t) return;

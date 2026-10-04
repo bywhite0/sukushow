@@ -19,6 +19,17 @@ export function hudFont(weight: number, size: number): string {
 // ── 贴图缓存 ─────────────────────────────────────────────────────
 type ImageEntry = { img: HTMLImageElement; state: 'loading' | 'ok' | 'error'; done: Promise<void> };
 const images = new Map<string, ImageEntry>();
+export type ImageLoadProgress = { url: string; phase: 'download' | 'ready' };
+type ImageProgressListener = (progress: ImageLoadProgress) => void;
+const imageListeners = new Map<string, Set<ImageProgressListener>>();
+
+function notifyImage(url: string, phase: ImageLoadProgress['phase']): void {
+  const listeners = imageListeners.get(url);
+  if (!listeners) return;
+  const progress = { url, phase } satisfies ImageLoadProgress;
+  for (const listener of listeners) listener(progress);
+  if (phase === 'ready') imageListeners.delete(url);
+}
 
 function entry(url: string): ImageEntry {
   let e = images.get(url);
@@ -29,13 +40,15 @@ function entry(url: string): ImageEntry {
   const done = new Promise<void>((r) => { resolveDone = r; });
   e = { img, state: 'loading', done };
   const rec = e;
+  notifyImage(url, 'download');
   img.onload = () => {
     void img.decode().catch(() => undefined).then(() => {
       rec.state = img.naturalWidth > 0 ? 'ok' : 'error';
+      notifyImage(url, 'ready');
       resolveDone();
     });
   };
-  img.onerror = () => { rec.state = 'error'; resolveDone(); };
+  img.onerror = () => { rec.state = 'error'; notifyImage(url, 'ready'); resolveDone(); };
   img.src = url;
   images.set(url, e);
   return e;
@@ -53,8 +66,21 @@ export function imageFailed(url: string): boolean {
   return images.get(url)?.state === 'error';
 }
 
-export function preloadImages(urls: readonly string[]): Promise<void> {
+export function preloadImages(urls: readonly string[], onProgress?: ImageProgressListener): Promise<void> {
   if (typeof Image === 'undefined') return Promise.resolve();
+  if (onProgress) {
+    for (const url of urls) {
+      const current = images.get(url);
+      if (!current || current.state === 'loading') {
+        let listeners = imageListeners.get(url);
+        if (!listeners) imageListeners.set(url, listeners = new Set());
+        listeners.add(onProgress);
+        onProgress({ url, phase: 'download' });
+      } else {
+        onProgress({ url, phase: 'ready' });
+      }
+    }
+  }
   return Promise.all(urls.map((u) => entry(u).done)).then(() => undefined);
 }
 

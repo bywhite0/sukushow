@@ -1,3 +1,5 @@
+import { cachedJsonResource, readResponseBytes, type DownloadProgress } from './resourceDownload'
+
 /**
  * 曲目资源解析：由曲目 Id 推导 BGM 与曲绘的本地路径。
  *
@@ -60,11 +62,7 @@ export type SongAssets = {
   coverUrl: string | null
 }
 
-export type BinaryLoadProgress = {
-  phase: 'download' | 'ready'
-  downloadedBytes?: number
-  totalBytes?: number
-}
+export type BinaryLoadProgress = DownloadProgress
 
 const BGM_BASE = '/assets/audio'
 const JACKET_BASE = '/assets/jacket'
@@ -72,7 +70,7 @@ const JACKET_BASE = '/assets/jacket'
 /** 曲目列表在 public 下的落盘位置。 */
 export const SONG_LIST_URL = '/song-list.json'
 /** 加载曲目列表（带进程内缓存）。 */
-let songListPromise: Promise<SongList> | null = null
+const loadCachedSongList = cachedJsonResource<SongList>(SONG_LIST_URL, '曲目列表')
 
 export type SongListLoadProgress = {
   phase: 'download' | 'ready'
@@ -81,27 +79,7 @@ export type SongListLoadProgress = {
 }
 
 export function loadSongList(onProgress?: (progress: SongListLoadProgress) => void): Promise<SongList> {
-  songListPromise ??= fetch(SONG_LIST_URL).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`曲目列表加载失败（${response.status}）：${SONG_LIST_URL}`)
-    }
-    if (onProgress) {
-      const totalBytes = Number(response.headers?.get?.('content-length'))
-      onProgress({
-        phase: 'download',
-        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
-      })
-      const bytes = new Uint8Array(await response.arrayBuffer())
-      onProgress({
-        phase: 'ready',
-        downloadedBytes: bytes.byteLength,
-        totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
-      })
-      return JSON.parse(new TextDecoder().decode(bytes)) as SongList
-    }
-    return await response.json() as SongList
-  })
-  return songListPromise
+  return loadCachedSongList(onProgress)
 }
 
 /** 由曲目条目推导 BGM / 曲绘 URL。 */
@@ -124,8 +102,8 @@ export function findSongByChartFile(list: SongList, filename: string): { song: S
 }
 
 /** 按曲目 Id 查找。 */
-export async function findSong(id: string): Promise<SongEntry | null> {
-  const list = await loadSongList()
+export async function findSong(id: string, onProgress?: (progress: SongListLoadProgress) => void): Promise<SongEntry | null> {
+  const list = await loadSongList(onProgress)
   return list.songs.find((song) => song.id === id) ?? null
 }
 
@@ -140,22 +118,12 @@ export async function fetchBytes(url: string | null, onProgress?: (progress: Bin
       console.warn(`[llll-preview] 资源缺失（${response.status}）：${url}`)
       return null
     }
-    const totalBytes = Number(response.headers?.get?.('content-length'))
-    onProgress?.({
-      phase: 'download',
-      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : undefined,
-    })
     const contentType = response.headers?.get?.('content-type') ?? ''
     if (contentType.includes('text/html')) {
       console.warn(`[llll-preview] 资源路径返回了 HTML：${url}`)
       return null
     }
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    onProgress?.({
-      phase: 'ready',
-      downloadedBytes: bytes.byteLength,
-      totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : bytes.byteLength,
-    })
+    const bytes = await readResponseBytes(response, onProgress)
     return bytes
   } catch (error) {
     console.warn('[llll-preview] 资源下载失败：', url, error)

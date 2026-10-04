@@ -5,6 +5,7 @@
  */
 
 import type { Chart, Note } from './chart';
+import { readResponseBytes, type DownloadProgress } from './resourceDownload';
 import { noteJudgementTimes } from './chart';
 import type { NoteJudgementType } from './rgOptions';
 
@@ -40,6 +41,9 @@ const CUE_FILE: Record<number, string> = {
   [SE_CUE.start]: 'se_rhythm_start_0001',
   [SE_CUE.touch]: 'se_rhythm_touch_0001',
 };
+
+export const SE_RESOURCE_URLS = Object.values(CUE_FILE).map((name) => `/se/${name}.wav`);
+export type SeLoadProgress = DownloadProgress & { url: string };
 
 /** AddSingle: `(uint)(type−1)<3 ? type+5 : 9` (Bad/Good/Great → 6/7/8, else Perfect). */
 export function cueIndexForJudgement(type: NoteJudgementType): number {
@@ -152,19 +156,27 @@ export class WebAudioSeOutput implements SeOutput {
     return new WebAudioSeOutput(new AudioContext(), true);
   }
 
-  async ensureLoaded(): Promise<void> {
+  async ensureLoaded(onProgress?: (progress: SeLoadProgress) => void): Promise<void> {
     if (this.loadPromise) return this.loadPromise;
     this.loadPromise = (async () => {
       await Promise.all(
         Object.entries(CUE_FILE).map(async ([idx, name]) => {
           const i = Number(idx);
+          const url = `/se/${name}.wav`;
           try {
-            const res = await fetch(`/se/${name}.wav`);
-            if (!res.ok) return;
-            const buf = await this.context.decodeAudioData(await res.arrayBuffer());
+            const res = await fetch(url);
+            if (!res.ok) {
+              onProgress?.({ url, phase: 'ready', downloadedBytes: 0 });
+              return;
+            }
+            const bytes = await readResponseBytes(res, (progress) => onProgress?.({ url, ...progress }));
+            const audioBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+            const buf = await this.context.decodeAudioData(audioBuffer);
             this.buffers.set(i, buf);
+            onProgress?.({ url, phase: 'ready', downloadedBytes: bytes.byteLength });
           } catch {
             /* missing cue is non-fatal in preview */
+            onProgress?.({ url, phase: 'ready', downloadedBytes: 0 });
           }
         }),
       );

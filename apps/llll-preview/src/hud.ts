@@ -232,6 +232,8 @@ const COMBO_EFFECT_COLOR = 'rgb(11,150,255)';
 /** 上层底光颜色 (0.4575, 0.7675, 1)。 */
 const COMBO_GLOW_UPPER_COLOR = 'rgb(117,196,255)';
 const AP_RATE_ROOT_TEX = '/rg/fx/tex/APRate_OutlineEffect.png';
+const AP_RATE_CORE_NAME = 'Default-Particle.png';
+const AP_RATE_CORE_TEX = `/rg/fx/tex/${AP_RATE_CORE_NAME}`;
 
 const PINK = 'rgb(255,58,153)';
 const TEAL = 'rgb(0,189,182)';
@@ -403,6 +405,7 @@ export class LiveHud {
         'ui_sc2_ingame_voltage_base', 'ui_sc2_ingame_gage_base_02', 'ui_sc2_ingame_gage_ap', 'ui_sc2_ingame_gage_voltage',
       ].map(spriteUrl),
       COMBO_EFFECT_SHEET_TEX, COMBO_EFFECT_DIGIT1_TEX, COMBO_GLOW_UPPER_TEX, COMBO_GLOW_LOWER_TEX, AP_RATE_ROOT_TEX,
+      '/rg/fx/tex/sc2_Particle_light02.png', '/rg/fx/tex/sc2_outgameLvUp_glitter_lyric_01.png', AP_RATE_CORE_TEX,
     ];
   }
 
@@ -760,7 +763,7 @@ export class LiveHud {
         this.apRateTexChannels.set(spec.tex, { ch });
       });
     }
-    load('Default-Particle.png', (id) => {
+    load(AP_RATE_CORE_NAME, (id) => {
       this.apRateCoreTex = { w: id.width, h: id.height, px: id.data };
     });
   }
