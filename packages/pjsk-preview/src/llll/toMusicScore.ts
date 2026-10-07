@@ -16,7 +16,7 @@
  *   NoteList: laneStart/laneEnd 含端点 0..59；category/noteBaseType 决定
  *             音符种类；Hold 用 previous/nextConnectionId 串链。
  */
-import type { Chart, Note } from './chart'
+import type { Chart, Note } from '@sukushow/chart/chart'
 
 export const TICKS_PER_BEAT = 480
 

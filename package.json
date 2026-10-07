@@ -8,7 +8,7 @@
     "dev": "pnpm --filter @sukushow/web dev",
     "preview": "pnpm --filter @sukushow/web preview",
     "render:svg": "pnpm --filter @sukushow/chart-svg render",
-    "build": "pnpm --filter @sukushow/export build && pnpm --filter @sukushow/llll-preview build && pnpm --filter @sukushow/flat-preview build && pnpm --filter @sukushow/pjsk-preview build && pnpm --filter @sukushow/web build && pnpm --filter @sukushow/chart-svg build",
+    "build": "pnpm --filter @sukushow/chart build && pnpm --filter @sukushow/export build && pnpm --filter @sukushow/llll-preview build && pnpm --filter @sukushow/pjsk-preview build && pnpm --filter @sukushow/web build && pnpm --filter @sukushow/chart-svg build",
     "test": "pnpm --filter @sukushow/* --if-present run test",
     "test:browser": "pnpm --filter @sukushow/web test:browser",
     "verify:shared-assets": "node ./scripts/verify-shared-assets.mjs",

@@ -5,11 +5,10 @@
  * 总时长在顶部，读谱方向和游戏里一致。参考仓库 pjsekai-scores-rs 的 SVG 也是这个朝向
  * （`y = time_height × Δt(bar, barStop)`，以末小节为基准向上量）。
  *
- * 与 2D 谱面实现 的差别：那边是视口 + 滚动偏移（看局部），这边是整谱定尺（出图），
- * 故没有 `scrollPx`，`pxPerSec` 直接决定成图高度。
+ * 整谱定尺出图：`pxPerSec` 直接决定成图高度。
  */
 
-import type { Chart, Note } from './chart';
+import type { Chart, Note } from '@sukushow/chart/chart';
 
 export const LANES = 60;
 
@@ -63,6 +62,15 @@ export function trackWidth(lay: Layout): number {
 /** 成图总宽（像素）。 */
 export function canvasWidth(lay: Layout): number {
   return trackWidth(lay) + lay.sideWidth + lay.padX * 2;
+}
+
+/**
+ * 时间轴长度（秒）：给出曲终时画到曲终，有音符晚于曲终时延到末音符终点；
+ * 没有曲终时用谱面的兜底时长（末音符 + 2 秒）。
+ */
+export function axisDuration(chart: Chart, finishTime: number | null): number {
+  if (finishTime === null) return chart.duration;
+  return chart.notes.reduce((t, n) => Math.max(t, n.end), finishTime);
 }
 
 /** 成图总高（像素）。 */

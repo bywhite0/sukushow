@@ -80,12 +80,12 @@ pnpm preview
 
 ## 目录
 
-- `src/chart.ts`：源格式、校验、串链、同时押。
+- 谱面解析与曲目时间（Fever、曲终）来自 `@sukushow/chart`。
 - `src/geometry.ts`：空间数学。
 - `src/slice.ts`、`src/shaders.ts`、`src/rgAssets.ts`、`src/fx.ts`：9-slice、着色器、资源加载、hit FX。
 - `src/hud.ts`：SafeArea 覆盖层。
 - `src/transport.ts`、`src/audio.ts`、`src/se.ts`：播放时基、本地音乐与局内音效。
-- `src/score.ts`、`src/fever.ts`、`src/hudFxMath.ts`：计分、Fever 窗与 HUD 动画曲线。
+- `src/score.ts`、`src/fever.ts`、`src/hudFxMath.ts`：计分、Fever 边线颜色与 HUD 动画曲线。
 - `src/renderer.ts`：WebGL 批量几何。
 - `src/rgOptions.ts`：游戏选项默认值；工作台和页面设置位于 `apps/web/src/views/llll/`。
 - `tests/`、`scripts/`：回归测试与本地语料校验。

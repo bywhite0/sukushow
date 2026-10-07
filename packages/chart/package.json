@@ -1,0 +1,28 @@
+{
+  "name": "@sukushow/chart",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "莲之空（Link! Like! ラブライブ！）原格式谱面的解析，以及曲目的 Fever 与曲终时刻",
+  "exports": {
+    "./package.json": "./package.json",
+    "./*.json": "./src/*.json",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "vitest run",
+    "verify:corpus": "tsx scripts/verify-corpus.ts",
+    "metadata:timing": "tsx scripts/build-song-timing.ts"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

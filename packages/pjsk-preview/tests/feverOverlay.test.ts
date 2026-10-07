@@ -25,6 +25,7 @@
  * 前置：dev server 在 5199 上跑着。不在时整组跳过，避免无服务环境下报假红。
  */
 import { describe, expect, it } from 'vitest'
+import { feverForSong } from '@sukushow/chart/songTiming'
 import fs from 'node:fs'
 
 const BASE = process.env.PREVIEW_URL ?? 'http://localhost:5199/'
@@ -121,17 +122,11 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     )
     await page.waitForTimeout(15000)
 
-    const fever = await page.evaluate(
-      (id: string) =>
-        fetch('/src/llll/feverMetadata.json')
-          .then((r) => r.json())
-          .then((j) => j[id] ?? null),
-      SONG,
-    )
+    const fever = feverForSong(SONG)
     const lead = await page.evaluate(
       () => (window as any).__LLL_PJSK__.player.getStateSnapshot().effectiveLeadInSec,
     )
-    expect(fever, `曲目 ${SONG} 应在 feverMetadata 里`).toBeTruthy()
+    if (!fever) throw new Error(`曲目 ${SONG} 应在时间索引里`)
 
     // 场景压黑：只留 HUD + Fever 覆盖层，差分才干净。
     await page.evaluate(() => {
@@ -294,17 +289,11 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     )
     await page.waitForTimeout(15000)
 
-    const meta = await page.evaluate(
-      (id: string) =>
-        fetch('/src/llll/feverMetadata.json')
-          .then((r) => r.json())
-          .then((j) => j[id] ?? null),
-      SONG,
-    )
+    const meta = feverForSong(SONG)
     const lead = await page.evaluate(
       () => (window as any).__LLL_PJSK__.player.getStateSnapshot().effectiveLeadInSec,
     )
-    expect(meta, `曲目 ${SONG} 应在 feverMetadata 里`).toBeTruthy()
+    if (!meta) throw new Error(`曲目 ${SONG} 应在时间索引里`)
 
     // 充能分母 = Fever 起点之前的音符数。谱面从页面里取（与实现同源）。
     const totalCharge = await page.evaluate(

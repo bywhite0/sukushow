@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parseChart } from '../src/llll/chart'
+import { parseChart } from '@sukushow/chart/chart'
 import { chartToMusicScore } from '../src/llll/toMusicScore'
 
 // 真实谱面属游戏资源、不进版本库；用 LLL_REAL_CHART 指向样本，未设置时整组跳过。

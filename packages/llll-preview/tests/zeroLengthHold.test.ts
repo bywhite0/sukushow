@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartAllNoteSize, parseChart } from '../src/chart';
+import { chartAllNoteSize, parseChart } from '@sukushow/chart/chart';
 import { createSlope, holdSegment } from '../src/geometry';
 
 const flags = (t: number, l: number, r: number, l2 = 0, r2 = 0) =>

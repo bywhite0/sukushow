@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { HitFx } from '../src/fx';
 import { feverCorePrefab } from '../src/feverCore';
-import { parseChart } from '../src/chart';
+import { parseChart } from '@sukushow/chart/chart';
 import type { FxFile } from '../src/rgAssets';
 
 function loadFeverFixture(): FxFile {

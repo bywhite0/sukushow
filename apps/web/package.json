@@ -12,6 +12,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
+    "@sukushow/chart": "workspace:*",
     "@sukushow/export": "workspace:*",
     "@sukushow/llll-preview": "workspace:*",
     "@sukushow/pjsk-preview": "workspace:*"

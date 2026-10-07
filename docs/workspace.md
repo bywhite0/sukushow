@@ -5,17 +5,18 @@
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
 | `apps/web` | 唯一浏览器前端：导航、选曲、URL 参数、设置、加载提示与各模式视图 | 源码 MIT；构建产物 AGPL-3.0-only |
-| `packages/llll-preview` | LLLL 解析、WebGL 渲染、HUD 与音频 | MIT |
+| `packages/chart` | LLLL 原格式谱面解析；曲目的 Fever 时段与曲终时刻 | MIT |
+| `packages/llll-preview` | LLLL WebGL 渲染、HUD 与音频 | MIT |
 | `packages/pjsk-preview` | PJSK WASM 渲染、LLLL 谱面适配与 PJSK 素材 | AGPL-3.0-only |
 | `packages/export` | 视频导出核心：逐帧编码、离线混音与封装 | MIT |
-| `packages/flat-preview` | 2D 解析与几何，供 SVG 导出交叉校验 | MIT |
-| `packages/chart-svg` | 静态 SVG 图片导出 | MIT |
+| `packages/chart-svg` | 静态 SVG 图片导出：平面布局、音符几何与 SVG 生成 | MIT |
 
 ## 依赖规则
 
 - 各包通过 `package.json` 的 `exports` 暴露模块；`apps/web` 只按包名（`@sukushow/*`）引用，并在 `dependencies` 中声明。
 - MIT 包不依赖 `@sukushow/pjsk-preview`；`@sukushow/pjsk-preview` 可以依赖 MIT 包。
 - 包不引用 `apps/` 中的代码；页面模块的测试位于 `apps/web/tests`。
+- 谱面解析与曲目时间（Fever 时段、曲终）只由 `@sukushow/chart` 提供；其余包与 `apps/web` 都从这里取，不各自解析。
 - `@sukushow/export` 只通过 `ExportFrameSource` 接口驱动帧源，不依赖任何渲染包。各渲染器在自己的包里写死开场区间（`EXPORT_OPENING`），导出对话框把它交给 `resolveExportRange`。
 
 ## 入口

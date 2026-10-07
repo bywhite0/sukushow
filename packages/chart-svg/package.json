@@ -11,11 +11,13 @@
   },
   "description": "把莲之空（Link! Like! ラブライブ！）原格式谱面渲染成 SVG",
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "render": "tsx scripts/render.ts",
     "verify:corpus": "tsx scripts/verify-corpus.ts",
-    "cross-check": "tsx scripts/cross-check.ts",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@sukushow/chart": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

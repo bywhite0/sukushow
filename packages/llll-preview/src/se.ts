@@ -4,9 +4,9 @@
  * User volume is an output-layer multiply (CRI category in original).
  */
 
-import type { Chart, Note } from './chart';
+import type { Chart, Note } from '@sukushow/chart/chart';
 import { readResponseBytes, type DownloadProgress } from './resourceDownload';
-import { noteJudgementTimes } from './chart';
+import { noteJudgementTimes } from '@sukushow/chart/chart';
 import type { NoteJudgementType } from './rgOptions';
 
 /** Binary cue ids inside rhythm.acb (not vgmstream stream index). */

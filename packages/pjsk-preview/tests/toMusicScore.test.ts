@@ -5,7 +5,7 @@
  * laneStart/laneEnd 里，而不是被压到 0–11。
  */
 import { describe, expect, it } from 'vitest'
-import { parseChart } from '../src/llll/chart'
+import { parseChart } from '@sukushow/chart/chart'
 import { chartToMusicScore, isLlllNativeChart, TICKS_PER_BEAT } from '../src/llll/toMusicScore'
 
 /** 按 llll Flags 位域拼一个音符：type 4bit / r 6bit / r2 6bit / l 6bit / l2 6bit。 */

@@ -1,4 +1,4 @@
-import type { Note } from './chart';
+import type { Note } from '@sukushow/chart/chart';
 export const BORDER = -4.632, SPAWN = 52, Y = 4.5;
 /** Base world width of one lane flag unit (HOLD_MESH default). */
 export const BASE_LANE_WIDTH = 0.15;

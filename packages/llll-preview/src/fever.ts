@@ -1,4 +1,4 @@
-/** Fever 时段与边线颜色；几何仍为屏幕空间近似。 */
+/** Fever 边线颜色与拖尾因子；几何为屏幕空间近似。时段见 `@sukushow/chart/fever`。 */
 
 /** libunity：模块使用同一粒子 seed、不同偏移，整数混合后执行 float32 转换。 */
 function trailSeedFactor(seed: number, offset: number): number {
@@ -17,13 +17,6 @@ export function feverTrailWidthFactor(seed: number): number {
 /** libunity 0x12AB338–0x12AB388：colorOverLifetime 的独立 seed 偏移。 */
 export function feverTrailColorFactor(seed: number): number {
   return trailSeedFactor(seed, 0x591bc05c);
-}
-
-export type FeverWindow = { start: number; end: number };
-
-export function isFeverAt(time: number, win: FeverWindow | null | undefined): boolean {
-  if (!win) return false;
-  return time >= win.start && time < win.end;
 }
 
 export const FEVER_LINE_CYCLE = 1.6;

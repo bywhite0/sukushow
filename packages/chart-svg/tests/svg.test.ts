@@ -2,10 +2,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
-import { decodeChartBytes } from '../src/chart';
+import { decodeChart } from '@sukushow/chart/chart';
 import { defaultLayout, timeY } from '../src/layout';
 import { type SpriteLibrary, renderSvg } from '../src/svg';
-import { feverWindow, isFeverAt } from '../src/fever';
 
 /** 与渲染器同一口径的数字格式（去掉浮点噪声、最多三位小数）。 */
 const n3 = (v: number) => {
@@ -18,7 +17,7 @@ const flags = (type: number, l: number, r: number, l2 = l, r2 = r) =>
 
 const chartOf = (notes: unknown[]) => {
   const json = JSON.stringify({ Notes: notes, Bpms: [{ Time: 0, Bpm: 120 }] });
-  return decodeChartBytes(new Uint8Array(deflateRawSync(Buffer.from(json))));
+  return decodeChart(new Uint8Array(deflateRawSync(Buffer.from(json))));
 };
 
 /** 带全部七张贴图的贴图库（URI 用占位串，只验证引用结构）。 */
@@ -250,7 +249,7 @@ describe('分列', () => {
       notes.push({ Uid: i + 1, just: String(i * 0.5), holds: [], Flags: flags(0, 10, 12) });
     }
     const json = JSON.stringify({ Notes: notes, Bpms: [{ Time: 0, Bpm: 120 }] });
-    return decodeChartBytes(new Uint8Array(deflateRawSync(Buffer.from(json))));
+    return decodeChart(new Uint8Array(deflateRawSync(Buffer.from(json))));
   };
 
   it('默认按长宽比切列，出横版', () => {
@@ -346,31 +345,6 @@ describe('Combo 与 Fever', () => {
       { Uid: 2, just: '1.5', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
     ]);
     expect(chart.maxCombo).toBe(5);
-  });
-
-  it('Fever 窗口：分段表 = [0, ...边界, 曲末]，取第 N 段', () => {
-    // 表头 + 四个边界 + 曲末，共 5 段。
-    const csv = [
-      'song_time,key_type',
-      '18228,20',
-      '42532,20',
-      '66835,20',
-      '91139,20',
-      '136709,99',
-    ].join('\n');
-    expect(feverWindow(csv, 5)).toEqual({ start: 91.139, end: 136.709 });
-    expect(feverWindow(csv, 1)).toEqual({ start: 0, end: 18.228 });
-    expect(isFeverAt(100, { start: 91.139, end: 136.709 })).toBe(true);
-    // 左闭右开。
-    expect(isFeverAt(136.709, { start: 91.139, end: 136.709 })).toBe(false);
-    expect(isFeverAt(50, { start: 91.139, end: 136.709 })).toBe(false);
-    expect(isFeverAt(50, null)).toBe(false);
-  });
-
-  it('Fever 段号越界时报错', () => {
-    const csv = ['song_time,key_type', '18228,20', '42532,20', '66835,20', '91139,20', '136709,99'].join('\n');
-    expect(() => feverWindow(csv, 0)).toThrow();
-    expect(() => feverWindow(csv, 6)).toThrow();
   });
 
   it('侧栏：画 Fever 带与各标注', () => {

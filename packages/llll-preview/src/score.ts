@@ -10,8 +10,8 @@
  * AllNoteSize = Σ_roots (Holds.length+1) after Pass2 GetHolds; same ticks as LiveHud countHeads.
  */
 
-import type { Chart } from './chart';
-import { chartAllNoteSize } from './chart';
+import type { Chart } from '@sukushow/chart/chart';
+import { chartAllNoteSize } from '@sukushow/chart/chart';
 import type { NoteJudgementType } from './rgOptions';
 
 export type ScoreRankId = 0 | 1 | 2 | 3 | 4; // None C B A S

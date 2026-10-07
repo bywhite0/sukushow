@@ -14,17 +14,17 @@
     "test": "vitest run",
     "smoke:export": "node ./scripts/export-smoke.mjs",
     "verify:export-memory": "node ./scripts/export-memory.mjs",
-    "verify:corpus": "tsx scripts/verify-corpus.ts",
-    "metadata:fever": "tsx scripts/build-fever-metadata.ts"
+    "verify:corpus": "tsx scripts/verify-corpus.ts"
   },
   "dependencies": {
-    "fflate": "^0.8.2",
+    "@sukushow/chart": "workspace:*",
     "three": "^0.183.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/node": "^24.0.0",
     "@types/three": "^0.183.0",
+    "fflate": "^0.8.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",

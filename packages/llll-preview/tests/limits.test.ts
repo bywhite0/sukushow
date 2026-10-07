@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeChart, parseChart } from '../src/chart';
+import { decodeChart, parseChart } from '@sukushow/chart/chart';
 import { demoChart } from '../src/demo';
 import { createSlope, holdSegment } from '../src/geometry';
 

@@ -1,0 +1,1654 @@
+{
+  "103101": {
+    "start": 75.556,
+    "end": 105.185,
+    "chanceStart": 51.852,
+    "chanceEnd": 75.556,
+    "finishTime": 139.259
+  },
+  "103102": {
+    "start": 65.185,
+    "end": 94.815,
+    "chanceStart": 48.889,
+    "chanceEnd": 65.185,
+    "finishTime": 109.63
+  },
+  "103103": {
+    "start": 41.455,
+    "end": 65.455,
+    "chanceStart": 32.727,
+    "chanceEnd": 41.455,
+    "finishTime": 78.545
+  },
+  "103104": {
+    "start": 57.6,
+    "end": 79.543,
+    "chanceStart": 35.657,
+    "chanceEnd": 57.6,
+    "finishTime": 98.743
+  },
+  "103105": {
+    "start": 71.538,
+    "end": 94.615,
+    "chanceStart": 50.769,
+    "chanceEnd": 71.538,
+    "finishTime": 113.077
+  },
+  "103106": {
+    "start": 53.165,
+    "end": 77.468,
+    "chanceStart": 34.937,
+    "chanceEnd": 53.165,
+    "finishTime": 97.215
+  },
+  "103107": {
+    "start": 50.909,
+    "end": 80,
+    "chanceStart": 32.727,
+    "chanceEnd": 50.909,
+    "finishTime": 100
+  },
+  "103108": {
+    "start": 82.353,
+    "end": 108.235,
+    "chanceStart": 61.176,
+    "chanceEnd": 82.353,
+    "finishTime": 108.235
+  },
+  "103109": {
+    "start": 65.185,
+    "end": 94.815,
+    "chanceStart": 48.889,
+    "chanceEnd": 65.185,
+    "finishTime": 109.63
+  },
+  "103110": {
+    "start": 48.372,
+    "end": 80,
+    "chanceStart": 33.488,
+    "chanceEnd": 48.372,
+    "finishTime": 89.302
+  },
+  "103111": {
+    "start": 49.565,
+    "end": 80.87,
+    "chanceStart": 28.696,
+    "chanceEnd": 49.565,
+    "finishTime": 117.391
+  },
+  "103112": {
+    "start": 75.556,
+    "end": 105.185,
+    "chanceStart": 51.852,
+    "chanceEnd": 75.556,
+    "finishTime": 139.259
+  },
+  "103113": {
+    "start": 55.385,
+    "end": 80,
+    "chanceStart": 43.077,
+    "chanceEnd": 55.385,
+    "finishTime": 87.692
+  },
+  "103114": {
+    "start": 105,
+    "end": 148.5,
+    "chanceStart": 75,
+    "chanceEnd": 105,
+    "finishTime": 148.5
+  },
+  "103115": {
+    "start": 66.857,
+    "end": 92.571,
+    "chanceStart": 51.429,
+    "chanceEnd": 66.857,
+    "finishTime": 108
+  },
+  "103116": {
+    "start": 49.412,
+    "end": 83.294,
+    "chanceStart": 15.529,
+    "chanceEnd": 49.412,
+    "finishTime": 148.235
+  },
+  "103117": {
+    "start": 55.147,
+    "end": 83.382,
+    "chanceStart": 38.824,
+    "chanceEnd": 55.147,
+    "finishTime": 104.559
+  },
+  "103118": {
+    "start": 99.672,
+    "end": 140.328,
+    "chanceStart": 78.689,
+    "chanceEnd": 99.672,
+    "finishTime": 140.328
+  },
+  "103119": {
+    "start": 51.329,
+    "end": 95.723,
+    "chanceStart": 37.457,
+    "chanceEnd": 51.329,
+    "finishTime": 112.37
+  },
+  "103120": {
+    "start": 60,
+    "end": 85.263,
+    "chanceStart": 44.211,
+    "chanceEnd": 60,
+    "finishTime": 104.211
+  },
+  "103201": {
+    "start": 61.796,
+    "end": 93.413,
+    "chanceStart": 41.677,
+    "chanceEnd": 61.796,
+    "finishTime": 93.413
+  },
+  "103202": {
+    "start": 67.133,
+    "end": 97.343,
+    "chanceStart": 57.063,
+    "chanceEnd": 67.133,
+    "finishTime": 112.448
+  },
+  "103203": {
+    "start": 58.105,
+    "end": 78.316,
+    "chanceStart": 37.895,
+    "chanceEnd": 58.105,
+    "finishTime": 101.053
+  },
+  "103204": {
+    "start": 52.245,
+    "end": 86.531,
+    "chanceStart": 35.918,
+    "chanceEnd": 52.245,
+    "finishTime": 106.122
+  },
+  "103205": {
+    "start": 56.652,
+    "end": 81.373,
+    "chanceStart": 36.052,
+    "chanceEnd": 56.652,
+    "finishTime": 93.734
+  },
+  "103301": {
+    "start": 60,
+    "end": 81.667,
+    "chanceStart": 38.667,
+    "chanceEnd": 60,
+    "finishTime": 94.667
+  },
+  "103302": {
+    "start": 59.341,
+    "end": 96.264,
+    "chanceStart": 46.154,
+    "chanceEnd": 59.341,
+    "finishTime": 117.363
+  },
+  "104101": {
+    "start": 75.556,
+    "end": 105.185,
+    "chanceStart": 51.852,
+    "chanceEnd": 75.556,
+    "finishTime": 139.259
+  },
+  "104102": {
+    "start": 62.041,
+    "end": 91.429,
+    "chanceStart": 48.98,
+    "chanceEnd": 62.041,
+    "finishTime": 114.286
+  },
+  "104103": {
+    "start": 54.34,
+    "end": 78.491,
+    "chanceStart": 39.245,
+    "chanceEnd": 54.34,
+    "finishTime": 92.075
+  },
+  "104104": {
+    "start": 66.857,
+    "end": 92.571,
+    "chanceStart": 51.429,
+    "chanceEnd": 66.857,
+    "finishTime": 108
+  },
+  "104105": {
+    "start": 60,
+    "end": 85.116,
+    "chanceStart": 46.047,
+    "chanceEnd": 60,
+    "finishTime": 100.465
+  },
+  "104106": {
+    "start": 65.185,
+    "end": 94.815,
+    "chanceStart": 48.889,
+    "chanceEnd": 65.185,
+    "finishTime": 109.63
+  },
+  "104107": {
+    "start": 53.165,
+    "end": 77.468,
+    "chanceStart": 34.937,
+    "chanceEnd": 53.165,
+    "finishTime": 97.215
+  },
+  "104108": {
+    "start": 48.372,
+    "end": 80,
+    "chanceStart": 33.488,
+    "chanceEnd": 48.372,
+    "finishTime": 89.302
+  },
+  "104109": {
+    "start": 62.444,
+    "end": 90.807,
+    "chanceStart": 40.489,
+    "chanceEnd": 62.444,
+    "finishTime": 112.625
+  },
+  "104110": {
+    "start": 60,
+    "end": 85.263,
+    "chanceStart": 44.211,
+    "chanceEnd": 60,
+    "finishTime": 104.211
+  },
+  "104111": {
+    "start": 99.672,
+    "end": 140.328,
+    "chanceStart": 78.689,
+    "chanceEnd": 99.672,
+    "finishTime": 140.328
+  },
+  "104112": {
+    "start": 72.727,
+    "end": 100.606,
+    "chanceStart": 48.485,
+    "chanceEnd": 72.727,
+    "finishTime": 123.636
+  },
+  "104113": {
+    "start": 55.147,
+    "end": 90.441,
+    "chanceStart": 38.824,
+    "chanceEnd": 55.147,
+    "finishTime": 104.559
+  },
+  "104114": {
+    "start": 59.684,
+    "end": 92.526,
+    "chanceStart": 41.684,
+    "chanceEnd": 59.684,
+    "finishTime": 109.895
+  },
+  "104115": {
+    "start": 90,
+    "end": 118.571,
+    "chanceStart": 65.714,
+    "chanceEnd": 90,
+    "finishTime": 118.571
+  },
+  "104116": {
+    "start": 50.743,
+    "end": 89.143,
+    "chanceStart": 37.029,
+    "chanceEnd": 50.743,
+    "finishTime": 105.6
+  },
+  "104117": {
+    "start": 74.545,
+    "end": 105.455,
+    "chanceStart": 45.455,
+    "chanceEnd": 74.545,
+    "finishTime": 116.364
+  },
+  "104118": {
+    "start": 43.125,
+    "end": 73.125,
+    "chanceStart": 33.75,
+    "chanceEnd": 43.125,
+    "finishTime": 91.875
+  },
+  "104119": {
+    "start": 105.185,
+    "end": 146.667,
+    "chanceStart": 75.556,
+    "chanceEnd": 105.185,
+    "finishTime": 198.519
+  },
+  "104120": {
+    "start": 44.444,
+    "end": 71.111,
+    "chanceStart": 31.111,
+    "chanceEnd": 44.444,
+    "finishTime": 95.556
+  },
+  "104201": {
+    "start": 48.862,
+    "end": 71.856,
+    "chanceStart": 25.868,
+    "chanceEnd": 48.862,
+    "finishTime": 90.539
+  },
+  "104202": {
+    "start": 70.588,
+    "end": 98.824,
+    "chanceStart": 45.49,
+    "chanceEnd": 70.588,
+    "finishTime": 116.078
+  },
+  "104203": {
+    "start": 75.53,
+    "end": 95.93,
+    "chanceStart": 51.53,
+    "chanceEnd": 75.53,
+    "finishTime": 123.53
+  },
+  "104204": {
+    "start": 68.571,
+    "end": 90.514,
+    "chanceStart": 46.629,
+    "chanceEnd": 68.571,
+    "finishTime": 123.429
+  },
+  "104301": {
+    "start": 67.765,
+    "end": 101.647,
+    "chanceStart": 48,
+    "chanceEnd": 67.765,
+    "finishTime": 121.412
+  },
+  "104302": {
+    "start": 70.25,
+    "end": 101.218,
+    "chanceStart": 56.315,
+    "chanceEnd": 70.25,
+    "finishTime": 101.218
+  },
+  "105101": {
+    "start": 75.556,
+    "end": 105.185,
+    "chanceStart": 51.852,
+    "chanceEnd": 75.556,
+    "finishTime": 139.259
+  },
+  "105102": {
+    "start": 53.182,
+    "end": 80,
+    "chanceStart": 38.788,
+    "chanceEnd": 53.182,
+    "finishTime": 101.818
+  },
+  "105103": {
+    "start": 54.375,
+    "end": 76.193,
+    "chanceStart": 34.091,
+    "chanceEnd": 54.375,
+    "finishTime": 95.455
+  },
+  "105104": {
+    "start": 62.609,
+    "end": 104.348,
+    "chanceStart": 45.217,
+    "chanceEnd": 62.609,
+    "finishTime": 126.957
+  },
+  "105105": {
+    "start": 50.909,
+    "end": 94.545,
+    "chanceStart": 37.818,
+    "chanceEnd": 50.909,
+    "finishTime": 117.818
+  },
+  "105106": {
+    "start": 45.474,
+    "end": 70.737,
+    "chanceStart": 30.316,
+    "chanceEnd": 45.474,
+    "finishTime": 83.368
+  },
+  "203101": {
+    "start": 69.31,
+    "end": 91.379,
+    "chanceStart": 47.241,
+    "chanceEnd": 69.31,
+    "finishTime": 117.241
+  },
+  "203102": {
+    "start": 66.545,
+    "end": 84,
+    "chanceStart": 46.909,
+    "chanceEnd": 66.545,
+    "finishTime": 103.636
+  },
+  "203103": {
+    "start": 56.889,
+    "end": 94.222,
+    "chanceStart": 42.667,
+    "chanceEnd": 56.889,
+    "finishTime": 94.222
+  },
+  "203104": {
+    "start": 68.308,
+    "end": 101.538,
+    "chanceStart": 53.538,
+    "chanceEnd": 68.308,
+    "finishTime": 118.154
+  },
+  "203105": {
+    "start": 60.638,
+    "end": 81.064,
+    "chanceStart": 45.957,
+    "chanceEnd": 60.638,
+    "finishTime": 91.915
+  },
+  "203106": {
+    "start": 58.477,
+    "end": 77.97,
+    "chanceStart": 36.548,
+    "chanceEnd": 58.477,
+    "finishTime": 91.371
+  },
+  "203107": {
+    "start": 59.13,
+    "end": 88.696,
+    "chanceStart": 45.217,
+    "chanceEnd": 59.13,
+    "finishTime": 107.826
+  },
+  "203108": {
+    "start": 52,
+    "end": 96,
+    "chanceStart": 34.667,
+    "chanceEnd": 52,
+    "finishTime": 142.667
+  },
+  "203109": {
+    "start": 85.946,
+    "end": 111.892,
+    "chanceStart": 47.027,
+    "chanceEnd": 85.946,
+    "finishTime": 137.838
+  },
+  "203110": {
+    "start": 79.091,
+    "end": 103.636,
+    "chanceStart": 57.273,
+    "chanceEnd": 79.091,
+    "finishTime": 120
+  },
+  "203111": {
+    "start": 58.305,
+    "end": 96.271,
+    "chanceStart": 36.61,
+    "chanceEnd": 58.305,
+    "finishTime": 109.831
+  },
+  "203112": {
+    "start": 52.5,
+    "end": 82.5,
+    "chanceStart": 37.5,
+    "chanceEnd": 52.5,
+    "finishTime": 99.375
+  },
+  "203113": {
+    "start": 52.235,
+    "end": 74.824,
+    "chanceStart": 40.941,
+    "chanceEnd": 52.235,
+    "finishTime": 93.176
+  },
+  "203114": {
+    "start": 63.797,
+    "end": 112.405,
+    "chanceStart": 39.494,
+    "chanceEnd": 63.797,
+    "finishTime": 133.671
+  },
+  "203115": {
+    "start": 71.053,
+    "end": 96.316,
+    "chanceStart": 44.211,
+    "chanceEnd": 71.053,
+    "finishTime": 129.474
+  },
+  "203116": {
+    "start": 86.667,
+    "end": 134.667,
+    "chanceStart": 56,
+    "chanceEnd": 86.667,
+    "finishTime": 134.667
+  },
+  "203117": {
+    "start": 91.139,
+    "end": 136.709,
+    "chanceStart": 66.835,
+    "chanceEnd": 91.139,
+    "finishTime": 136.709
+  },
+  "203118": {
+    "start": 60.321,
+    "end": 85.989,
+    "chanceStart": 47.487,
+    "chanceEnd": 60.321,
+    "finishTime": 105.241
+  },
+  "203201": {
+    "start": 57.882,
+    "end": 83.294,
+    "chanceStart": 39.529,
+    "chanceEnd": 57.882,
+    "finishTime": 94.588
+  },
+  "203202": {
+    "start": 64.054,
+    "end": 94.054,
+    "chanceStart": 47.838,
+    "chanceEnd": 64.054,
+    "finishTime": 94.054
+  },
+  "203203": {
+    "start": 54.4,
+    "end": 67.2,
+    "chanceStart": 41.6,
+    "chanceEnd": 54.4,
+    "finishTime": 81.6
+  },
+  "203204": {
+    "start": 77.922,
+    "end": 105.974,
+    "chanceStart": 49.87,
+    "chanceEnd": 77.922,
+    "finishTime": 123.117
+  },
+  "203205": {
+    "start": 67.862,
+    "end": 84.414,
+    "chanceStart": 54.621,
+    "chanceEnd": 67.862,
+    "finishTime": 100.966
+  },
+  "203206": {
+    "start": 56.693,
+    "end": 71.811,
+    "chanceStart": 41.575,
+    "chanceEnd": 56.693,
+    "finishTime": 92.598
+  },
+  "203207": {
+    "start": 60.444,
+    "end": 78.222,
+    "chanceStart": 32,
+    "chanceEnd": 60.444,
+    "finishTime": 94.222
+  },
+  "203208": {
+    "start": 59.294,
+    "end": 81.882,
+    "chanceStart": 45.176,
+    "chanceEnd": 59.294,
+    "finishTime": 96
+  },
+  "203301": {
+    "start": 77.714,
+    "end": 123.429,
+    "chanceStart": 66.286,
+    "chanceEnd": 77.714,
+    "finishTime": 145.143
+  },
+  "203302": {
+    "start": 93.659,
+    "end": 117.073,
+    "chanceStart": 70.244,
+    "chanceEnd": 93.659,
+    "finishTime": 117.24
+  },
+  "204101": {
+    "start": 104.554,
+    "end": 137.822,
+    "chanceStart": 84.356,
+    "chanceEnd": 104.554,
+    "finishTime": 137.822
+  },
+  "204102": {
+    "start": 69.31,
+    "end": 91.379,
+    "chanceStart": 47.241,
+    "chanceEnd": 69.31,
+    "finishTime": 117.241
+  },
+  "204103": {
+    "start": 52,
+    "end": 96,
+    "chanceStart": 34.667,
+    "chanceEnd": 52,
+    "finishTime": 142.667
+  },
+  "204104": {
+    "start": 112.421,
+    "end": 152.842,
+    "chanceStart": 73.263,
+    "chanceEnd": 112.421,
+    "finishTime": 152.842
+  },
+  "204105": {
+    "start": 114,
+    "end": 142.345,
+    "chanceStart": 87.724,
+    "chanceEnd": 114,
+    "finishTime": 142.345
+  },
+  "204106": {
+    "start": 68.308,
+    "end": 101.538,
+    "chanceStart": 53.538,
+    "chanceEnd": 68.308,
+    "finishTime": 118.154
+  },
+  "204107": {
+    "start": 56.14,
+    "end": 89.825,
+    "chanceStart": 42.105,
+    "chanceEnd": 56.14,
+    "finishTime": 108.07
+  },
+  "204108": {
+    "start": 60.638,
+    "end": 81.064,
+    "chanceStart": 45.957,
+    "chanceEnd": 60.638,
+    "finishTime": 91.915
+  },
+  "204109": {
+    "start": 56.889,
+    "end": 94.222,
+    "chanceStart": 42.667,
+    "chanceEnd": 56.889,
+    "finishTime": 94.222
+  },
+  "204110": {
+    "start": 59.13,
+    "end": 88.696,
+    "chanceStart": 45.217,
+    "chanceEnd": 59.13,
+    "finishTime": 107.826
+  },
+  "204111": {
+    "start": 58.477,
+    "end": 77.97,
+    "chanceStart": 36.548,
+    "chanceEnd": 58.477,
+    "finishTime": 91.371
+  },
+  "204112": {
+    "start": 48,
+    "end": 83.556,
+    "chanceStart": 33.778,
+    "chanceEnd": 48,
+    "finishTime": 103.111
+  },
+  "204113": {
+    "start": 58.305,
+    "end": 96.271,
+    "chanceStart": 36.61,
+    "chanceEnd": 58.305,
+    "finishTime": 109.831
+  },
+  "204114": {
+    "start": 79.091,
+    "end": 103.636,
+    "chanceStart": 57.273,
+    "chanceEnd": 79.091,
+    "finishTime": 120
+  },
+  "204115": {
+    "start": 52.5,
+    "end": 82.5,
+    "chanceStart": 37.5,
+    "chanceEnd": 52.5,
+    "finishTime": 99.375
+  },
+  "204116": {
+    "start": 64.941,
+    "end": 93.176,
+    "chanceStart": 48,
+    "chanceEnd": 64.941,
+    "finishTime": 128.471
+  },
+  "204117": {
+    "start": 67.826,
+    "end": 95.652,
+    "chanceStart": 46.957,
+    "chanceEnd": 67.826,
+    "finishTime": 116.522
+  },
+  "204118": {
+    "start": 57.333,
+    "end": 86.667,
+    "chanceStart": 45.333,
+    "chanceEnd": 57.333,
+    "finishTime": 104
+  },
+  "204119": {
+    "start": 58.378,
+    "end": 87.365,
+    "chanceStart": 45.405,
+    "chanceEnd": 58.378,
+    "finishTime": 103.784
+  },
+  "204120": {
+    "start": 81.231,
+    "end": 112.615,
+    "chanceStart": 62.769,
+    "chanceEnd": 81.231,
+    "finishTime": 138.462
+  },
+  "204121": {
+    "start": 52.192,
+    "end": 88.356,
+    "chanceStart": 37.808,
+    "chanceEnd": 52.192,
+    "finishTime": 105.205
+  },
+  "204201": {
+    "start": 44,
+    "end": 76,
+    "chanceStart": 26,
+    "chanceEnd": 44,
+    "finishTime": 94
+  },
+  "204202": {
+    "start": 110.182,
+    "end": 145.091,
+    "chanceStart": 82.909,
+    "chanceEnd": 110.182,
+    "finishTime": 145.091
+  },
+  "204301": {
+    "start": 54.104,
+    "end": 84.624,
+    "chanceStart": 37.457,
+    "chanceEnd": 54.104,
+    "finishTime": 117.919
+  },
+  "204302": {
+    "start": 60,
+    "end": 92.113,
+    "chanceStart": 43.944,
+    "chanceEnd": 60,
+    "finishTime": 92.113
+  },
+  "205101": {
+    "start": 62.769,
+    "end": 97.846,
+    "chanceStart": 48,
+    "chanceEnd": 62.769,
+    "finishTime": 97.846
+  },
+  "205102": {
+    "start": 48,
+    "end": 75.789,
+    "chanceStart": 37.895,
+    "chanceEnd": 48,
+    "finishTime": 97.263
+  },
+  "205103": {
+    "start": 68.364,
+    "end": 97.455,
+    "chanceStart": 45.091,
+    "chanceEnd": 68.364,
+    "finishTime": 97.455
+  },
+  "205201": {
+    "start": 76.875,
+    "end": 101.25,
+    "chanceStart": 60,
+    "chanceEnd": 76.875,
+    "finishTime": 101.25
+  },
+  "205202": {
+    "start": 72,
+    "end": 100.235,
+    "chanceStart": 48,
+    "chanceEnd": 72,
+    "finishTime": 112.941
+  },
+  "205203": {
+    "start": 93.158,
+    "end": 124.737,
+    "chanceStart": 72.632,
+    "chanceEnd": 93.158,
+    "finishTime": 124.737
+  },
+  "205301": {
+    "start": 51.6,
+    "end": 70.8,
+    "chanceStart": 37.2,
+    "chanceEnd": 51.6,
+    "finishTime": 93.6
+  },
+  "303101": {
+    "start": 52.987,
+    "end": 77.922,
+    "chanceStart": 40.519,
+    "chanceEnd": 52.987,
+    "finishTime": 96.623
+  },
+  "303102": {
+    "start": 55.5,
+    "end": 79.5,
+    "chanceStart": 40.5,
+    "chanceEnd": 55.5,
+    "finishTime": 97.5
+  },
+  "303103": {
+    "start": 67.2,
+    "end": 94.4,
+    "chanceStart": 40.8,
+    "chanceEnd": 67.2,
+    "finishTime": 126.4
+  },
+  "303104": {
+    "start": 51.818,
+    "end": 76.364,
+    "chanceStart": 40.909,
+    "chanceEnd": 51.818,
+    "finishTime": 94.091
+  },
+  "303105": {
+    "start": 59.242,
+    "end": 88.555,
+    "chanceStart": 40.922,
+    "chanceEnd": 59.242,
+    "finishTime": 114.68
+  },
+  "303106": {
+    "start": 77.938,
+    "end": 98.969,
+    "chanceStart": 55.67,
+    "chanceEnd": 77.938,
+    "finishTime": 123.711
+  },
+  "303107": {
+    "start": 65.294,
+    "end": 90,
+    "chanceStart": 51.176,
+    "chanceEnd": 65.294,
+    "finishTime": 104.118
+  },
+  "303108": {
+    "start": 52.364,
+    "end": 69.818,
+    "chanceStart": 32.727,
+    "chanceEnd": 52.364,
+    "finishTime": 87.273
+  },
+  "303109": {
+    "start": 51,
+    "end": 76.5,
+    "chanceStart": 27,
+    "chanceEnd": 51,
+    "finishTime": 91.5
+  },
+  "303110": {
+    "start": 44.746,
+    "end": 73.22,
+    "chanceStart": 28.475,
+    "chanceEnd": 44.746,
+    "finishTime": 91.525
+  },
+  "303111": {
+    "start": 62.4,
+    "end": 89.6,
+    "chanceStart": 48,
+    "chanceEnd": 62.4,
+    "finishTime": 89.6
+  },
+  "303112": {
+    "start": 62.069,
+    "end": 99.31,
+    "chanceStart": 51.034,
+    "chanceEnd": 62.069,
+    "finishTime": 99.31
+  },
+  "303113": {
+    "start": 43.279,
+    "end": 59.016,
+    "chanceStart": 27.541,
+    "chanceEnd": 43.279,
+    "finishTime": 86.557
+  },
+  "303114": {
+    "start": 66.667,
+    "end": 88,
+    "chanceStart": 45.333,
+    "chanceEnd": 66.667,
+    "finishTime": 101.333
+  },
+  "303115": {
+    "start": 49.756,
+    "end": 86.341,
+    "chanceStart": 38.049,
+    "chanceEnd": 49.756,
+    "finishTime": 122.927
+  },
+  "303116": {
+    "start": 97.143,
+    "end": 133.333,
+    "chanceStart": 66.667,
+    "chanceEnd": 97.143,
+    "finishTime": 133.333
+  },
+  "303117": {
+    "start": 41.575,
+    "end": 71.811,
+    "chanceStart": 24.567,
+    "chanceEnd": 41.575,
+    "finishTime": 94.488
+  },
+  "303118": {
+    "start": 60.923,
+    "end": 92.308,
+    "chanceStart": 46.154,
+    "chanceEnd": 60.923,
+    "finishTime": 108.923
+  },
+  "303119": {
+    "start": 61.579,
+    "end": 88.421,
+    "chanceStart": 48.947,
+    "chanceEnd": 61.579,
+    "finishTime": 102.632
+  },
+  "303201": {
+    "start": 90.226,
+    "end": 115.489,
+    "chanceStart": 75.789,
+    "chanceEnd": 90.226,
+    "finishTime": 115.489
+  },
+  "303202": {
+    "start": 77.037,
+    "end": 100.741,
+    "chanceStart": 53.333,
+    "chanceEnd": 77.037,
+    "finishTime": 120
+  },
+  "303203": {
+    "start": 72,
+    "end": 93.333,
+    "chanceStart": 50.667,
+    "chanceEnd": 72,
+    "finishTime": 100
+  },
+  "303204": {
+    "start": 40,
+    "end": 58.824,
+    "chanceStart": 30.588,
+    "chanceEnd": 40,
+    "finishTime": 80
+  },
+  "303205": {
+    "start": 49.846,
+    "end": 75.692,
+    "chanceStart": 27.692,
+    "chanceEnd": 49.846,
+    "finishTime": 94.154
+  },
+  "303206": {
+    "start": 53.647,
+    "end": 79.059,
+    "chanceStart": 42.353,
+    "chanceEnd": 53.647,
+    "finishTime": 91.765
+  },
+  "303207": {
+    "start": 57.231,
+    "end": 92.308,
+    "chanceStart": 40.615,
+    "chanceEnd": 57.231,
+    "finishTime": 92.308
+  },
+  "304101": {
+    "start": 52.987,
+    "end": 77.922,
+    "chanceStart": 40.519,
+    "chanceEnd": 52.987,
+    "finishTime": 96.623
+  },
+  "304102": {
+    "start": 87.591,
+    "end": 115.62,
+    "chanceStart": 59.562,
+    "chanceEnd": 87.591,
+    "finishTime": 124.38
+  },
+  "304103": {
+    "start": 51,
+    "end": 76.5,
+    "chanceStart": 27,
+    "chanceEnd": 51,
+    "finishTime": 91.5
+  },
+  "304104": {
+    "start": 52.364,
+    "end": 69.818,
+    "chanceStart": 32.727,
+    "chanceEnd": 52.364,
+    "finishTime": 87.273
+  },
+  "304105": {
+    "start": 44.308,
+    "end": 77.538,
+    "chanceStart": 33.231,
+    "chanceEnd": 44.308,
+    "finishTime": 94.154
+  },
+  "304106": {
+    "start": 62.069,
+    "end": 99.31,
+    "chanceStart": 51.034,
+    "chanceEnd": 62.069,
+    "finishTime": 99.31
+  },
+  "304107": {
+    "start": 66.857,
+    "end": 97.714,
+    "chanceStart": 49.714,
+    "chanceEnd": 66.857,
+    "finishTime": 114.857
+  },
+  "304108": {
+    "start": 61.579,
+    "end": 88.421,
+    "chanceStart": 48.947,
+    "chanceEnd": 61.579,
+    "finishTime": 102.632
+  },
+  "304109": {
+    "start": 65.294,
+    "end": 90,
+    "chanceStart": 51.176,
+    "chanceEnd": 65.294,
+    "finishTime": 104.118
+  },
+  "304110": {
+    "start": 59.242,
+    "end": 88.555,
+    "chanceStart": 40.922,
+    "chanceEnd": 59.242,
+    "finishTime": 114.68
+  },
+  "304111": {
+    "start": 43.279,
+    "end": 59.016,
+    "chanceStart": 27.541,
+    "chanceEnd": 43.279,
+    "finishTime": 86.557
+  },
+  "304112": {
+    "start": 62.4,
+    "end": 89.6,
+    "chanceStart": 48,
+    "chanceEnd": 62.4,
+    "finishTime": 89.6
+  },
+  "304113": {
+    "start": 75.429,
+    "end": 106.286,
+    "chanceStart": 58.286,
+    "chanceEnd": 75.429,
+    "finishTime": 125.143
+  },
+  "304114": {
+    "start": 66.087,
+    "end": 93.913,
+    "chanceStart": 52.174,
+    "chanceEnd": 66.087,
+    "finishTime": 114.783
+  },
+  "304115": {
+    "start": 67.2,
+    "end": 94.4,
+    "chanceStart": 40.8,
+    "chanceEnd": 67.2,
+    "finishTime": 126.4
+  },
+  "304116": {
+    "start": 55.5,
+    "end": 79.5,
+    "chanceStart": 40.5,
+    "chanceEnd": 55.5,
+    "finishTime": 97.5
+  },
+  "304117": {
+    "start": 72.88,
+    "end": 104.293,
+    "chanceStart": 52.775,
+    "chanceEnd": 72.88,
+    "finishTime": 104.293
+  },
+  "304118": {
+    "start": 56.571,
+    "end": 87.429,
+    "chanceStart": 42.857,
+    "chanceEnd": 56.571,
+    "finishTime": 109.714
+  },
+  "304119": {
+    "start": 62.5,
+    "end": 122.5,
+    "chanceStart": 32.5,
+    "chanceEnd": 62.5,
+    "finishTime": 137.5
+  },
+  "304120": {
+    "start": 50.526,
+    "end": 79.398,
+    "chanceStart": 34.286,
+    "chanceEnd": 50.526,
+    "finishTime": 104.662
+  },
+  "304121": {
+    "start": 72,
+    "end": 101.538,
+    "chanceStart": 55.385,
+    "chanceEnd": 72,
+    "finishTime": 129.231
+  },
+  "304122": {
+    "start": 77.647,
+    "end": 120,
+    "chanceStart": 52.941,
+    "chanceEnd": 77.647,
+    "finishTime": 137.647
+  },
+  "304201": {
+    "start": 86.531,
+    "end": 115.918,
+    "chanceStart": 71.837,
+    "chanceEnd": 86.531,
+    "finishTime": 138.776
+  },
+  "304202": {
+    "start": 120.889,
+    "end": 158.222,
+    "chanceStart": 92.444,
+    "chanceEnd": 120.889,
+    "finishTime": 158.222
+  },
+  "304203": {
+    "start": 49.825,
+    "end": 84.912,
+    "chanceStart": 38.246,
+    "chanceEnd": 49.825,
+    "finishTime": 99.649
+  },
+  "304301": {
+    "start": 62.222,
+    "end": 90.667,
+    "chanceStart": 44.444,
+    "chanceEnd": 62.222,
+    "finishTime": 108.444
+  },
+  "305101": {
+    "start": 55.491,
+    "end": 74.913,
+    "chanceStart": 44.393,
+    "chanceEnd": 55.491,
+    "finishTime": 91.561
+  },
+  "305102": {
+    "start": 60.896,
+    "end": 82.388,
+    "chanceStart": 46.567,
+    "chanceEnd": 60.896,
+    "finishTime": 100.299
+  },
+  "305103": {
+    "start": 97.895,
+    "end": 142.105,
+    "chanceStart": 67.895,
+    "chanceEnd": 97.895,
+    "finishTime": 142.105
+  },
+  "305104": {
+    "start": 56.461,
+    "end": 83.596,
+    "chanceStart": 45.843,
+    "chanceEnd": 56.461,
+    "finishTime": 107.865
+  },
+  "305105": {
+    "start": 54.75,
+    "end": 85.5,
+    "chanceStart": 46.5,
+    "chanceEnd": 54.75,
+    "finishTime": 85.5
+  },
+  "305106": {
+    "start": 69.296,
+    "end": 99.718,
+    "chanceStart": 54.085,
+    "chanceEnd": 69.296,
+    "finishTime": 116.62
+  },
+  "305107": {
+    "start": 64.865,
+    "end": 94.703,
+    "chanceStart": 41.514,
+    "chanceEnd": 64.865,
+    "finishTime": 118.054
+  },
+  "405101": {
+    "start": 75.536,
+    "end": 117.143,
+    "chanceStart": 64.286,
+    "chanceEnd": 75.536,
+    "finishTime": 117.143
+  },
+  "405102": {
+    "start": 57.231,
+    "end": 88.615,
+    "chanceStart": 38.769,
+    "chanceEnd": 57.231,
+    "finishTime": 107.077
+  },
+  "405103": {
+    "start": 52.235,
+    "end": 80.471,
+    "chanceStart": 36.706,
+    "chanceEnd": 52.235,
+    "finishTime": 94.588
+  },
+  "405104": {
+    "start": 48.75,
+    "end": 78.75,
+    "chanceStart": 33.75,
+    "chanceEnd": 48.75,
+    "finishTime": 99.375
+  },
+  "405105": {
+    "start": 69.231,
+    "end": 93.846,
+    "chanceStart": 56.923,
+    "chanceEnd": 69.231,
+    "finishTime": 109.231
+  },
+  "405106": {
+    "start": 71.111,
+    "end": 94.815,
+    "chanceStart": 47.407,
+    "chanceEnd": 71.111,
+    "finishTime": 115.556
+  },
+  "405107": {
+    "start": 47.8,
+    "end": 73.4,
+    "chanceStart": 31.8,
+    "chanceEnd": 47.8,
+    "finishTime": 92.8
+  },
+  "405108": {
+    "start": 53.516,
+    "end": 82.088,
+    "chanceStart": 36.373,
+    "chanceEnd": 53.516,
+    "finishTime": 106.85
+  },
+  "405109": {
+    "start": 62,
+    "end": 90.444,
+    "chanceStart": 48,
+    "chanceEnd": 62,
+    "finishTime": 110.222
+  },
+  "405110": {
+    "start": 57.692,
+    "end": 94.615,
+    "chanceStart": 34.615,
+    "chanceEnd": 57.692,
+    "finishTime": 128.077
+  },
+  "405111": {
+    "start": 60.638,
+    "end": 81.064,
+    "chanceStart": 45.957,
+    "chanceEnd": 60.638,
+    "finishTime": 91.915
+  },
+  "405112": {
+    "start": 48,
+    "end": 69.6,
+    "chanceStart": 36,
+    "chanceEnd": 48,
+    "finishTime": 91.2
+  },
+  "405113": {
+    "start": 56.25,
+    "end": 86.25,
+    "chanceStart": 41.25,
+    "chanceEnd": 56.25,
+    "finishTime": 106.875
+  },
+  "405114": {
+    "start": 53.818,
+    "end": 97.455,
+    "chanceStart": 29.091,
+    "chanceEnd": 53.818,
+    "finishTime": 130.909
+  },
+  "405115": {
+    "start": 41.143,
+    "end": 63.086,
+    "chanceStart": 30.171,
+    "chanceEnd": 41.143,
+    "finishTime": 92.571
+  },
+  "405116": {
+    "start": 77.53,
+    "end": 115.93,
+    "chanceStart": 64.73,
+    "chanceEnd": 77.53,
+    "finishTime": 115.93
+  },
+  "405117": {
+    "start": 61.714,
+    "end": 85.714,
+    "chanceStart": 48,
+    "chanceEnd": 61.714,
+    "finishTime": 104.571
+  },
+  "405118": {
+    "start": 59.113,
+    "end": 80.394,
+    "chanceStart": 40.197,
+    "chanceEnd": 59.113,
+    "finishTime": 98.128
+  },
+  "405119": {
+    "start": 64,
+    "end": 94.4,
+    "chanceStart": 48,
+    "chanceEnd": 64,
+    "finishTime": 115.2
+  },
+  "405120": {
+    "start": 53.023,
+    "end": 75.349,
+    "chanceStart": 41.86,
+    "chanceEnd": 53.023,
+    "finishTime": 92.093
+  },
+  "405121": {
+    "start": 81,
+    "end": 105,
+    "chanceStart": 57,
+    "chanceEnd": 81,
+    "finishTime": 124.5
+  },
+  "405122": {
+    "start": 48.696,
+    "end": 76.522,
+    "chanceStart": 34.783,
+    "chanceEnd": 48.696,
+    "finishTime": 99.13
+  },
+  "405123": {
+    "start": 58.947,
+    "end": 94.035,
+    "chanceStart": 43.509,
+    "chanceEnd": 58.947,
+    "finishTime": 94.035
+  },
+  "405124": {
+    "start": 68.571,
+    "end": 101.143,
+    "chanceStart": 53.143,
+    "chanceEnd": 68.571,
+    "finishTime": 120
+  },
+  "405125": {
+    "start": 49.091,
+    "end": 80,
+    "chanceStart": 32.727,
+    "chanceEnd": 49.091,
+    "finishTime": 92.727
+  },
+  "405126": {
+    "start": 74.094,
+    "end": 114.362,
+    "chanceStart": 57.987,
+    "chanceEnd": 74.094,
+    "finishTime": 114.362
+  },
+  "405127": {
+    "start": 93.257,
+    "end": 124.8,
+    "chanceStart": 71.314,
+    "chanceEnd": 93.257,
+    "finishTime": 124.8
+  },
+  "405128": {
+    "start": 110.541,
+    "end": 135.726,
+    "chanceStart": 98.689,
+    "chanceEnd": 110.541,
+    "finishTime": 135.726
+  },
+  "405129": {
+    "start": 75.692,
+    "end": 120,
+    "chanceStart": 57.231,
+    "chanceEnd": 75.692,
+    "finishTime": 120
+  },
+  "405130": {
+    "start": 53.165,
+    "end": 85.063,
+    "chanceStart": 37.975,
+    "chanceEnd": 53.165,
+    "finishTime": 98.734
+  },
+  "405131": {
+    "start": 55.385,
+    "end": 87.033,
+    "chanceStart": 34.286,
+    "chanceEnd": 55.385,
+    "finishTime": 121.319
+  },
+  "405132": {
+    "start": 52.987,
+    "end": 77.922,
+    "chanceStart": 40.519,
+    "chanceEnd": 52.987,
+    "finishTime": 96.623
+  },
+  "405133": {
+    "start": 47.143,
+    "end": 81.429,
+    "chanceStart": 30,
+    "chanceEnd": 47.143,
+    "finishTime": 98.571
+  },
+  "405134": {
+    "start": 62.769,
+    "end": 94.154,
+    "chanceStart": 46.154,
+    "chanceEnd": 62.769,
+    "finishTime": 94.154
+  },
+  "405135": {
+    "start": 65.303,
+    "end": 87.121,
+    "chanceStart": 48.485,
+    "chanceEnd": 65.303,
+    "finishTime": 109.091
+  },
+  "405136": {
+    "start": 65.915,
+    "end": 94.648,
+    "chanceStart": 50.704,
+    "chanceEnd": 65.915,
+    "finishTime": 109.859
+  },
+  "405137": {
+    "start": 101.124,
+    "end": 144.27,
+    "chanceStart": 79.551,
+    "chanceEnd": 101.124,
+    "finishTime": 144.27
+  },
+  "405138": {
+    "start": 56.842,
+    "end": 87.158,
+    "chanceStart": 46.737,
+    "chanceEnd": 56.842,
+    "finishTime": 103.579
+  },
+  "405139": {
+    "start": 113.898,
+    "end": 152.542,
+    "chanceStart": 75.254,
+    "chanceEnd": 113.898,
+    "finishTime": 152.542
+  },
+  "405140": {
+    "start": 68.916,
+    "end": 93.22,
+    "chanceStart": 44.613,
+    "chanceEnd": 68.916,
+    "finishTime": 111.448
+  },
+  "405141": {
+    "start": 75.556,
+    "end": 105.185,
+    "chanceStart": 51.852,
+    "chanceEnd": 75.556,
+    "finishTime": 139.259
+  },
+  "405142": {
+    "start": 101.124,
+    "end": 144.27,
+    "chanceStart": 79.551,
+    "chanceEnd": 101.124,
+    "finishTime": 144.27
+  },
+  "405143": {
+    "start": 56.842,
+    "end": 87.158,
+    "chanceStart": 46.737,
+    "chanceEnd": 56.842,
+    "finishTime": 103.579
+  },
+  "405144": {
+    "start": 65.915,
+    "end": 94.648,
+    "chanceStart": 50.704,
+    "chanceEnd": 65.915,
+    "finishTime": 109.859
+  },
+  "405201": {
+    "start": 99.512,
+    "end": 140.488,
+    "chanceStart": 71.415,
+    "chanceEnd": 99.512,
+    "finishTime": 140.488
+  },
+  "405202": {
+    "start": 56,
+    "end": 77.333,
+    "chanceStart": 45.333,
+    "chanceEnd": 56,
+    "finishTime": 92
+  },
+  "405203": {
+    "start": 62.485,
+    "end": 88.047,
+    "chanceStart": 49.704,
+    "chanceEnd": 62.485,
+    "finishTime": 116.45
+  },
+  "405204": {
+    "start": 61.176,
+    "end": 80,
+    "chanceStart": 37.5,
+    "chanceEnd": 61.176,
+    "finishTime": 91.765
+  },
+  "405205": {
+    "start": 67.742,
+    "end": 104.516,
+    "chanceStart": 52.258,
+    "chanceEnd": 67.742,
+    "finishTime": 104.516
+  },
+  "405206": {
+    "start": 85.07,
+    "end": 131.47,
+    "chanceStart": 67.47,
+    "chanceEnd": 85.07,
+    "finishTime": 131.47
+  },
+  "405207": {
+    "start": 70.244,
+    "end": 109.268,
+    "chanceStart": 56.585,
+    "chanceEnd": 70.244,
+    "finishTime": 109.268
+  },
+  "405208": {
+    "start": 73.412,
+    "end": 107.294,
+    "chanceStart": 60.706,
+    "chanceEnd": 73.412,
+    "finishTime": 107.294
+  },
+  "405209": {
+    "start": 61.091,
+    "end": 78.545,
+    "chanceStart": 39.273,
+    "chanceEnd": 61.091,
+    "finishTime": 91.636
+  },
+  "405301": {
+    "start": 54.667,
+    "end": 78.667,
+    "chanceStart": 41.333,
+    "chanceEnd": 54.667,
+    "finishTime": 93.333
+  },
+  "405302": {
+    "start": 94.545,
+    "end": 125.455,
+    "chanceStart": 61.818,
+    "chanceEnd": 94.545,
+    "finishTime": 158.182
+  },
+  "405303": {
+    "start": 63.371,
+    "end": 93.034,
+    "chanceStart": 51.236,
+    "chanceEnd": 63.371,
+    "finishTime": 93.034
+  },
+  "405304": {
+    "start": 51.176,
+    "end": 68.824,
+    "chanceStart": 37.059,
+    "chanceEnd": 51.176,
+    "finishTime": 91.765
+  },
+  "405305": {
+    "start": 53.878,
+    "end": 83.265,
+    "chanceStart": 34.286,
+    "chanceEnd": 53.878,
+    "finishTime": 93.061
+  }
+}

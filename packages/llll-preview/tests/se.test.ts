@@ -9,7 +9,7 @@ import {
   dispatchAutoPlaySe,
   type SeOutput,
 } from '../src/se';
-import { parseChart } from '../src/chart';
+import { parseChart } from '@sukushow/chart/chart';
 
 class FakeOut implements SeOutput {
   plays: { index: number; vol: number; offset?: number }[] = [];

@@ -13,8 +13,8 @@
  * 跨列的长 Hold 在两侧各自被裁一次，并排看起来仍是连续的。
  */
 
-import type { Chart, Note } from './chart';
-import type { FeverWindow } from './fever';
+import type { Chart, Note } from '@sukushow/chart/chart';
+import type { FeverWindow } from '@sukushow/chart/fever';
 import {
   type Layout, LANES, canvasWidth, edgeX, measures, noteSpan, timeY, trackWidth,
 } from './layout';
