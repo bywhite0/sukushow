@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HitFx } from '../src/fx';
-import { parseChart } from '../src/chart';
+import { parseChart } from '@sukushow/chart/chart';
 import type { FxFile } from '../src/rgAssets';
 
 const resource = JSON.parse(readFileSync(new URL('../../../apps/web/public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;

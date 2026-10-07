@@ -1,15 +1,14 @@
-/** 解析与几何单测。 */
+/** 平面布局与音符几何单测。 */
 
 import { describe, expect, it } from 'vitest';
-import { deflateRawSync } from 'node:zlib';
-import { parseChart, decodeChartBytes, bpmAt, beatAt, SIMULTANEOUS_WINDOW } from '../src/chart';
+import { parseChart } from '@sukushow/chart/chart';
 import {
   LANE_WORLD, SPRITE_SCALE_X, HOLD_CENTER, HOLD_SIDE, HOLD_CENTER_ALPHA, HOLD_SIDE_ALPHA,
   FLICK_SIGN_OFFSET_Y, ARROW_WIDTH, bandHalves, flickOverlays, laneX, noteDepthWorld,
   noteSpriteSize, noteWidthWorld, pxPerWorld, sliceCaps,
 } from '../src/geometry';
 import {
-  LANES, chainEnd, chainQuads, contentHeight, canvasWidth, defaultLayout, edgeX, holdQuad,
+  LANES, chainQuads, contentHeight, canvasWidth, defaultLayout, edgeX, holdQuad,
   measures, noteSpan, timeY, trackWidth, yTime,
 } from '../src/layout';
 
@@ -21,84 +20,6 @@ const chart = (notes: unknown[], bpms: unknown[] = [{ Time: 0, Bpm: 120 }]) =>
 
 const lay = (over: Partial<ReturnType<typeof defaultLayout>> = {}) => ({
   ...defaultLayout(), duration: 10, ...over,
-});
-
-describe('解析', () => {
-  it('解出四类音符与轨道', () => {
-    const c = chart([
-      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) },
-      { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 20, 25, 22, 27) },
-      { Uid: 3, just: '4.0', holds: [], Flags: flags(2, 30, 30) },
-      { Uid: 4, just: '5.0', holds: [], Flags: flags(3, 40, 50) },
-    ]);
-    expect(c.notes.map(n => n.type)).toEqual([0, 1, 2, 3]);
-    expect(c.notes[1].end).toBe(3.0);
-    expect(c.notes[1]).toMatchObject({ l: 20, r: 25, l2: 22, r2: 27 });
-  });
-
-  it('Hold 串链按 (l2,r2)→(l,r) 且 Uid 递增判连', () => {
-    const c = chart([
-      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
-      { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 12, 22) },
-      { Uid: 3, just: '3.0', holds: ['4.0'], Flags: flags(1, 12, 22, 12, 22) },
-    ]);
-    const [a, b, d] = c.notes;
-    expect(a.next).toBe(b);
-    expect(b.next).toBe(d);
-    expect(d.next).toBeUndefined();
-    expect(c.roots.map(n => n.uid)).toEqual([1]);
-    expect(chainEnd(a)).toBe(4.0);
-  });
-
-  it('链首起点与链尾终点进同时押组', () => {
-    const c = chart([
-      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
-      { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 10, 20) },
-      { Uid: 3, just: '1.0', holds: [], Flags: flags(0, 30, 32) },
-      { Uid: 4, just: '3.0', holds: [], Flags: flags(0, 40, 42) },
-    ]);
-    const at = (t: number) => c.lines.find(l => Math.abs(l.time - t) < 1e-6);
-    expect(at(1.0)?.points.length).toBe(2);
-    expect(at(3.0)?.points.length).toBe(2);
-    expect(at(3.0)?.points.some(p => p.tail)).toBe(true);
-  });
-
-  it('同时押容差是 4ms', () => {
-    expect(SIMULTANEOUS_WINDOW).toBe(0.004);
-    const c = chart([
-      { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) },
-      { Uid: 2, just: '1.003', holds: [], Flags: flags(0, 20, 22) },
-      { Uid: 3, just: '1.010', holds: [], Flags: flags(0, 30, 32) },
-    ]);
-    expect(c.lines).toHaveLength(1);
-    expect(c.lines[0].points).toHaveLength(2);
-  });
-
-  it('拒绝越界与倒序数据', () => {
-    expect(() => chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 12, 10) }])).toThrow(/轨道/);
-    expect(() => chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(4, 10, 12) }])).toThrow(/类型/);
-    expect(() => chart([{ Uid: 1, just: '2.0', holds: ['1.0'], Flags: flags(1, 10, 12) }])).toThrow(/倒序/);
-    expect(() => chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }, { Uid: 1, just: '2.0', holds: [], Flags: flags(0, 10, 12) }])).toThrow(/重复/);
-  });
-
-  it('BPM 与拍号取「不晚于该时刻」的最后一段', () => {
-    const bpms = [{ time: 0, bpm: 120 }, { time: 5, bpm: 180 }];
-    expect(bpmAt(bpms, 0)).toBe(120);
-    expect(bpmAt(bpms, 4.9)).toBe(120);
-    expect(bpmAt(bpms, 5)).toBe(180);
-    expect(bpmAt([], 3)).toBe(120);
-    const beats = [{ numerator: 4, denominator: 4, time: 0 }, { numerator: 3, denominator: 4, time: 2 }];
-    expect(beatAt(beats, 1).numerator).toBe(4);
-    expect(beatAt(beats, 2).numerator).toBe(3);
-  });
-
-  it('deflate 输入与明文输入等价', () => {
-    const json = JSON.stringify({ Notes: [{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }], Bpms: [{ Time: 0, Bpm: 120 }] });
-    const a = decodeChartBytes(new Uint8Array(deflateRawSync(Buffer.from(json))));
-    const b = decodeChartBytes(new TextEncoder().encode(json));
-    expect(a.notes.length).toBe(b.notes.length);
-    expect(a.notes[0]).toMatchObject({ uid: 1, time: 1.0, type: 0 });
-  });
 });
 
 describe('布局', () => {
@@ -313,5 +234,34 @@ describe('几何', () => {
     const l = lay();
     const n = chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(2, 30, 32) }]).notes[0];
     expect(flickOverlays(n, l, {})).toHaveLength(0);
+  });
+});
+
+const zeroChain = () => parseChart({
+  Notes: [
+    { Uid: 1, just: '0', holds: ['1'], Flags: flags(1, 0, 14, 15, 29) },
+    { Uid: 2, just: '1', holds: ['1'], Flags: flags(1, 15, 29, 45, 59) }, // 零长
+    { Uid: 3, just: '1', holds: ['1.5'], Flags: flags(1, 0, 14, 0, 14) },
+    { Uid: 4, just: '1', holds: ['2'], Flags: flags(1, 45, 59, 30, 44) },
+  ],
+  Bpms: [{ Time: 0, Bpm: 120 }],
+});
+
+describe('零长 hold 段出图', () => {
+  it('出图：前一段停在它自己的尾端 lane，下一段从瞬移后的 lane 起画，零长段不出面', () => {
+    const c = zeroChain();
+    const [a, , , b] = c.notes;
+    const l = lay();
+    const q = chainQuads(c.roots[0], l);
+    expect(q).toHaveLength(2);
+    const [tl, tr] = noteSpan(a, l, true);
+    expect(q[0].p[3][0]).toBeCloseTo(tl, 6);
+    expect(q[0].p[2][0]).toBeCloseTo(tr, 6);
+    const [hl, hr] = noteSpan(b, l, false);
+    expect(q[1].p[0][0]).toBeCloseTo(hl, 6);
+    expect(q[1].p[1][0]).toBeCloseTo(hr, 6);
+    // 瞬移前后两排同一时刻、横向不同：前一段没有被拉向 45-59。
+    expect(q[0].p[3][1]).toBeCloseTo(q[1].p[0][1], 6);
+    expect(Math.abs(q[1].p[0][0] - q[0].p[3][0])).toBeGreaterThan(l.lanePx);
   });
 });

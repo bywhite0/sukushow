@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Chart, Note } from './chart';
+import type { Chart, Note } from '@sukushow/chart/chart';
 import { BORDER, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
 import { HitFx } from './fx';

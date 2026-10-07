@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { deflateSync, strToU8 } from 'fflate';
-import { parseChart, decodeChart } from '../src/chart';
+import { parseChart, decodeChart } from '@sukushow/chart/chart';
 import { createSlope, worldX, holdSegment } from '../src/geometry';
 import { Transport } from '../src/transport';
 const flags = (t: number,l: number,r: number,l2=0,r2=0) => t+r*16+r2*1024+l*65536+l2*4194304;

@@ -2,7 +2,7 @@ import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import feverTrailColors from './feverTrailColors.json';
 import { feverEntrance, CORE_MOVE_END } from './feverAnimation';
 import * as THREE from 'three';
-import type { Chart } from './chart';
+import type { Chart } from '@sukushow/chart/chart';
 import { BORDER, Y, edges, worldX } from './geometry';
 import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab, FxMat } from './rgAssets';
 import { fxMaterial } from './shaders';

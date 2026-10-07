@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { findSongByChartFile, songAssets, type SongList } from '@sukushow/llll-preview/songAssets';
 import { availableDifficulties, filterSongs, matchesQuery } from '../src/songPicker';
-import { feverForFilename } from '@sukushow/llll-preview/feverMetadata';
+import { parseChartName } from '@sukushow/chart/masterdata';
+import { feverForSong, finishTimeForSong } from '@sukushow/chart/songTiming';
 
 const list = JSON.parse(readFileSync(new URL('../public/song-list.json', import.meta.url), 'utf8')) as SongList;
 
@@ -19,7 +20,11 @@ describe('曲目列表 apps/web/public/song-list.json', () => {
     expect(findSongByChartFile(list, file)).toEqual({ song, difficulty });
     expect(file).toMatch(/^rhythmgame_chart_\d+_\d+\.bytes$/);
     expect(findSongByChartFile(list, 'nope.bytes')).toBeNull();
-    expect(feverForFilename(file, { [song.id]: { start: 1, end: 2 } })).toEqual({ start: 1, end: 2 });
+    expect(String(parseChartName(file)?.musicId)).toBe(song.id);
+    expect(feverForSong(parseChartName(file)?.musicId)).toEqual(feverForSong(song.id));
+  });
+  it('曲目列表的 playTime 与时间索引的曲终逐首一致', () => {
+    for (const song of list.songs) expect(finishTimeForSong(song.id)).toBe(song.playTime / 1000);
   });
   it('BGM / 封面 URL 以 soundId / jacketId 为准', () => {
     const song = list.songs.find((s) => s.hasChart && s.hasJacket)!;

@@ -18,7 +18,7 @@
  *   const { runLaneProbe } = await import('/src/debug/laneProbe.ts')
  *   await runLaneProbe()
  */
-import { parseChart } from '@sukushow/pjsk-preview/llll/chart'
+import { parseChart } from '@sukushow/chart/chart'
 import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 
 /** llll Flags 位域打包：type 4bit / r 6bit / l 6bit。 */

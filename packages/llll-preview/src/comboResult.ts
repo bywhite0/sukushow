@@ -3,7 +3,7 @@
  * 自动演奏恒为 AP；其余三档由配置项手动选择预览。
  *
  * 时序：LiveEnd.Is = FinishTime ≤ t，FinishTime = MusicsRecord.PlayTime(ms) / 1000。
- * ComboResultResolver.ShowAsync（@0x4B01A80）按 GetResultIndex（AP→0，FC→1，Clear→2，Finish→3）
+ * ComboResultResolver.ShowAsync（4.12.0 状态机 @0x486B024）按 GetResultIndex（AP→0，FC→1，Clear→2，Finish→3）
  * 互斥激活 roots[idx]，播放 ComboResultSeNames[idx]（AP 0004 … Finish 0001），然后 animator.Play 4 s 的 clip。
  *
  * 分层（Canvas：world space，Default 层，order 10，overrideSorting）：

@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { decodeChart } from '../src/chart';
+import { decodeChart } from '@sukushow/chart/chart';
 import { createSlope, holdSegment } from '../src/geometry';
 const directory=process.argv[2];
 if(!directory)throw new Error('请指定包含 rhythmgame_chart_*.bytes 的本地目录');

@@ -13,7 +13,7 @@
  * 于是 `pxPerWorld = lanePx / LANE_WORLD`，横纵共用同一比例，贴图纵横比与原版一致。
  */
 
-import type { Note } from './chart';
+import type { Note } from '@sukushow/chart/chart';
 import type { Layout } from './layout';
 import { noteSpan, timeY } from './layout';
 

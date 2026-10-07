@@ -7,9 +7,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodeChartBytes } from '../src/chart';
-import { defaultLayout } from '../src/layout';
+import { decodeChart } from '@sukushow/chart/chart';
+import { parseChartName } from '@sukushow/chart/masterdata';
+import { finishTimeForSong } from '@sukushow/chart/songTiming';
+import { axisDuration, defaultLayout } from '../src/layout';
 import { loadSprites } from '../src/assets';
+import { fileSpriteSource } from './sprites';
 import { renderSvg } from '../src/svg';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -21,7 +24,7 @@ if (!files.length) {
   process.exit(2);
 }
 
-const { lib, missing } = loadSprites();
+const { lib, missing } = loadSprites(fileSpriteSource());
 if (missing.length) console.error(`警告：缺贴图 ${missing.join(', ')}`);
 
 const totals = { notes: 0, holds: 0, bars: 0, simul: 0, svg: 0, chains: 0 };
@@ -32,7 +35,9 @@ let n = 0;
 for (const file of files) {
   const id = file.replace('rhythmgame_chart_', '').replace('.bytes', '');
   try {
-    const chart = decodeChartBytes(new Uint8Array(readFileSync(join(dir, file))));
+    // 与出图脚本同一条时长规则：认得出曲目时画到曲终。
+    const decoded = decodeChart(new Uint8Array(readFileSync(join(dir, file))));
+    const chart = { ...decoded, duration: axisDuration(decoded, finishTimeForSong(parseChartName(file)?.musicId)) };
     const lay = { ...defaultLayout(), duration: chart.duration };
     const common = {
       layout: lay,

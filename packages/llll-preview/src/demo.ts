@@ -1,4 +1,4 @@
-import { parseChart } from './chart';
+import { parseChart } from '@sukushow/chart/chart';
 export function demoChart(){
   const Notes:{Uid:number;just:string;Flags:number;holds:string[]}[]=[];
   const add=(t:number,type:number,l:number,r:number,end=0,l2=0,r2=0)=>Notes.push({Uid:Notes.length+1,just:String(t),Flags:type+r*16+r2*1024+l*65536+l2*4194304,holds:end?[String(end)]:[]});

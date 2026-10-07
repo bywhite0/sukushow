@@ -29,6 +29,9 @@
  *   --no-side-beats    侧栏不标拍号
  *   --no-fever         侧栏不标 Fever 区
  *   --masterdata <dir> masterdata 目录（读 MusicScores.yaml / Musics.yaml）
+ *
+ * 时长：认得出曲目时画到曲终 FinishTime（`Musics.PlayTime / 1000`，取本地主数据，
+ * 缺省时查时间索引），有音符晚于它时延到末音符；认不出曲目时用谱面的末音符 + 2 秒。
  *   --jacket-dir <dir> 曲绘目录（`<曲目Id>.png`）
  *   --meta             底部信息区：封面 + 曲名 + 难度
  *   --meta-size <px>   封面边长（默认 192，同参考仓库的 meta_size）
@@ -40,13 +43,16 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
-import { decodeChartBytes } from '../src/chart';
-import { defaultLayout } from '../src/layout';
+import { decodeChart } from '@sukushow/chart/chart';
+import { feverFromMusicScore } from '@sukushow/chart/fever';
+import { difficultyFromSuffix, parseChartName } from '@sukushow/chart/masterdata';
+import { feverForSong, finishTimeForSong } from '@sukushow/chart/songTiming';
+import { axisDuration, defaultLayout } from '../src/layout';
 import { loadSprites } from '../src/assets';
 import { renderSvg } from '../src/svg';
-import { feverWindow } from '../src/fever';
 import { masterdataDir as resolveMasterdata, musicscoreDir as resolveMusicscore, jacketDir as resolveJacketDir } from './local-paths';
-import { difficultyFromSuffix, loadMasterData, parseChartName } from './masterdata';
+import { loadMasterData } from './masterdata';
+import { fileSpriteSource } from './sprites';
 
 function arg(name: string, fallback?: string): string | undefined {
   for (const flag of [`--${name}`, `-${name}`]) {
@@ -64,33 +70,7 @@ if (!input || input.startsWith('-')) {
 }
 const out = arg('o', arg('output', 'out/chart.svg'))!;
 
-const chart = decodeChartBytes(new Uint8Array(readFileSync(input)));
-const base = defaultLayout();
-const lay = {
-  ...base,
-  lanePx: Number(arg('lane-px', String(base.lanePx))),
-  // 默认值一律从 defaultLayout() 取，避免这里与布局默认值各说各话。
-  pxPerSec: Number(arg('px-per-sec', String(base.pxPerSec))),
-  padX: Number(arg('pad', String(base.padX))),
-  padY: Number(arg('pad', String(base.padY))),
-  mirror: has('mirror'),
-  duration: chart.duration,
-};
-
-const { lib, missing } = loadSprites({ mode: has('link-assets') ? 'link' : 'embed' });
-if (missing.length) console.error(`警告：缺贴图 ${missing.join(', ')}（对应层退化为纯色或跳过）`);
-
-const cssFile = arg('css');
-const from = arg('from'), to = arg('to');
-const range = from !== undefined || to !== undefined
-  ? { from: from !== undefined ? Number(from) : 0, to: to !== undefined ? Number(to) : chart.duration }
-  : undefined;
-if (range && !(range.to > range.from)) {
-  console.error(`时间段无效：${range.from} → ${range.to}（to 必须大于 from）`);
-  process.exit(2);
-}
-
-// ── 侧栏数据：MaxCombo / 曲名 / Fever 段 ──────────────────────────────
+// ── 曲目数据：MaxCombo / 曲名 / Fever 段 / 曲终 ──────────────────────────────
 // 曲目与难度从文件名取；主数据缺文件时整块降级（侧栏照画，只是少几个数字）。
 const named = parseChartName(basename(input));
 const difficulty = named ? difficultyFromSuffix(named.suffix) : null;
@@ -104,10 +84,41 @@ const csvDir = resolveMusicscore(undefined, dirname(input));
 const csvPath = named && csvDir ? join(csvDir, `musicscore_${named.musicId}.csv`) : null;
 if (!has('no-fever') && csvPath && existsSync(csvPath) && music?.feverSectionNo) {
   try {
-    fever = feverWindow(readFileSync(csvPath, 'utf8'), music.feverSectionNo);
+    fever = feverFromMusicScore(readFileSync(csvPath, 'utf8'), music.feverSectionNo);
   } catch (e) {
     console.error(`警告：Fever 段读取失败（${(e as Error).message}）`);
   }
+}
+if (!has('no-fever')) fever ??= feverForSong(named?.musicId);
+
+// 曲终：本地主数据优先，其次时间索引。
+const finishTime = music?.playTime ? music.playTime / 1000 : finishTimeForSong(named?.musicId);
+
+const decoded = decodeChart(new Uint8Array(readFileSync(input)));
+const chart = { ...decoded, duration: axisDuration(decoded, finishTime) };
+const base = defaultLayout();
+const lay = {
+  ...base,
+  lanePx: Number(arg('lane-px', String(base.lanePx))),
+  // 默认值一律从 defaultLayout() 取，避免这里与布局默认值各说各话。
+  pxPerSec: Number(arg('px-per-sec', String(base.pxPerSec))),
+  padX: Number(arg('pad', String(base.padX))),
+  padY: Number(arg('pad', String(base.padY))),
+  mirror: has('mirror'),
+  duration: chart.duration,
+};
+
+const { lib, missing } = loadSprites(fileSpriteSource(), { mode: has('link-assets') ? 'link' : 'embed' });
+if (missing.length) console.error(`警告：缺贴图 ${missing.join(', ')}（对应层退化为纯色或跳过）`);
+
+const cssFile = arg('css');
+const from = arg('from'), to = arg('to');
+const range = from !== undefined || to !== undefined
+  ? { from: from !== undefined ? Number(from) : 0, to: to !== undefined ? Number(to) : chart.duration }
+  : undefined;
+if (range && !(range.to > range.from)) {
+  console.error(`时间段无效：${range.from} → ${range.to}（to 必须大于 from）`);
+  process.exit(2);
 }
 
 const side = has('side')
@@ -171,7 +182,7 @@ writeFileSync(out, svg);
 
 const kb = (svg.length / 1024).toFixed(1);
 console.log(`谱面：${input}`);
-console.log(`音符 ${chart.notes.length}（链首 ${chart.roots.length}）／时长 ${chart.duration.toFixed(2)}s／BPM ${chart.bpms.length} 段`);
+console.log(`音符 ${chart.notes.length}（链首 ${chart.roots.length}）／时长 ${chart.duration.toFixed(2)}s（${finishTime === null ? '末音符 + 2 秒' : '曲终'}）／BPM ${chart.bpms.length} 段`);
 const totalW = stats.columns * stats.columnWidth + (stats.columns - 1) * Number(arg('column-gap', '8'));
 console.log(`版式：${stats.columns} 列 × ${stats.columnWidth}px，列高 ${Math.round(stats.columnHeight)}px，合计 ${Math.round(totalW)} × ${Math.round(stats.columnHeight)} px${range ? `（${range.from}s → ${range.to}s）` : ''}`);
 console.log(`绘制：音符 ${stats.notes}（瞬时 ${stats.instants}）／Hold 半边 ${stats.holds}／小节线 ${stats.bars}／拍线 ${stats.beats}／同时押 ${stats.simultaneous}${stats.fallback ? `／兜底 ${stats.fallback}` : ''}`);

@@ -17,9 +17,9 @@
     "smoke:export": "node ./scripts/export-smoke.mjs"
   },
   "dependencies": {
+    "@sukushow/chart": "workspace:*",
     "@sukushow/export": "workspace:*",
-    "@sukushow/llll-preview": "workspace:*",
-    "fflate": "^0.8.2"
+    "@sukushow/llll-preview": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

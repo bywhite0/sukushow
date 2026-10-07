@@ -1,4 +1,4 @@
-import type { Chart, Note } from './chart';
+import type { Chart, Note } from '@sukushow/chart/chart';
 import {
   AP_RATE_FLASH_DURATION,
   COMBO_FLASH_DURATION,
@@ -71,8 +71,8 @@ import {
   tintedMask,
 } from './canvasKit';
 import { lcg, mixSeed } from './rng';
-import { isFeverAt, type FeverWindow } from './fever';
-import { noteJudgementTimes } from './chart';
+import { isFeverAt, type FeverWindow } from '@sukushow/chart/fever';
+import { noteJudgementTimes } from '@sukushow/chart/chart';
 import {
   DEFAULT_SCORE_CONFIG,
   ScoreEngine,

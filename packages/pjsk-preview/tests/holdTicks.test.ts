@@ -3,7 +3,7 @@
  * 以及零长 hold 段（holds[^1] == just，链中的横向瞬移点）转成 MusicScore 后的节点形态。
  */
 import { describe, expect, it } from 'vitest'
-import { chartAllNoteSize, getHolds, parseChart } from '../src/llll/chart'
+import { chartAllNoteSize, getHolds, parseChart } from '@sukushow/chart/chart'
 import { chartToMusicScore } from '../src/llll/toMusicScore'
 
 function flags(type: number, l: number, r: number, l2 = 0, r2 = 0): number {

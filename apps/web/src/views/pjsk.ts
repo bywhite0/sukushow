@@ -15,12 +15,12 @@ import './pjsk.css'
 import { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
 import type { PreviewRuntimeConfig } from '@sukushow/pjsk-preview/lib/types'
 import { buildAssetManifest } from '@sukushow/pjsk-preview/assetManifest'
-import { parseChart, decodeChart, type Chart } from '@sukushow/pjsk-preview/llll/chart'
+import { parseChart, decodeChart, type Chart } from '@sukushow/chart/chart'
 import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from '@sukushow/pjsk-preview/lib/url'
 import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '@sukushow/pjsk-preview/llll/songAssets'
-import { feverForSong } from '@sukushow/pjsk-preview/llll/fever'
+import { feverForSong } from '@sukushow/chart/songTiming'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
 import type { SongSelectionStore } from '../songSelection'
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize, type ResourceLoadingTask } from '../resourceLoading'
@@ -324,7 +324,7 @@ function applyFeverWindow(songId: string | null) {
  * 分子 = 其中已经过去的那些（每帧推进）。口径照 PJSK 的
  * `progress = feverCount / totalFeverCount`。
  *
- * 音符时刻用谱面自身的 `time`（秒）——与 feverMetadata 同域（都相对音频起点），
+ * 音符时刻用谱面自身的 `time`（秒）——与时间索引同域（都相对音频起点），
  * 不需要再减 lead-in。窗口判定用「Fever 起点」而不是总时长：总时长含收尾静音，
  * 拿它当分母会让进度永远充不满。
  */

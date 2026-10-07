@@ -41,7 +41,7 @@
 pnpm install
 ```
 
-需要 Node 20+（用了原生 `node:zlib` 解 raw-deflate）。贴图与元数据已在 `public/rg/`，开箱即用。
+谱面解析、Fever 与曲终来自 `@sukushow/chart`。渲染库（`src/`）不依赖 Node，浏览器与 Node 都能调用；CLI 需要 Node 20+。贴图与元数据已在 `public/rg/`，开箱即用。
 
 ## 用法
 
@@ -73,6 +73,27 @@ pnpm render <谱面.bytes|.json> -o <输出.svg> [选项]
 | `--transparent` | 透明背景 |
 | `--link-assets` | 贴图用链接而非内嵌（SVG 更小，但需带上贴图目录） |
 | `--css <file>` | 追加样式表 |
+
+时间轴长度：认得出曲目时画到曲终（`Musics.PlayTime / 1000`，取 `--masterdata` 的主数据，缺省时查 `@sukushow/chart` 的时间索引），有音符晚于曲终时延到末音符；认不出曲目时画到末音符 + 2 秒。规则见 `layout.axisDuration`。
+
+## 在浏览器中调用
+
+贴图由调用方读取后注入：先取回 `SPRITE_NAMES` 里的贴图和 `sprite_meta.json`，再交给 `loadSprites`。
+
+```ts
+import { decodeChart } from '@sukushow/chart/chart';
+import { SPRITE_NAMES, loadSprites } from '@sukushow/chart-svg/assets';
+import { axisDuration, defaultLayout } from '@sukushow/chart-svg/layout';
+import { renderSvg } from '@sukushow/chart-svg/svg';
+
+const bytes = new Map(await Promise.all(SPRITE_NAMES.map(async name =>
+  [name, new Uint8Array(await (await fetch(`/rg/sprites/${name}.png`)).arrayBuffer())] as const)));
+const meta = await (await fetch('/rg/sprite_meta.json')).json();
+const { lib } = loadSprites({ meta, read: name => bytes.get(name) });
+const decoded = decodeChart(chartBytes);
+const chart = { ...decoded, duration: axisDuration(decoded, finishTime) };
+const { svg } = renderSvg(chart, lib, { layout: { ...defaultLayout(), duration: chart.duration }, /* 其余选项 */ });
+```
 
 例：
 
@@ -135,13 +156,10 @@ pnpm render chart.bytes -o heart.svg --from 103.0 --to 104.7 --px-per-sec 900 --
 ## 校验
 
 ```bash
-pnpm build            # tsc --noEmit
-pnpm test             # 单测（解析 / 布局 / 几何 / SVG 结构）
+pnpm build            # 类型检查：src 按浏览器环境，脚本与测试按 Node 环境
+pnpm test             # 单测（布局 / 几何 / SVG 结构）
 pnpm verify:corpus    # 617 张谱面全量渲染，检查统计自洽与标签配平
-pnpm cross-check      # 与 2D 谱面实现 逐音符比对解析口径与几何量
 ```
-
-`cross-check` 对 SVG 导出与 2D 视图使用同一批谱面校验音符、串链拓扑、贴图尺寸与时间轴映射。
 
 ## 许可
 

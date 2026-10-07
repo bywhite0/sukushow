@@ -111,38 +111,23 @@ SVG 用 `linearGradient` + `gradientUnits="userSpaceOnUse"`，端点即这对投
 轨道左侧的侧栏（`--side`）画小节号、BPM、拍号与 Fever 区。BPM 与拍号**只在变化处标**，
 否则整屏重复同一个数字。参考仓库 `pjsekai-scores-rs` 把这类标注竖排在轨道两侧，本仓库只留左侧。
 
-**Fever 窗口不在谱面文件里**（谱面顶层只有 `Notes` / `Bpms` / `Offset` / `Beats`）。
-它来自两处主数据：
+Fever 窗口与曲终的口径、二进制依据见 `@sukushow/chart` 的 `docs/evidence.md`。CLI 先用 `--masterdata` 的
+`FeverSectionNo` 与谱面同目录的 `musicscore_<id>.csv` 现算，缺数据时查该包的时间索引。例如抱花（`203117`）的边界是
+18228 / 42532 / 66835 / 91139 ms，MusicEnd 136709 ms，`FeverSectionNo = 5` → 窗口 **91.139s → 136.709s**。
 
-- `masterdata/Musics.yaml` 的 `FeverSectionNo`（1～5）指明第几段
-- `cache/plain/musicscore_<id>.csv` 的 `key_type=20` 行给出分段边界（毫秒），`key_type=99` 给出曲末
+## 时间轴长度
 
-段表 = `[0, ...边界, 曲末]`，窗口 = `[段表[N−1], 段表[N]]`。口径与 `packages/llll-preview` 的
-`feverFromMusicScore` 一致。抱花（`203117`）的边界是 18228 / 42532 / 66835 / 91139 ms，
-曲末 136709 ms，`FeverSectionNo = 5` → 窗口 **91.139s → 136.709s**。
-
-注意「曲末」取 CSV 原始顺序里**最后一个** `key_type=99`，不是时间最大的那个。
+`axisDuration`：认得出曲目时画到曲终（`Musics.PlayTime / 1000`，节奏游戏在此进入结算），有音符晚于曲终时延到末音符终点；
+认不出曲目时用谱面的末音符 + 2 秒。全量 616 张谱面里曲终减末音符最小为 −0.3 ms（主数据是整毫秒），
+曲终前 0.5 s 内没有 Flick，Sign 不会被顶边裁掉。两种时长下 617 张谱面的音符绘制统计逐张相同。
 
 ## Combo
 
-`chart.maxCombo` 的口径同 `packages/llll-preview` 的 `chartAllNoteSize`：非 Hold 每个算 1；
-Hold **只算链首**，链首本身 1 + 判定航点数——单段 Hold 用 JSON 的 `holds`，多段链用
-`getHolds` 按**半拍**重采样（链中节点不计，它们由链首的航点覆盖）。
+侧栏与信息区的 Combo 优先用主数据的 `MaxCombo`，自算值 `chart.maxCombo`（口径见 `@sukushow/chart`）作兜底与自检。
 
-`getHolds` 照原版 `RhythmGameConsts.GetHolds`（4.12.0 @0x485D11C）**全程 float32**：半拍步长
-`(60f / Bpm) * 0.5f` 单精度累加；循环内「贴近终点」用 `LooseEquals`（单精度差 `< 9.9999997e-5f`）；
-收尾的 `(long)(|end − last| × 10000f) <= 1` 按截断取整；取 BPM 时早于首段回落到**最后一段**。
-全量 616 张实测与 `MusicScores.yaml` 的 `MaxCombo` **全部一致**。
-
-此前用 double 累加、循环内容差 `2e-4`，命中 614：`204103_04` 少 1（容差比原版宽）、
-`405138_04` 少 2（84.6s 有 190→38→380→760→1140→190 的连续变速，double 累加与 float32 分岔）。
-标注仍优先用主数据的权威 `MaxCombo`，自算值作兜底与自检。
-
-串链判据同 `ChartResolver.Prepare` / `IsCombine`：数组顺序取首个满足条件的后继，时刻比较走单精度
-`LooseEquals`，**不看段长**——零长段（`holds[^1] == just`，4 张谱 8 处：`103204_02`、`405122_03`、
-`405131_03`、`405137_04`）照样留在链里。出图时每段各画自己的「头 [l,r] → 尾 [l2,r2]」四边形，
-零长段没有纵向跨度故不出面，前一段停在它自己的尾轨道、下一段从跳变后的轨道起画——与原版
-（前一段尾排不会被拉向跳变后的轨道）一致。
+零长段（`holds[^1] == just`，4 张谱 8 处：`103204_02`、`405122_03`、`405131_03`、`405137_04`）留在链里。
+出图时每段各画自己的「头 [l,r] → 尾 [l2,r2]」四边形，零长段没有纵向跨度故不出面，前一段停在它自己的尾轨道、
+下一段从跳变后的轨道起画——与原版（前一段尾排不会被拉向跳变后的轨道）一致。
 
 ## 底部信息区
 
@@ -171,17 +156,7 @@ Hold **只算链首**，链首本身 1 + 判定航点数——单段 Hold 用 JS
 
 ## 谱面数据格式
 
-deflate-raw 压缩的 JSON，含 `Notes`、`Bpms`、可选 `Beats`：
-
-```
-type = f & 15          r = (f >>> 4) & 63     r2 = (f >>> 10) & 63
-l    = (f >>> 16) & 63 l2 = (f >>> 22) & 63
-```
-
-- 同时押判定：时刻差 < 4 ms
-- 真实谱面 `l ≤ r`
-- 链首判定：`type === 1 && !prev`
-- 链节点通过 `n.next` 相连；串链判据同律原版，两侧压回 **float32** 再比（用 double 容差会漏连）
+字段、串链判据与同时押口径见 `@sukushow/chart` 的 `docs/evidence.md`。
 
 ## 长曲的分列
 
@@ -213,19 +188,6 @@ l    = (f >>> 16) & 63 l2 = (f >>> 22) & 63
 音符统计按 `Uid` 去重，不因切列翻倍。
 
 局部图（`--from/--to`）默认**不切列**：本来就是要那一段，切了反而碎。
-
-## 与统一前端 2D 视图的关系
-
-SVG 导出与统一前端中的 2D 视图共享解析和几何口径：
-
-| 项 | 说明 |
-|---|---|
-| 解析 | 同一套字段口径、同一条串链判据 |
-| 布局 | 同为时间向上、以 `duration` 为锚、`noteSpan` 同式 |
-| 贴图 | 同一批 `public/rg/` 贴图与 `sprite_meta.json` |
-| 差异 | SVG 导出是**整谱定尺出图**（`pxPerSec` 决定成图高，长曲切列并排）；2D 视图是**视口 + 滚动**交互预览 |
-
-`pnpm cross-check` 逐音符比对两者，口径漂了就报差异。
 
 ## 参考
 
