@@ -103,3 +103,19 @@ test('空区间拒绝导出且不锁住预览', async ({ page }) => {
   await expect(page.locator('[data-support]')).toContainText('导出区间为空');
   await restored(page);
 });
+
+test('包含开场时起点停在开场开头，取消勾选回到 0，再勾选拉回开场开头', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#message')).toContainText('就绪');
+  await page.locator('#export-video').click();
+  const opening = page.locator('[name="opening"]');
+  const start = page.locator('[name="start"]');
+  await expect(opening).toBeChecked();
+  await expect(start).toHaveValue('-3.667');
+  await expect(start).toHaveAttribute('min', '-3.667');
+  await opening.uncheck();
+  await expect(start).toHaveValue('0');
+  await expect(start).toHaveAttribute('min', '0');
+  await opening.check();
+  await expect(start).toHaveValue('-3.667');
+});
