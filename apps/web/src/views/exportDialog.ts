@@ -1,9 +1,9 @@
 /**
- * 视频导出对话框：选预设 → 逐帧渲染编码 → 下载。
+ * 视频导出对话框（LLLL 与 PJSK 共用）：选预设 → 逐帧渲染编码 → 下载。
  *
  * 不受支持的配置（VideoEncoder.isConfigSupported 为假）在选项里置灰。
- * 导出期间暂停实时渲染循环并锁住会影响画面的控件，画布临时固定到预设尺寸（dpr 1），
- * 结束或取消后恢复原尺寸与播放位置。
+ * 画面由调用方给的 ExportFrameSource 负责：导出期间暂停实时渲染循环、画布固定到预设尺寸（dpr 1），
+ * 结束或取消后恢复；这里只锁住会影响画面的控件并驱动 exportVideo。
  */
 import {
   BITRATE_CHOICES_MBPS,
@@ -25,20 +25,22 @@ import {
   type ExportProgress,
   type ExportResult,
   type ExportVideoSettings,
+  type OpeningSpan,
 } from '@sukushow/export'
-import type { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
-import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 
 export type ExportDialogContext = {
-  player: MmwWasmPlayer
-  canvas: HTMLCanvasElement
-  /** 停止 / 恢复实时渲染循环。 */
-  suspendLiveRendering: () => void
-  resumeLiveRendering: () => void
-  /** 按舞台当前尺寸恢复画布（与 window resize 同口径）。 */
-  restoreCanvasSize: () => void
-  /** 恢复播放倍率（导出固定 1×）。 */
-  restorePlaybackRate: () => void
+  /** 本模式写死的开场区间。 */
+  opening: OpeningSpan
+  /** 「包含开场」勾选项的文案。 */
+  openingLabel: string
+  /** 曲名为空时的下载文件名。 */
+  fileNamePrefix: string
+  /** 按本次选项创建帧源（intro = 是否包含开场）。 */
+  createSource: (options: { intro: boolean }) => ExportFrameSource
+  /** 走带终点（秒）。 */
+  durationSec: () => number
+  /** 每次打开对话框时「包含开场」的默认值；不提供时保留上次的选择。 */
+  openingDefault?: () => boolean
   /** 导出期间需要锁住的区域。 */
   lockTargets: () => HTMLElement[]
   title: () => string
@@ -80,7 +82,7 @@ export async function probeAllConfigs(): Promise<{ video: ConfigSupportRow[]; au
   return { video, audio }
 }
 
-const DIALOG_HTML = `
+const dialogHtml = (openingLabel: string) => `
 <form method="dialog" class="export-form">
  <header class="export-head"><h2>导出视频</h2><button type="button" class="text-button" data-close aria-label="关闭">✕</button></header>
  <div class="export-grid">
@@ -88,10 +90,10 @@ const DIALOG_HTML = `
   <label class="setting"><span>分辨率</span><select name="resolution"></select></label>
   <label class="setting"><span>帧率</span><select name="fps">${FRAME_RATES.map((fps) => `<option value="${fps}"${fps === 60 ? ' selected' : ''}>${fps} fps</option>`).join('')}</select></label>
   <label class="setting"><span>码率</span><select name="bitrate"><option value="auto" selected>自动</option>${BITRATE_CHOICES_MBPS.map((mbps) => `<option value="${mbps}">${mbps} Mbps</option>`).join('')}</select></label>
-  <label class="setting"><span>起点 <small>秒</small></span><input name="start" type="number" min="0" step="0.1" value="0"></label>
+  <label class="setting"><span>起点 <small>秒</small></span><input name="start" type="number" step="0.1" value="0"></label>
   <label class="setting"><span>终点 <small>秒</small></span><input name="end" type="number" min="0" step="0.1" value="0"></label>
  </div>
- <label class="check"><input name="opening" type="checkbox" checked>包含开场卡片（关闭时从第 ${EXPORT_OPENING.endSec} 秒起）</label>
+ <label class="check"><input name="opening" type="checkbox" checked>${openingLabel}</label>
  <p class="export-support" data-support></p>
  <div class="export-progress" data-progress hidden><progress max="1" value="0"></progress><output data-progress-text></output></div>
  <div class="export-actions">
@@ -108,7 +110,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
   dialog.className = 'export-dialog'
   dialog.id = 'export-dialog'
   dialog.setAttribute('aria-label', '导出视频')
-  dialog.innerHTML = DIALOG_HTML
+  dialog.innerHTML = dialogHtml(ctx.openingLabel)
   document.body.append(dialog)
 
   const q = <T extends Element>(selector: string) => dialog.querySelector<T>(selector)!
@@ -151,10 +153,8 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     return { container: containerSelect.value as ContainerFormat, width: preset.width, height: preset.height, fps, bitrateMbps }
   }
 
-  const durationSec = () => {
-    const snapshot = ctx.player.getStateSnapshot()
-    return Math.max(snapshot.durationSec, snapshot.chartEndSec)
-  }
+  const durationSec = () => ctx.durationSec()
+  const minStartSec = () => (openingInput.checked ? ctx.opening.startSec : ctx.opening.endSec)
 
   const bitrateOf = (settings: ExportVideoSettings, width: number, height: number, fps: number) =>
     bitrateSelect.value === 'auto' ? defaultBitrateMbps(width, height, fps) : settings.bitrateMbps
@@ -202,10 +202,13 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     startButton.disabled = !videoOk || running !== null
   }
 
+  /** 包含过场：起点下限为过场开头，起点停在 0 时拉到过场开头；关闭：下限 0。 */
   const syncRangeFloor = () => {
-    const floor = openingInput.checked ? EXPORT_OPENING.startSec : EXPORT_OPENING.endSec
-    startInput.min = String(floor)
-    if (Number(startInput.value) < floor) startInput.value = String(floor)
+    const floor = minStartSec()
+    startInput.min = String(Number(floor.toFixed(3)))
+    const start = Number(startInput.value)
+    if (!Number.isFinite(start) || start < floor) startInput.value = String(Math.max(0, floor))
+    else if (floor < 0 && Math.abs(start) < 1e-9) startInput.value = String(Number(floor.toFixed(3)))
   }
 
   const setLocked = (locked: boolean) => {
@@ -219,40 +222,10 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     return `${phase} ${progress.framesDone}/${progress.frameCount} 帧 · ${progress.fps.toFixed(1)} fps · ${progress.realtimeFactor.toFixed(2)}× 实时`
   }
 
-  function makeHost(): ExportFrameSource {
-    let resumeAt = 0
-    return {
-      canvas: ctx.canvas,
-      begin(width, height) {
-        ctx.suspendLiveRendering()
-        resumeAt = ctx.player.getStateSnapshot().currentTimeSec
-        ctx.player.pause()
-        ctx.player.setPlaybackRate(1)
-        ctx.canvas.classList.add('exporting')
-        ctx.player.resize(width, height, 1)
-        ctx.player.setExportMode(true)
-      },
-      renderAt(outputTimeSec) {
-        ctx.player.renderFrameAt(outputTimeSec, true)
-      },
-      collectAudio() {
-        return { events: ctx.player.getCapturedSoundEvents(), ...ctx.player.getAudioSources() }
-      },
-      end() {
-        ctx.player.setExportMode(false)
-        ctx.canvas.classList.remove('exporting')
-        ctx.restoreCanvasSize()
-        ctx.restorePlaybackRate()
-        ctx.player.seek(resumeAt)
-        ctx.resumeLiveRendering()
-      },
-    }
-  }
-
   async function start() {
     if (running) return
     const settings = readSettings()
-    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), EXPORT_OPENING, openingInput.checked)
+    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), ctx.opening, openingInput.checked)
     if (range.endSec - range.startSec < 1 / settings.fps) {
       supportLine.textContent = '导出区间为空，请检查起点 / 终点。'
       return
@@ -269,7 +242,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     progressText.textContent = '准备中…'
     let result: ExportResult | null = null
     try {
-      result = await exportVideo(makeHost(), {
+      result = await exportVideo(ctx.createSource({ intro: openingInput.checked }), {
         ...settings,
         ...range,
         signal: running.signal,
@@ -280,7 +253,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
       })
       downloadUrl = URL.createObjectURL(result.blob)
       downloadLink.href = downloadUrl
-      downloadLink.download = exportFileName(ctx.title(), settings, 'pjsk-preview')
+      downloadLink.download = exportFileName(ctx.title(), settings, ctx.fileNamePrefix)
       downloadLink.hidden = false
       progressBar.value = 1
       const sizeMb = (result.blob.size / 1024 / 1024).toFixed(1)
@@ -321,6 +294,10 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     const duration = durationSec()
     endInput.max = startInput.max = String(Math.ceil(duration))
     if (!(Number(endInput.value) > 0) || Number(endInput.value) > duration) endInput.value = duration.toFixed(1)
+    if (!running && ctx.openingDefault) {
+      openingInput.checked = ctx.openingDefault()
+      startInput.value = String(openingInput.checked ? Number(ctx.opening.startSec.toFixed(3)) : ctx.opening.endSec)
+    }
     syncRangeFloor()
     dialog.showModal()
     void refreshSupport()
