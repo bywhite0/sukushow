@@ -10,7 +10,7 @@ import { PreviewRenderer } from '@sukushow/llll-preview/renderer';
 import { LiveHud } from '@sukushow/llll-preview/hud';
 import { imagesSettled, loadHudFonts, preloadImages } from '@sukushow/llll-preview/canvasKit';
 import type { ExportFrameSource } from '@sukushow/export';
-import { installExportDialog, probeAllConfigs } from './llll/exportDialog';
+import { installExportDialog, probeAllConfigs } from './exportDialog';
 import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '@sukushow/llll-preview/stageCompositor';
 import { EXPORT_OPENING, StartAnimation, START_BASE01_URL, START_CLIP_DURATION } from '@sukushow/llll-preview/startAnim';
 import { ComboResult, BANNER_TEX_BASE, COMBO_RESULT_CLIP_DURATION, type ComboResultLoadProgress, type ResultKind } from '@sukushow/llll-preview/comboResult';
@@ -621,10 +621,13 @@ function createExportSource(opts:{intro:boolean}):ExportFrameSource{
  };
 }
 const exportDialog=installExportDialog(el<HTMLButtonElement>('export-video'),{
+ opening:EXPORT_OPENING,
+ openingLabel:'包含开场过场（负时刻；关闭时最早从 0 秒起）',
+ fileNamePrefix:'llll-preview',
  createSource:createExportSource,
  // 走带终点已含曲终横幅（chart.duration ≥ FinishTime + 横幅时长）。
  durationSec:()=>player?.transport.duration??chart.duration,
- introDefault:()=>input('opt-start-anim').checked,
+ openingDefault:()=>input('opt-start-anim').checked,
  lockTargets:()=>[document.querySelector<HTMLElement>('.workspace-header')!,document.querySelector<HTMLElement>('aside')!,document.querySelector<HTMLElement>('.transport')!],
  title:()=>el('chart-name').textContent??'',
  message,

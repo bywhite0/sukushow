@@ -21,7 +21,9 @@ import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from '
 import { parseUrlPreviewParams } from '@sukushow/pjsk-preview/lib/url'
 import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '@sukushow/pjsk-preview/llll/songAssets'
 import { feverForSong } from '@sukushow/chart/songTiming'
-import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
+import { installExportDialog, probeAllConfigs } from './exportDialog'
+import type { ExportFrameSource } from '@sukushow/export'
+import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 import type { SongSelectionStore } from '../songSelection'
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize, type ResourceLoadingTask } from '../resourceLoading'
 import { mmwWasmFilename } from '@sukushow/pjsk-preview/generated/mmwWasmAsset'
@@ -984,20 +986,50 @@ const onResize = () => {
 }
 window.addEventListener('resize', onResize)
 
+/** 导出帧源：导出期间停掉实时渲染循环、画布固定到预设尺寸（dpr 1），结束或取消后恢复尺寸、倍率与播放位置。 */
+function createExportSource(): ExportFrameSource {
+  const canvas = el<HTMLCanvasElement>('chart-canvas')
+  let resumeAt = 0
+  return {
+    canvas,
+    begin(width, height) {
+      liveRenderingSuspended = true
+      cancelAnimationFrame(rafHandle)
+      resumeAt = player.getStateSnapshot().currentTimeSec
+      player.pause()
+      player.setPlaybackRate(1)
+      canvas.classList.add('exporting')
+      player.resize(width, height, 1)
+      player.setExportMode(true)
+    },
+    renderAt(outputTimeSec) {
+      player.renderFrameAt(outputTimeSec, true)
+    },
+    collectAudio() {
+      return { events: player.getCapturedSoundEvents(), ...player.getAudioSources() }
+    },
+    end() {
+      player.setExportMode(false)
+      canvas.classList.remove('exporting')
+      resizeCanvasToStage()
+      player.setPlaybackRate(Number(select('rate').value))
+      player.seek(resumeAt)
+      liveRenderingSuspended = false
+      cancelAnimationFrame(rafHandle)
+      renderLoop()
+    },
+  }
+}
+
 const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), {
-  player,
-  canvas: el<HTMLCanvasElement>('chart-canvas'),
-  suspendLiveRendering: () => {
-    liveRenderingSuspended = true
-    cancelAnimationFrame(rafHandle)
+  opening: EXPORT_OPENING,
+  openingLabel: `包含开场卡片（关闭时从第 ${EXPORT_OPENING.endSec} 秒起）`,
+  fileNamePrefix: 'pjsk-preview',
+  createSource: createExportSource,
+  durationSec: () => {
+    const snapshot = player.getStateSnapshot()
+    return Math.max(snapshot.durationSec, snapshot.chartEndSec)
   },
-  resumeLiveRendering: () => {
-    liveRenderingSuspended = false
-    cancelAnimationFrame(rafHandle)
-    renderLoop()
-  },
-  restoreCanvasSize: resizeCanvasToStage,
-  restorePlaybackRate: () => player.setPlaybackRate(Number(select('rate').value)),
   lockTargets: () => [toolbarHost!, root.querySelector<HTMLElement>('aside')!, root.querySelector<HTMLElement>('.transport')!],
   title: () => el('chart-name').textContent ?? 'pjsk-preview',
   message,
