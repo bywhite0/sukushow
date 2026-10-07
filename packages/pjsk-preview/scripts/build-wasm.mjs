@@ -17,7 +17,7 @@ const publicWasmDir = path.join(projectRoot, 'public/wasm')
 const wasmManifestFile = path.join(generatedDir, 'mmwWasmAsset.ts')
 
 // emcc 解析：优先环境变量，其次 emsdk 默认位置。
-// 不依赖 PATH——Hermes 的 terminal 每次调用是独立 shell，`source emsdk_env.sh` 不跨调用持久。
+// 不依赖 PATH：`source emsdk_env.sh` 只对当前 shell 生效，换一个 shell 调用构建就找不到 emcc。
 function resolveEmcc() {
   const candidates = [
     process.env.EMCC,
@@ -135,9 +135,16 @@ execFileSync(
   },
 )
 
-// 上游对 emscripten 生成代码的三处补丁（MainLoop 未定义时的保护）。
 const generatedJs = fs.readFileSync(outputFile, 'utf8')
+// wasm 一律由 mmwWasm.ts 的 locateFile 指向 /wasm/<哈希>.wasm。胶水里的默认地址
+// `new URL("mmw-preview.wasm", import.meta.url)` 走不到，却会让 Vite 构建时另打包一份 wasm，换成普通字符串。
+const DEFAULT_WASM_URL = 'new URL("mmw-preview.wasm",import.meta.url).href'
+if (generatedJs.split(DEFAULT_WASM_URL).length !== 2) {
+  throw new Error('emscripten 生成代码里默认 wasm 地址的写法变了，需要同步更新 build-wasm.mjs 的补丁')
+}
+// 其余是上游对 emscripten 生成代码的三处补丁（MainLoop 未定义时的保护）。
 const patchedJs = generatedJs
+  .replace(DEFAULT_WASM_URL, '"mmw-preview.wasm"')
   .replaceAll(
     'var registerPreMainLoop=f=>{typeof MainLoop!="undefined"&&MainLoop.preMainLoop.push(f)};',
     'var registerPreMainLoop=f=>{typeof MainLoop!="undefined"&&MainLoop&&MainLoop.preMainLoop&&MainLoop.preMainLoop.push(f)};',
