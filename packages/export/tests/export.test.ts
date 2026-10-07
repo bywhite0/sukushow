@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { VirtualClock, resolveExportRange, type OpeningSpan } from '../src/clock'
-import { loopPhaseToOffset, loopPointsFor, scheduleSoundEvents, type CapturedSoundEvent } from '../src/audioMix'
+import { loopPhaseToOffset, loopPointsFor, mixFrameCount, mixSegments, scheduleSoundEvents, type CapturedSoundEvent } from '../src/audioMix'
 import {
   RESOLUTION_PRESETS,
   audioEncoderCandidates,
@@ -133,6 +133,32 @@ describe('scheduleSoundEvents', () => {
     const points = { loopStart: 0.1, loopEnd: 0.9 }
     expect(loopPhaseToOffset(0.5, 1, points)).toBeCloseTo(0.5, 9)
     expect(loopPhaseToOffset(1.3, 1, points)).toBeCloseTo(0.1 + (1.2 % 0.8), 9)
+  })
+})
+
+describe('mix segments', () => {
+  it('counts the clip frames like the whole-clip render', () => {
+    expect(mixFrameCount(25, 48000)).toBe(1_200_000)
+    expect(mixFrameCount(0.2, 48000)).toBe(9600)
+    expect(mixFrameCount(0, 48000)).toBe(1)
+  })
+
+  it('covers the clip with contiguous integer-frame segments', () => {
+    const segments = mixSegments(1_200_000, 480_000)
+    expect(segments).toEqual([
+      { startFrame: 0, frameCount: 480_000 },
+      { startFrame: 480_000, frameCount: 480_000 },
+      { startFrame: 960_000, frameCount: 240_000 },
+    ])
+    for (let i = 1; i < segments.length; i += 1) {
+      expect(segments[i]!.startFrame).toBe(segments[i - 1]!.startFrame + segments[i - 1]!.frameCount)
+    }
+  })
+
+  it('uses a single segment for short clips and never returns empty segments', () => {
+    expect(mixSegments(9600, 480_000)).toEqual([{ startFrame: 0, frameCount: 9600 }])
+    expect(mixSegments(1_000, 0.5)).toHaveLength(1000)
+    expect(mixSegments(0, 480_000)).toEqual([])
   })
 })
 

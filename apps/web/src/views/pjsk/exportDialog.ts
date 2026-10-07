@@ -12,6 +12,7 @@ import {
   RESOLUTION_PRESETS,
   buildVideoEncoderConfig,
   defaultBitrateMbps,
+  discardExportFile,
   exportFileName,
   exportVideo,
   findResolution,
@@ -83,7 +84,7 @@ const DIALOG_HTML = `
 <form method="dialog" class="export-form">
  <header class="export-head"><h2>导出视频</h2><button type="button" class="text-button" data-close aria-label="关闭">✕</button></header>
  <div class="export-grid">
-  <label class="setting"><span>格式</span><select name="container"><option value="mp4" selected>MP4（H.264 + AAC）</option><option value="webm">WebM（VP9 + Opus）</option></select></label>
+  <label class="setting"><span>格式</span><select name="container"><option value="mp4" selected>MP4（H.264 + AAC）</option><option value="webm">WebM（VP9 + Opus，长片段建议用 MP4）</option></select></label>
   <label class="setting"><span>分辨率</span><select name="resolution"></select></label>
   <label class="setting"><span>帧率</span><select name="fps">${FRAME_RATES.map((fps) => `<option value="${fps}"${fps === 60 ? ' selected' : ''}>${fps} fps</option>`).join('')}</select></label>
   <label class="setting"><span>码率</span><select name="bitrate"><option value="auto" selected>自动</option>${BITRATE_CHOICES_MBPS.map((mbps) => `<option value="${mbps}">${mbps} Mbps</option>`).join('')}</select></label>
@@ -101,6 +102,8 @@ const DIALOG_HTML = `
 </form>`
 
 export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialogContext) {
+  // 上一个会话遗留的导出临时文件：当前页面还没有指向它的下载链接
+  void discardExportFile()
   const dialog = document.createElement('dialog')
   dialog.className = 'export-dialog'
   dialog.id = 'export-dialog'

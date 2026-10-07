@@ -111,12 +111,29 @@ export type MixInput = {
   loopPoints?: (key: string, buffer: AudioBuffer) => { loopStart: number; loopEnd: number } | null
 }
 
-/** OfflineAudioContext 离线混音，返回整段 PCM。 */
-export async function renderMix(input: MixInput): Promise<AudioBuffer> {
-  const length = Math.max(1, Math.ceil(input.durationSec * input.sampleRate))
-  const ctx = new OfflineAudioContext({ numberOfChannels: input.channels, length, sampleRate: input.sampleRate })
-  const t0 = input.startSec
-  const t1 = input.startSec + input.durationSec
+/** 混音分段长度（秒）：每段单独离线渲染、编码后即释放，PCM 峰值与片长无关。 */
+export const MIX_SEGMENT_SEC = 10
+
+/** 导出片段的总采样帧数。 */
+export function mixFrameCount(durationSec: number, sampleRate: number): number {
+  return Math.max(1, Math.ceil(durationSec * sampleRate))
+}
+
+/** 把 [0, totalFrames) 切成首尾相接的整数帧段；段边界由帧号决定，相邻两段不重叠也不留缝。 */
+export function mixSegments(totalFrames: number, segmentFrames: number): { startFrame: number; frameCount: number }[] {
+  const step = Math.max(1, Math.floor(segmentFrames))
+  const segments: { startFrame: number; frameCount: number }[] = []
+  for (let startFrame = 0; startFrame < totalFrames; startFrame += step) {
+    segments.push({ startFrame, frameCount: Math.min(step, totalFrames - startFrame) })
+  }
+  return segments
+}
+
+/** OfflineAudioContext 离线渲染导出片段中 [startFrame, startFrame + frameCount) 这一段 PCM。 */
+export async function renderMixSegment(input: MixInput, startFrame: number, frameCount: number): Promise<AudioBuffer> {
+  const ctx = new OfflineAudioContext({ numberOfChannels: input.channels, length: frameCount, sampleRate: input.sampleRate })
+  const t0 = input.startSec + startFrame / input.sampleRate
+  const t1 = t0 + frameCount / input.sampleRate
 
   if (input.bgm && input.bgmVolume > 0) {
     const source = ctx.createBufferSource()

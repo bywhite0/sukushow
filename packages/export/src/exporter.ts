@@ -1,11 +1,11 @@
 /**
  * 视频导出：帧源逐帧渲染（虚拟时钟）→ WebCodecs VideoEncoder；
- * 音效事件 + BGM → OfflineAudioContext → AudioEncoder；Mediabunny 封装成 MP4 / WebM。
+ * 音效事件 + BGM → 分段 OfflineAudioContext → AudioEncoder；Mediabunny 封装成 MP4 / WebM。
+ * MP4 边封装边写入 OPFS 临时文件（见 output.ts），WebM 在内存中封装。
  *
  * 只依赖 ExportFrameSource 接口：画面怎么画、音效怎么收集由各预览实现。
  */
 import {
-  BufferTarget,
   EncodedAudioPacketSource,
   EncodedPacket,
   EncodedVideoPacketSource,
@@ -14,7 +14,8 @@ import {
   WebMOutputFormat,
 } from 'mediabunny'
 import { VirtualClock } from './clock'
-import { renderMix, type CapturedSoundEvent } from './audioMix'
+import { MIX_SEGMENT_SEC, mixFrameCount, mixSegments, renderMixSegment, type CapturedSoundEvent, type MixInput } from './audioMix'
+import { createExportTarget } from './output'
 import {
   AUDIO_CHANNELS,
   AUDIO_SAMPLE_RATE,
@@ -131,6 +132,8 @@ export async function pickAudioConfig(container: ContainerFormat): Promise<{ cod
 
 const nowSec = () => performance.now() / 1000
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+/** 等待写出的视频包上限：写盘慢于编码时在帧循环里等写入追上，编码包不在内存中堆积。 */
+const MAX_PENDING_VIDEO_PACKETS = 120
 
 export async function exportVideo(host: ExportFrameSource, request: ExportRequest): Promise<ExportResult> {
   const { signal } = request
@@ -149,25 +152,31 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
   const clock = new VirtualClock(request.startSec, request.endSec, request.fps)
   if (clock.frameCount <= 0) throw new Error('导出区间为空')
 
-  const target = new BufferTarget()
+  const exportTarget = await createExportTarget(request.container)
   const output = new Output({
-    format: request.container === 'mp4' ? new Mp4OutputFormat({ fastStart: 'in-memory' }) : new WebMOutputFormat(),
-    target,
+    // fastStart: false：moov 写在末尾，样本随编码写出，不在内存中积累
+    format: request.container === 'mp4' ? new Mp4OutputFormat({ fastStart: false }) : new WebMOutputFormat(),
+    target: exportTarget.target,
   })
   const videoSource = new EncodedVideoPacketSource(videoCodecFor(request.container))
   output.addVideoTrack(videoSource, { frameRate: request.fps })
   const audioSource = audioChoice ? new EncodedAudioPacketSource(audioChoice.codec) : null
   if (audioSource) output.addAudioTrack(audioSource)
-  await output.start()
 
   let encoderError: unknown = null
-  // 封装按到达顺序串行写入；不在帧循环里等待它，避免与音轨交错等待互相卡住。
+  // 封装按到达顺序串行写入，积压超过上限时才在帧循环里等待。MP4 写样本不等音轨，
+  // WebM 写入只是入队，所以等待不会因音轨尚未开始而卡住。
   let videoChain: Promise<void> = Promise.resolve()
   let audioChain: Promise<void> = Promise.resolve()
+  let pendingVideoPackets = 0
   const videoEncoder = new VideoEncoder({
     output: (chunk, meta) => {
       const packet = EncodedPacket.fromEncodedChunk(chunk)
-      videoChain = videoChain.then(() => videoSource.add(packet, meta))
+      pendingVideoPackets += 1
+      videoChain = videoChain.then(async () => {
+        await videoSource.add(packet, meta)
+        pendingVideoPackets -= 1
+      })
     },
     error: (error) => {
       encoderError = error
@@ -190,6 +199,7 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
   }
 
   try {
+    await output.start()
     videoEncoder.configure(videoConfig)
     hostActive = true
     await host.begin(request.width, request.height, clock.startSec, request.fps)
@@ -218,6 +228,7 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
           setTimeout(done, 50)
         })
       }
+      if (pendingVideoPackets > MAX_PENDING_VIDEO_PACKETS) await videoChain
       if (nowSec() - lastYield > 0.1) {
         report('video', (0.9 * (index + 1)) / clock.frameCount, index + 1)
         await yieldToUi()
@@ -234,7 +245,7 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
     hostActive = false
 
     if (audioSource && audioChoice) {
-      const mixed = await renderMix({
+      const mix: MixInput = {
         startSec: clock.startSec,
         durationSec: clock.durationSec,
         sampleRate: AUDIO_SAMPLE_RATE,
@@ -246,9 +257,8 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
         soundBuffers: audio.soundBuffers,
         events: audio.events,
         loopPoints: audio.loopPoints,
-      })
-      throwIfAborted()
-      audioEncoder = new AudioEncoder({
+      }
+      const encoder = new AudioEncoder({
         output: (chunk, meta) => {
           const packet = EncodedPacket.fromEncodedChunk(chunk)
           audioChain = audioChain.then(() => audioSource.add(packet, meta))
@@ -257,9 +267,19 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
           encoderError = error
         },
       })
-      audioEncoder.configure(audioChoice.config)
-      await encodeAudioBuffer(audioEncoder, mixed, throwIfAborted)
-      await audioEncoder.flush()
+      audioEncoder = encoder
+      encoder.configure(audioChoice.config)
+      // 逐段混音、编码，每段 PCM 编码后即释放
+      const totalFrames = mixFrameCount(clock.durationSec, AUDIO_SAMPLE_RATE)
+      for (const segment of mixSegments(totalFrames, MIX_SEGMENT_SEC * AUDIO_SAMPLE_RATE)) {
+        throwIfAborted()
+        const pcm = await renderMixSegment(mix, segment.startFrame, segment.frameCount)
+        throwIfAborted()
+        await encodeAudioBuffer(encoder, pcm, segment.startFrame, throwIfAborted)
+        if (encoderError) throw encoderError
+        report('audio', 0.9 + (0.07 * (segment.startFrame + segment.frameCount)) / totalFrames, clock.frameCount)
+      }
+      await encoder.flush()
       if (encoderError) throw encoderError
     }
 
@@ -267,13 +287,12 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
     await Promise.all([videoChain, audioChain])
     throwIfAborted()
     await output.finalize()
-    const buffer = target.buffer
-    if (!buffer) throw new Error('封装失败：没有输出数据')
     const mimeType = await output.getMimeType()
+    const blob = await exportTarget.result(mimeType)
     const elapsedSec = nowSec() - started
     report('finalize', 1, clock.frameCount)
     return {
-      blob: new Blob([buffer], { type: mimeType }),
+      blob,
       mimeType,
       videoCodec: videoConfig.codec,
       audioCodec: audioChoice?.codec ?? null,
@@ -290,6 +309,7 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
     } catch {
       // ignore
     }
+    await exportTarget.discard()
     throw error
   } finally {
     if (hostActive) host.end()
@@ -298,7 +318,8 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
   }
 }
 
-async function encodeAudioBuffer(encoder: AudioEncoder, buffer: AudioBuffer, throwIfAborted: () => void) {
+/** 把一段 PCM 切成 AudioData 送入编码器；时间戳从该段在片段中的起始帧 startFrame 起算。 */
+async function encodeAudioBuffer(encoder: AudioEncoder, buffer: AudioBuffer, startFrame: number, throwIfAborted: () => void) {
   const chunkFrames = 4800
   const channels = buffer.numberOfChannels
   const planes = Array.from({ length: channels }, (_, channel) => buffer.getChannelData(channel))
@@ -314,7 +335,7 @@ async function encodeAudioBuffer(encoder: AudioEncoder, buffer: AudioBuffer, thr
       sampleRate: buffer.sampleRate,
       numberOfFrames: frames,
       numberOfChannels: channels,
-      timestamp: Math.round((offset * 1_000_000) / buffer.sampleRate),
+      timestamp: Math.round(((startFrame + offset) * 1_000_000) / buffer.sampleRate),
       data,
     })
     try {

@@ -1,11 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// 用最小替身代替 Mediabunny 与 WebCodecs，只验证 exportVideo 对帧源的调用契约（无音轨路径）
+// 用最小替身代替 Mediabunny 与 WebCodecs，只验证 exportVideo 对帧源、写入目标与音频分段的调用契约
+const mux = vi.hoisted(() => ({ targets: [] as unknown[] }))
+
 vi.mock('mediabunny', () => {
   class BufferTarget {
     buffer: ArrayBuffer | null = new ArrayBuffer(8)
   }
+  class StreamTarget {
+    constructor(
+      public writable: unknown,
+      public options: unknown,
+    ) {}
+  }
   class Output {
+    constructor(options: { target: unknown }) {
+      mux.targets.push(options.target)
+    }
     addVideoTrack() {}
     addAudioTrack() {}
     async start() {}
@@ -24,13 +35,17 @@ vi.mock('mediabunny', () => {
   class Mp4OutputFormat {}
   class WebMOutputFormat {}
   const EncodedPacket = { fromEncodedChunk: (chunk: unknown) => chunk }
-  return { BufferTarget, Output, EncodedVideoPacketSource, EncodedAudioPacketSource, EncodedPacket, Mp4OutputFormat, WebMOutputFormat }
+  return { BufferTarget, StreamTarget, Output, EncodedVideoPacketSource, EncodedAudioPacketSource, EncodedPacket, Mp4OutputFormat, WebMOutputFormat }
 })
 
+import { BufferTarget, StreamTarget } from 'mediabunny'
 import { ExportCancelledError, exportVideo, type ExportAudioSources, type ExportFrameSource, type ExportRequest } from '../src/exporter'
 
 const frames: FakeVideoFrame[] = []
+const audioData: FakeAudioData[] = []
+const mixLengths: number[] = []
 let failEncode = false
+let audioSupported = false
 
 class FakeVideoFrame {
   closed = false
@@ -62,18 +77,76 @@ class FakeVideoEncoder {
 }
 
 class FakeAudioEncoder {
-  // 不支持任何音频配置：导出走无音轨路径，不进入离线混音
+  // 默认不支持任何音频配置：导出走无音轨路径
   static async isConfigSupported() {
-    return { supported: false }
+    return { supported: audioSupported }
   }
+  state = 'unconfigured'
+  encodeQueueSize = 0
+  configure() {
+    this.state = 'configured'
+  }
+  encode() {}
+  async flush() {}
+  close() {
+    this.state = 'closed'
+  }
+}
+
+class FakeAudioData {
+  closed = false
+  readonly timestamp: number
+  readonly numberOfFrames: number
+  constructor(init: { timestamp: number; numberOfFrames: number }) {
+    this.timestamp = init.timestamp
+    this.numberOfFrames = init.numberOfFrames
+    audioData.push(this)
+  }
+  close() {
+    this.closed = true
+  }
+}
+
+class FakeOfflineAudioContext {
+  destination = {}
+  constructor(private readonly options: { numberOfChannels: number; length: number; sampleRate: number }) {
+    mixLengths.push(options.length)
+  }
+  createGain() {
+    return { gain: { value: 1 }, connect: (node: unknown) => node }
+  }
+  createBufferSource() {
+    return { connect: (node: unknown) => node, start() {}, stop() {} }
+  }
+  async startRendering() {
+    const { length, numberOfChannels, sampleRate } = this.options
+    const planes = Array.from({ length: numberOfChannels }, () => new Float32Array(length))
+    return { length, numberOfChannels, sampleRate, getChannelData: (channel: number) => planes[channel] }
+  }
+}
+
+/** 浏览器 OPFS 的最小替身：一个目录、一个可写文件。 */
+function fakeOpfs() {
+  const writable = { kind: 'writable' }
+  const file = new Blob(['mp4-bytes'])
+  const handle = { createWritable: vi.fn(async () => writable), getFile: vi.fn(async () => file) }
+  const dir = { getFileHandle: vi.fn(async () => handle), removeEntry: vi.fn(async () => {}) }
+  const root = { getDirectoryHandle: vi.fn(async () => dir) }
+  vi.stubGlobal('navigator', { storage: { getDirectory: async () => root } })
+  return { writable, handle, dir, root }
 }
 
 beforeEach(() => {
   frames.length = 0
+  audioData.length = 0
+  mixLengths.length = 0
+  mux.targets.length = 0
   failEncode = false
+  audioSupported = false
   vi.stubGlobal('VideoEncoder', FakeVideoEncoder)
   vi.stubGlobal('AudioEncoder', FakeAudioEncoder)
-  vi.stubGlobal('OfflineAudioContext', class {})
+  vi.stubGlobal('AudioData', FakeAudioData)
+  vi.stubGlobal('OfflineAudioContext', FakeOfflineAudioContext)
   vi.stubGlobal('VideoFrame', FakeVideoFrame)
 })
 
@@ -181,5 +254,62 @@ describe('exportVideo frame source contract', () => {
     const { source, calls } = recordingSource()
     await expect(exportVideo(source, { ...request, startSec: 5, endSec: 5 })).rejects.toThrow('导出区间为空')
     expect(calls).toEqual([])
+  })
+})
+
+describe('exportVideo output target', () => {
+  it('streams MP4 into the OPFS temp file and returns that file', async () => {
+    const opfs = fakeOpfs()
+    const result = await exportVideo(recordingSource().source, request)
+    const target = mux.targets[0] as InstanceType<typeof StreamTarget> & { writable: unknown; options: unknown }
+    expect(target).toBeInstanceOf(StreamTarget)
+    expect(target.writable).toBe(opfs.writable)
+    expect(target.options).toEqual({ chunked: true })
+    expect(opfs.root.getDirectoryHandle).toHaveBeenCalledWith('sukushow-export', { create: true })
+    expect(opfs.dir.getFileHandle).toHaveBeenCalledWith('export.mp4', { create: true })
+    expect(result.blob.size).toBe('mp4-bytes'.length)
+    expect(result.blob.type).toBe('video/mp4')
+    expect(opfs.dir.removeEntry).not.toHaveBeenCalled()
+  })
+
+  it('keeps WebM in memory even when OPFS is available', async () => {
+    const opfs = fakeOpfs()
+    await exportVideo(recordingSource().source, { ...request, container: 'webm' })
+    expect(mux.targets[0]).toBeInstanceOf(BufferTarget)
+    expect(opfs.handle.createWritable).not.toHaveBeenCalled()
+  })
+
+  it('removes the temp file when an MP4 export fails', async () => {
+    const opfs = fakeOpfs()
+    const { source } = recordingSource({
+      begin: () => {
+        throw new Error('begin failed')
+      },
+    })
+    await expect(exportVideo(source, request)).rejects.toThrow('begin failed')
+    expect(opfs.dir.removeEntry).toHaveBeenCalledWith('export.mp4')
+  })
+
+  it('falls back to memory when OPFS is unavailable', async () => {
+    vi.stubGlobal('navigator', {})
+    const result = await exportVideo(recordingSource().source, request)
+    expect(mux.targets[0]).toBeInstanceOf(BufferTarget)
+    expect(result.blob.size).toBe(8)
+  })
+})
+
+describe('exportVideo audio', () => {
+  it('mixes and encodes audio in contiguous 10 s segments and releases every chunk', async () => {
+    audioSupported = true
+    vi.stubGlobal('navigator', {})
+    const result = await exportVideo(recordingSource().source, { ...request, startSec: 0, endSec: 25 })
+    expect(result.audioCodec).toBe('aac')
+    expect(mixLengths).toEqual([480_000, 480_000, 240_000])
+    expect(audioData).toHaveLength(250)
+    audioData.forEach((data, index) => {
+      expect(data.timestamp).toBe(index * 100_000)
+      expect(data.numberOfFrames).toBe(4800)
+    })
+    expect(audioData.every((data) => data.closed)).toBe(true)
   })
 })

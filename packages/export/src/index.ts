@@ -1,4 +1,5 @@
 export * from './audioMix'
 export * from './clock'
 export * from './exporter'
+export { discardExportFile } from './output'
 export * from './presets'
