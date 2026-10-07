@@ -1,40 +1,37 @@
 /**
  * 视频导出对话框：选预设 → 逐帧渲染编码 → 下载。
  *
- * 移植自 PJSK 实现（src/ui/exportDialog.ts）。不受支持的配置（VideoEncoder.isConfigSupported 为假）
- * 在选项里置灰。画面由调用方给的 ExportFrameSource 负责：导出期间暂停实时渲染循环、画布固定到预设尺寸（dpr 1），
+ * 不受支持的配置（VideoEncoder.isConfigSupported 为假）在选项里置灰。
+ * 画面由调用方给的 ExportFrameSource 负责：导出期间暂停实时渲染循环、画布固定到预设尺寸（dpr 1），
  * 结束或取消后恢复；这里只锁住会影响画面的控件并驱动 exportVideo。
  */
-import { resolveExportRange } from '@sukushow/llll-preview/export/clock'
-import {
-  ExportCancelledError,
-  exportVideo,
-  isVideoConfigSupported,
-  pickAudioConfig,
-  webCodecsAvailable,
-  type ExportFrameSource,
-  type ExportProgress,
-  type ExportResult,
-} from '@sukushow/llll-preview/export/exporter'
 import {
   BITRATE_CHOICES_MBPS,
+  ExportCancelledError,
   FRAME_RATES,
   RESOLUTION_PRESETS,
   buildVideoEncoderConfig,
   defaultBitrateMbps,
   exportFileName,
+  exportVideo,
   findResolution,
+  isVideoConfigSupported,
+  pickAudioConfig,
+  resolveExportRange,
+  webCodecsAvailable,
   type ContainerFormat,
+  type ExportFrameSource,
+  type ExportProgress,
+  type ExportResult,
   type ExportVideoSettings,
-} from '@sukushow/llll-preview/export/presets'
+} from '@sukushow/export'
+import { EXPORT_OPENING } from '@sukushow/llll-preview/startAnim'
 
 export type ExportDialogContext = {
   /** 按本次选项创建帧源（intro = 是否包含开场过场）。 */
   createSource: (options: { intro: boolean }) => ExportFrameSource
   /** 走带终点（秒）。 */
   durationSec: () => number
-  /** 开场过场时长（秒）；包含过场时导出可从 −introSec 起。 */
-  introSec: number
   /** 打开对话框时「包含开场过场」的默认值（跟随预览设置）。 */
   introDefault: () => boolean
   /** 导出期间需要锁住的区域。 */
@@ -148,7 +145,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
   }
 
   const durationSec = () => ctx.durationSec()
-  const minStartSec = () => (openingInput.checked ? -ctx.introSec : 0)
+  const minStartSec = () => (openingInput.checked ? EXPORT_OPENING.startSec : EXPORT_OPENING.endSec)
 
   const bitrateOf = (settings: ExportVideoSettings, width: number, height: number, fps: number) =>
     bitrateSelect.value === 'auto' ? defaultBitrateMbps(width, height, fps) : settings.bitrateMbps
@@ -196,7 +193,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     startButton.disabled = !videoOk || running !== null
   }
 
-  /** 包含过场：起点下限 −introSec，起点停在 0 时拉到过场开头；关闭：下限 0。 */
+  /** 包含过场：起点下限为过场开头，起点停在 0 时拉到过场开头；关闭：下限 0。 */
   const syncRangeFloor = () => {
     const floor = minStartSec()
     startInput.min = String(Number(floor.toFixed(3)))
@@ -219,7 +216,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
   async function start() {
     if (running) return
     const settings = readSettings()
-    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), minStartSec())
+    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), EXPORT_OPENING, openingInput.checked)
     if (range.endSec - range.startSec < 1 / settings.fps) {
       supportLine.textContent = '导出区间为空，请检查起点 / 终点。'
       return
@@ -247,7 +244,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
       })
       downloadUrl = URL.createObjectURL(result.blob)
       downloadLink.href = downloadUrl
-      downloadLink.download = exportFileName(ctx.title(), settings)
+      downloadLink.download = exportFileName(ctx.title(), settings, 'llll-preview')
       downloadLink.hidden = false
       progressBar.value = 1
       const sizeMb = (result.blob.size / 1024 / 1024).toFixed(1)
@@ -290,7 +287,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     if (!(Number(endInput.value) > 0) || Number(endInput.value) > duration) endInput.value = duration.toFixed(1)
     if (!running) {
       openingInput.checked = ctx.introDefault()
-      startInput.value = String(openingInput.checked ? Number((-ctx.introSec).toFixed(3)) : 0)
+      startInput.value = String(openingInput.checked ? Number(EXPORT_OPENING.startSec.toFixed(3)) : EXPORT_OPENING.endSec)
     }
     syncRangeFloor()
     dialog.showModal()

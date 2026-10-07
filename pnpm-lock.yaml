@@ -10,6 +10,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@sukushow/export':
+        specifier: workspace:*
+        version: link:../../packages/export
       '@sukushow/llll-preview':
         specifier: workspace:*
         version: link:../../packages/llll-preview
@@ -45,6 +48,19 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.5)(vite@7.3.6(@types/node@24.13.5)(terser@5.51.2)(tsx@4.23.13))
 
+  packages/export:
+    dependencies:
+      mediabunny:
+        specifier: 1.61.0
+        version: 1.61.0
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.4)(vite@7.3.6(@types/node@26.6.4)(terser@5.51.2)(tsx@4.23.13))
+
   packages/flat-preview:
     devDependencies:
       '@types/node':
@@ -68,9 +84,6 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
-      mediabunny:
-        specifier: 1.61.0
-        version: 1.61.0
       three:
         specifier: ^0.183.0
         version: 0.183.2
@@ -99,15 +112,15 @@ importers:
 
   packages/pjsk-preview:
     dependencies:
+      '@sukushow/export':
+        specifier: workspace:*
+        version: link:../export
       '@sukushow/llll-preview':
         specifier: workspace:*
         version: link:../llll-preview
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
-      mediabunny:
-        specifier: ^1.61.0
-        version: 1.61.0
     devDependencies:
       '@types/node':
         specifier: ^24.0.0

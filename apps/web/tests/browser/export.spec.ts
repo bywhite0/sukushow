@@ -1,7 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 
 // 编码与资源预热会争用 GPU；总预算需覆盖下面的 60 秒条件等待。
 test.setTimeout(120_000);
+
+/** 开发服务器以 /@fs/ 提供工作区包源码；与应用导入的 @sukushow/llll-preview/se 是同一模块实例。 */
+const SE_MODULE_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/se.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
 
 async function prepare(page: Page) {
   await page.goto('/');
@@ -31,14 +35,14 @@ async function restored(page: Page) {
 
 test('30 fps 导出将音效推进到片段终点，下载后恢复预览', async ({ page }) => {
   await prepare(page);
-  await page.evaluate(async () => {
-    const { CapturingSeOutput } = await import('/src/se.ts' as string);
+  await page.evaluate(async (url) => {
+    const { CapturingSeOutput } = await import(url);
     const finish = CapturingSeOutput.prototype.finish;
     CapturingSeOutput.prototype.finish = function(end: number) {
       (window as any).__audioEnd = end;
       return finish.call(this, end);
     };
-  });
+  }, SE_MODULE_URL);
   await page.locator('[data-start]').click();
   await expect(page.locator('[data-download]')).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('[data-progress-text]')).toContainText('6 帧 / 0.20 秒');

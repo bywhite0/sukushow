@@ -1,5 +1,5 @@
 import { mmwWasmFilename } from '../generated/mmwWasmAsset'
-import type { CapturedSoundEvent } from '../export/audioMix'
+import type { CapturedSoundEvent } from '@sukushow/export'
 import type { PreviewRuntimeConfig, ScoreTextFormat, SessionMetadata, TransportState, WasmPlayerSnapshot } from './types'
 
 type CcallOptions = {

@@ -1,6 +1,6 @@
 # llll-preview · 谱面放映室
 
-面向 Link! Like! LoveLive! 原格式谱面的本地优先 WebGL 3D 渲染与导出模块。浏览器工作台位于 `apps/web`，本目录保留解析、渲染、音频、特效和导出实现。
+面向 Link! Like! LoveLive! 原格式谱面的本地优先 WebGL 3D 渲染模块。浏览器工作台位于 `apps/web`，本目录保留解析、渲染、音频、特效与导出用的音效记录；视频编码与封装由 `packages/export` 完成。
 
 ## 运行
 

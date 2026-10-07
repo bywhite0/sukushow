@@ -1,6 +1,8 @@
 /**
- * 视频导出：wasm 逐帧渲染（虚拟时钟）→ WebCodecs VideoEncoder；
+ * 视频导出：帧源逐帧渲染（虚拟时钟）→ WebCodecs VideoEncoder；
  * 音效事件 + BGM → OfflineAudioContext → AudioEncoder；Mediabunny 封装成 MP4 / WebM。
+ *
+ * 只依赖 ExportFrameSource 接口：画面怎么画、音效怎么收集由各预览实现。
  */
 import {
   BufferTarget,
@@ -24,16 +26,25 @@ import {
   type ExportVideoSettings,
 } from './presets'
 
-/** 导出时对播放器的最小依赖面（main.ts 提供实现）。 */
-export type ExportHost = {
-  /** 把画布固定到导出尺寸（dpr 1），进入导出模式（虚拟时钟 + 音效收集）。 */
-  begin(width: number, height: number): void
+/**
+ * 帧源：导出对预览的最小依赖面（各预览自己实现）。
+ * begin 之后按帧号顺序调用 renderAt（时刻严格递增、步长 1/fps），最后 collectAudio + end。
+ */
+export type ExportFrameSource = {
+  /**
+   * 把画布固定到导出尺寸（dpr 1），进入导出模式（虚拟时钟 + 音效收集）。
+   * 需要从起点前预滚的帧源用 startSec / fps 推进到起点；能从任意时刻直接进入的帧源可以忽略。
+   */
+  begin(width: number, height: number, startSec: number, fps: number): void | Promise<void>
   /** 以注入时刻渲染一帧（正在播放语义）。 */
   renderAt(outputTimeSec: number): void
   /** 当前帧所在的画布；须在 renderAt 之后同一任务内取帧。 */
   readonly canvas: HTMLCanvasElement
-  /** 导出期间收集到的音效事件与混音素材。 */
-  collectAudio(): ExportAudioSources
+  /**
+   * 导出期间收集到的音效事件与混音素材。endSec 为视频终点（起点 + 时长），
+   * 供按播放过程收集音效的帧源补齐最后一帧间隔并收尾；事件自带终点的帧源可以忽略。
+   */
+  collectAudio(endSec: number): ExportAudioSources
   /** 退出导出模式，恢复画布尺寸与播放位置。 */
   end(): void
 }
@@ -45,6 +56,8 @@ export type ExportAudioSources = {
   bgmVolume: number
   soundVolume: number
   soundBuffers: ReadonlyMap<string, AudioBuffer>
+  /** 循环音的循环点（见 audioMix.MixInput.loopPoints）。 */
+  loopPoints?: (key: string, buffer: AudioBuffer) => { loopStart: number; loopEnd: number } | null
 }
 
 export type ExportPhase = 'video' | 'audio' | 'finalize'
@@ -119,7 +132,7 @@ export async function pickAudioConfig(container: ContainerFormat): Promise<{ cod
 const nowSec = () => performance.now() / 1000
 const yieldToUi = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-export async function exportVideo(host: ExportHost, request: ExportRequest): Promise<ExportResult> {
+export async function exportVideo(host: ExportFrameSource, request: ExportRequest): Promise<ExportResult> {
   const { signal } = request
   const throwIfAborted = () => {
     if (signal?.aborted) throw new ExportCancelledError()
@@ -178,8 +191,9 @@ export async function exportVideo(host: ExportHost, request: ExportRequest): Pro
 
   try {
     videoEncoder.configure(videoConfig)
-    host.begin(request.width, request.height)
     hostActive = true
+    await host.begin(request.width, request.height, clock.startSec, request.fps)
+    throwIfAborted()
 
     const keyFrameInterval = Math.max(1, Math.round(request.fps * 2))
     let lastYield = nowSec()
@@ -192,8 +206,11 @@ export async function exportVideo(host: ExportHost, request: ExportRequest): Pro
         timestamp: clock.timestampUs(index),
         duration: clock.frameDurationUs(index),
       })
-      videoEncoder.encode(frame, { keyFrame: index % keyFrameInterval === 0 })
-      frame.close()
+      try {
+        videoEncoder.encode(frame, { keyFrame: index % keyFrameInterval === 0 })
+      } finally {
+        frame.close()
+      }
       while (videoEncoder.encodeQueueSize > 6) {
         await new Promise<void>((resolve) => {
           const done = () => resolve()
@@ -212,7 +229,7 @@ export async function exportVideo(host: ExportHost, request: ExportRequest): Pro
     report('audio', 0.9, clock.frameCount)
     throwIfAborted()
 
-    const audio = host.collectAudio()
+    const audio = host.collectAudio(clock.startSec + clock.durationSec)
     host.end()
     hostActive = false
 
@@ -228,6 +245,7 @@ export async function exportVideo(host: ExportHost, request: ExportRequest): Pro
         soundVolume: audio.soundVolume,
         soundBuffers: audio.soundBuffers,
         events: audio.events,
+        loopPoints: audio.loopPoints,
       })
       throwIfAborted()
       audioEncoder = new AudioEncoder({
@@ -299,8 +317,11 @@ async function encodeAudioBuffer(encoder: AudioEncoder, buffer: AudioBuffer, thr
       timestamp: Math.round((offset * 1_000_000) / buffer.sampleRate),
       data,
     })
-    encoder.encode(audioData)
-    audioData.close()
+    try {
+      encoder.encode(audioData)
+    } finally {
+      audioData.close()
+    }
     if (encoder.encodeQueueSize > 32) await yieldToUi()
   }
 }

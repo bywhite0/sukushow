@@ -298,7 +298,7 @@ export function seBusFor(cueIndex: number): 'tap' | 'se' {
   return cueIndex === SE_CUE.start || (cueIndex >= SE_CUE.finish1 && cueIndex <= SE_CUE.finish4) ? 'se' : 'tap';
 }
 
-/** 导出时记录的音效事件（与 export/audioMix 的 CapturedSoundEvent 同形）；key = String(cue 编号)。 */
+/** 导出时记录的音效事件（与 @sukushow/export 的 CapturedSoundEvent 同形）；key = String(cue 编号)。 */
 export type CapturedSeEvent = {
   type: 'oneShot' | 'loop';
   key: string;

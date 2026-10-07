@@ -5,29 +5,28 @@
  * 导出期间暂停实时渲染循环并锁住会影响画面的控件，画布临时固定到预设尺寸（dpr 1），
  * 结束或取消后恢复原尺寸与播放位置。
  */
-import type { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
-import { OPENING_CARD_DURATION_SEC, resolveExportRange } from '@sukushow/pjsk-preview/export/clock'
-import {
-  ExportCancelledError,
-  exportVideo,
-  isVideoConfigSupported,
-  pickAudioConfig,
-  webCodecsAvailable,
-  type ExportHost,
-  type ExportProgress,
-  type ExportResult,
-} from '@sukushow/pjsk-preview/export/exporter'
 import {
   BITRATE_CHOICES_MBPS,
+  ExportCancelledError,
   FRAME_RATES,
   RESOLUTION_PRESETS,
   buildVideoEncoderConfig,
   defaultBitrateMbps,
   exportFileName,
+  exportVideo,
   findResolution,
+  isVideoConfigSupported,
+  pickAudioConfig,
+  resolveExportRange,
+  webCodecsAvailable,
   type ContainerFormat,
+  type ExportFrameSource,
+  type ExportProgress,
+  type ExportResult,
   type ExportVideoSettings,
-} from '@sukushow/pjsk-preview/export/presets'
+} from '@sukushow/export'
+import type { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
+import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 
 export type ExportDialogContext = {
   player: MmwWasmPlayer
@@ -91,7 +90,7 @@ const DIALOG_HTML = `
   <label class="setting"><span>起点 <small>秒</small></span><input name="start" type="number" min="0" step="0.1" value="0"></label>
   <label class="setting"><span>终点 <small>秒</small></span><input name="end" type="number" min="0" step="0.1" value="0"></label>
  </div>
- <label class="check"><input name="opening" type="checkbox" checked>包含开场卡片（关闭时从第 ${OPENING_CARD_DURATION_SEC} 秒起）</label>
+ <label class="check"><input name="opening" type="checkbox" checked>包含开场卡片（关闭时从第 ${EXPORT_OPENING.endSec} 秒起）</label>
  <p class="export-support" data-support></p>
  <div class="export-progress" data-progress hidden><progress max="1" value="0"></progress><output data-progress-text></output></div>
  <div class="export-actions">
@@ -201,7 +200,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
   }
 
   const syncRangeFloor = () => {
-    const floor = openingInput.checked ? 0 : OPENING_CARD_DURATION_SEC
+    const floor = openingInput.checked ? EXPORT_OPENING.startSec : EXPORT_OPENING.endSec
     startInput.min = String(floor)
     if (Number(startInput.value) < floor) startInput.value = String(floor)
   }
@@ -217,7 +216,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     return `${phase} ${progress.framesDone}/${progress.frameCount} 帧 · ${progress.fps.toFixed(1)} fps · ${progress.realtimeFactor.toFixed(2)}× 实时`
   }
 
-  function makeHost(): ExportHost {
+  function makeHost(): ExportFrameSource {
     let resumeAt = 0
     return {
       canvas: ctx.canvas,
@@ -250,7 +249,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
   async function start() {
     if (running) return
     const settings = readSettings()
-    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), openingInput.checked)
+    const range = resolveExportRange({ startSec: Number(startInput.value), endSec: Number(endInput.value) }, durationSec(), EXPORT_OPENING, openingInput.checked)
     if (range.endSec - range.startSec < 1 / settings.fps) {
       supportLine.textContent = '导出区间为空，请检查起点 / 终点。'
       return
@@ -278,7 +277,7 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
       })
       downloadUrl = URL.createObjectURL(result.blob)
       downloadLink.href = downloadUrl
-      downloadLink.download = exportFileName(ctx.title(), settings)
+      downloadLink.download = exportFileName(ctx.title(), settings, 'pjsk-preview')
       downloadLink.hidden = false
       progressBar.value = 1
       const sizeMb = (result.blob.size / 1024 / 1024).toFixed(1)
