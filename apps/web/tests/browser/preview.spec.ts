@@ -33,7 +33,7 @@ test('过线后 combo 递增并显示 PERFECT',async({page})=>{
  expect(errors).toEqual([]);
 });
 test('导入谱面，坏文件不清空已有内容',async({page})=>{
- await page.goto('/');
+ await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
  await page.locator('#chart-file').setInputFiles({name:'测试.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Notes:[{Uid:1,just:'1',Flags:80,holds:[]}],Bpms:[{Bpm:120,Time:0}]}))});
  await expect(page.locator('#message')).toContainText('已加载 测试.json');
  await page.locator('#timeline').evaluate((e:HTMLInputElement)=>{e.value='1';e.dispatchEvent(new Event('input'));});
@@ -46,7 +46,7 @@ test('导入谱面，坏文件不清空已有内容',async({page})=>{
  await expect(page.locator('#chart-canvas')).toHaveAttribute('data-visible-notes',visibleNotes!);
 });
 test('窄屏不横溢，音频错误可恢复',async({page})=>{
- await page.setViewportSize({width:400,height:850});await page.goto('/');
+ await page.setViewportSize({width:400,height:850});await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.locator('#audio-file').setInputFiles({name:'bad.wav',mimeType:'audio/wav',buffer:Buffer.from('bad')});
  await expect(page.locator('#message')).toContainText('音频解码失败');await page.getByRole('button',{name:'播放',exact:true}).click();await expect(page.getByRole('button',{name:'暂停',exact:true})).toBeVisible();
