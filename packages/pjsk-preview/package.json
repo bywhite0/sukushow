@@ -1,0 +1,30 @@
+{
+  "name": "@sukushow/pjsk-preview",
+  "private": true,
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./*.json": "./src/*.json",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build:wasm": "node ./scripts/build-wasm.mjs",
+    "build": "pnpm run build:wasm && pnpm run typecheck",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "smoke:export": "node ./scripts/export-smoke.mjs"
+  },
+  "dependencies": {
+    "@sukushow/llll-preview": "workspace:*",
+    "fflate": "^0.8.2",
+    "mediabunny": "^1.61.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.11"
+  }
+}

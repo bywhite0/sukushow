@@ -9,7 +9,7 @@
  * 无谱面的曲目默认隐藏（它们打不开），需要时用「含无谱面」勾选框放出来。
  * 列表按分类分组、组内保持曲目列表原有的 orderId 顺序。
  */
-import type { SongEntry, SongList } from '../../llll-preview/src/songAssets'
+import type { SongEntry, SongList } from '@sukushow/llll-preview/songAssets'
 
 export const DIFFICULTY_ORDER = ['NORMAL', 'HARD', 'EXPERT', 'MASTER'] as const
 export type DifficultyName = (typeof DIFFICULTY_ORDER)[number]

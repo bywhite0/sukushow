@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const apps = [resolve(root, 'apps/web'), resolve(root, 'apps/chart-svg')];
+const apps = [resolve(root, 'apps/web'), resolve(root, 'packages/chart-svg')];
 const spriteNames = [
   'ui_sc2_ingame_flick_sign',
   'ui_sc2_ingame_notes_flick',

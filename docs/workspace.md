@@ -1,14 +1,14 @@
 # sukushow 工作区
 
-根目录负责 workspace 配置、统一前端构建和跨项目校验；项目位于 `apps/`。
+根目录负责 workspace 配置、统一前端构建和跨项目校验；浏览器应用位于 `apps/`，可复用模块位于 `packages/`。
 
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
 | `apps/web` | 唯一浏览器前端、统一导航与 LLLL/PJSK 工作台 | MIT |
-| `apps/llll-preview` | LLLL 解析、渲染、音频与视频导出后端 | MIT |
-| `apps/pjsk-preview` | PJSK 解析、WASM 渲染与导出后端 | AGPL-3.0-only |
-| `apps/flat-preview` | 2D 解析、几何与 Canvas 契约校验后端 | MIT |
-| `apps/chart-svg` | 静态 SVG 图片导出后端 | MIT |
+| `packages/llll-preview` | LLLL 解析、渲染、音频与视频导出后端 | MIT |
+| `packages/pjsk-preview` | PJSK 解析、WASM 渲染与导出后端 | AGPL-3.0-only |
+| `packages/flat-preview` | 2D 解析、几何与 Canvas 契约校验后端 | MIT |
+| `packages/chart-svg` | 静态 SVG 图片导出后端 | MIT |
 
 各项目按职责组织为 `@sukushow/*` workspace 包；页面代码和静态运行时资源集中在 `apps/web`，渲染子项目提供解析、渲染、配置和导出模块。
 
@@ -25,8 +25,8 @@ pnpm render:svg          # SVG CLI
 
 统一前端的 `apps/web/public` 集中保存 LLLL、PJSK 和契约校验用 2D 运行时资源。
 
-`pnpm verify:shared-assets` 会比较 `apps/web` 与 `apps/chart-svg` 的 7 张 2D 贴图及元数据哈希。
+`pnpm verify:shared-assets` 会比较 `apps/web` 与 `packages/chart-svg` 的 7 张 2D 贴图及元数据哈希。
 
 ## 许可
 
-根目录与 `apps/llll-preview`、`apps/flat-preview`、`apps/chart-svg` 的自有代码按 MIT 处理。`apps/pjsk-preview` 及其中的 MikuMikuWorld/AGPL 来源代码继续按 AGPL-3.0-only 处理；合并时不能把整个 workspace 改写成单一 MIT。
+根目录与 `packages/llll-preview`、`packages/flat-preview`、`packages/chart-svg` 的自有代码按 MIT 处理。`packages/pjsk-preview` 及其中的 MikuMikuWorld/AGPL 来源代码继续按 AGPL-3.0-only 处理；合并时不能把整个 workspace 改写成单一 MIT。

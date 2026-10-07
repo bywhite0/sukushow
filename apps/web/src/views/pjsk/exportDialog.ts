@@ -5,8 +5,8 @@
  * 导出期间暂停实时渲染循环并锁住会影响画面的控件，画布临时固定到预设尺寸（dpr 1），
  * 结束或取消后恢复原尺寸与播放位置。
  */
-import type { MmwWasmPlayer } from '../../../../pjsk-preview/src/lib/mmwWasm'
-import { OPENING_CARD_DURATION_SEC, resolveExportRange } from '../../../../pjsk-preview/src/export/clock'
+import type { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
+import { OPENING_CARD_DURATION_SEC, resolveExportRange } from '@sukushow/pjsk-preview/export/clock'
 import {
   ExportCancelledError,
   exportVideo,
@@ -16,7 +16,7 @@ import {
   type ExportHost,
   type ExportProgress,
   type ExportResult,
-} from '../../../../pjsk-preview/src/export/exporter'
+} from '@sukushow/pjsk-preview/export/exporter'
 import {
   BITRATE_CHOICES_MBPS,
   FRAME_RATES,
@@ -27,7 +27,7 @@ import {
   findResolution,
   type ContainerFormat,
   type ExportVideoSettings,
-} from '../../../../pjsk-preview/src/export/presets'
+} from '@sukushow/pjsk-preview/export/presets'
 
 export type ExportDialogContext = {
   player: MmwWasmPlayer
