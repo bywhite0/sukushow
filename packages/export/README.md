@@ -11,6 +11,8 @@
 
 导出区间由 `resolveExportRange` 规范化：各渲染器在自己的包里写死开场区间（`OpeningSpan`），包含开场时最早从开场起点导出，不包含时从开场终点起。
 
+MP4 以 `fastStart: false`（moov 在文件末尾）边封装边写入 OPFS 临时文件，导出结束后直接以磁盘文件提供下载；音频按 `MIX_SEGMENT_SEC`（10 秒）逐段离线混音、编码。两者使内存占用不随片长增长。WebM 的封装器会等待音视频交错，仍在内存中封装；浏览器不支持 OPFS 写入时，MP4 也退回内存。`discardExportFile()` 用于清理临时文件。
+
 ```powershell
 pnpm --filter @sukushow/export test
 ```
