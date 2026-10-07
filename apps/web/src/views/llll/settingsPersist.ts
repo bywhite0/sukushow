@@ -1,6 +1,6 @@
 /** Persist preview sidebar / transport settings in localStorage. */
 
-import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '../../../../llll-preview/src/rgOptions';
+import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '@sukushow/llll-preview/rgOptions';
 import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
 
 export const SETTINGS_STORAGE_KEY = 'llll-preview-web:settings:v1';

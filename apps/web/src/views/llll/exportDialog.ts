@@ -5,7 +5,7 @@
  * 在选项里置灰。画面由调用方给的 ExportFrameSource 负责：导出期间暂停实时渲染循环、画布固定到预设尺寸（dpr 1），
  * 结束或取消后恢复；这里只锁住会影响画面的控件并驱动 exportVideo。
  */
-import { resolveExportRange } from '../../../../llll-preview/src/export/clock'
+import { resolveExportRange } from '@sukushow/llll-preview/export/clock'
 import {
   ExportCancelledError,
   exportVideo,
@@ -15,7 +15,7 @@ import {
   type ExportFrameSource,
   type ExportProgress,
   type ExportResult,
-} from '../../../../llll-preview/src/export/exporter'
+} from '@sukushow/llll-preview/export/exporter'
 import {
   BITRATE_CHOICES_MBPS,
   FRAME_RATES,
@@ -26,7 +26,7 @@ import {
   findResolution,
   type ContainerFormat,
   type ExportVideoSettings,
-} from '../../../../llll-preview/src/export/presets'
+} from '@sukushow/llll-preview/export/presets'
 
 export type ExportDialogContext = {
   /** 按本次选项创建帧源（intro = 是否包含开场过场）。 */

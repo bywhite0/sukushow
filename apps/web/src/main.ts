@@ -1,5 +1,5 @@
 import './style.css'
-import { loadSongList } from '../../llll-preview/src/songAssets'
+import { loadSongList } from '@sukushow/llll-preview/songAssets'
 import { createSongPicker, DIFFICULTY_ORDER, type SongPickerHandle } from './songPicker'
 import { SongSelectionStore, type SongSelection } from './songSelection'
 import { formatResourceSize } from './resourceLoading'

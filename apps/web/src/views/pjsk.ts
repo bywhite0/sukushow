@@ -12,20 +12,20 @@
  *     → wasm（PJSK 渲染，60 轨）
  */
 import './pjsk.css'
-import { MmwWasmPlayer } from '../../../pjsk-preview/src/lib/mmwWasm'
-import type { PreviewRuntimeConfig } from '../../../pjsk-preview/src/lib/types'
-import { buildAssetManifest } from '../../../pjsk-preview/src/assetManifest'
-import { parseChart, decodeChart, type Chart } from '../../../pjsk-preview/src/llll/chart'
-import { chartToMusicScore } from '../../../pjsk-preview/src/llll/toMusicScore'
+import { MmwWasmPlayer } from '@sukushow/pjsk-preview/lib/mmwWasm'
+import type { PreviewRuntimeConfig } from '@sukushow/pjsk-preview/lib/types'
+import { buildAssetManifest } from '@sukushow/pjsk-preview/assetManifest'
+import { parseChart, decodeChart, type Chart } from '@sukushow/pjsk-preview/llll/chart'
+import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from './pjsk/url'
-import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '../../../pjsk-preview/src/llll/songAssets'
-import { feverForSong } from '../../../pjsk-preview/src/llll/fever'
+import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '@sukushow/pjsk-preview/llll/songAssets'
+import { feverForSong } from '@sukushow/pjsk-preview/llll/fever'
 import { installExportDialog, probeAllConfigs } from './pjsk/exportDialog'
 import type { SongSelectionStore } from '../songSelection'
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize, type ResourceLoadingTask } from '../resourceLoading'
-import { mmwWasmFilename } from '../../../pjsk-preview/src/generated/mmwWasmAsset'
-import { readResponseBytes } from '../../../llll-preview/src/resourceDownload'
+import { mmwWasmFilename } from '@sukushow/pjsk-preview/generated/mmwWasmAsset'
+import { readResponseBytes } from '@sukushow/llll-preview/resourceDownload'
 
 declare global {
   interface Window {
@@ -294,7 +294,7 @@ function setDuration(durationSec: number) {
  * 推送当前曲目的 Fever 时段；无数据时显式推 -1 关闭（不沿用上一首）。
  *
  * Fever 只认曲目 Id（歌曲主数据），本地文件导入没有 Id，故一律关闭——
- * 与 `apps/llll-preview` 的「未知歌曲不估算」同口径。
+ * 与 `packages/llll-preview` 的「未知歌曲不估算」同口径。
  */
 function applyFeverWindow(songId: string | null) {
   applyFeverCharge(currentChartForCharge, songId)

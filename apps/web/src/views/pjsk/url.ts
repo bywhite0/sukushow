@@ -1,4 +1,4 @@
-import type { UrlPreviewParams } from '../../../../pjsk-preview/src/lib/types'
+import type { UrlPreviewParams } from '@sukushow/pjsk-preview/lib/types'
 
 function pickFirstNonEmptyParam(url: URL, keys: readonly string[]) {
   for (const key of keys) {

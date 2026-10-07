@@ -18,8 +18,8 @@
  *   const { runLaneProbe } = await import('/src/debug/laneProbe.ts')
  *   await runLaneProbe()
  */
-import { parseChart } from '../../../../pjsk-preview/src/llll/chart'
-import { chartToMusicScore } from '../../../../pjsk-preview/src/llll/toMusicScore'
+import { parseChart } from '@sukushow/pjsk-preview/llll/chart'
+import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 
 /** llll Flags 位域打包：type 4bit / r 6bit / l 6bit。 */
 function flags(type: number, l: number, r: number): number {
