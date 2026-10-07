@@ -202,13 +202,16 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
     startButton.disabled = !videoOk || running !== null
   }
 
-  /** 包含过场：起点下限为过场开头，起点停在 0 时拉到过场开头；关闭：下限 0。 */
+  /**
+   * 包含开场：起点下限为开场开头，起点停在 0 时拉到开场开头；不包含：下限为开场终点。
+   * 下限按输入框显示的三位小数比较：开场开头 −3.6666667 显示为 −3.667，按原值比会被当成越界。
+   */
   const syncRangeFloor = () => {
-    const floor = minStartSec()
-    startInput.min = String(Number(floor.toFixed(3)))
+    const floor = Number(minStartSec().toFixed(3))
+    startInput.min = String(floor)
     const start = Number(startInput.value)
     if (!Number.isFinite(start) || start < floor) startInput.value = String(Math.max(0, floor))
-    else if (floor < 0 && Math.abs(start) < 1e-9) startInput.value = String(Number(floor.toFixed(3)))
+    else if (floor < 0 && Math.abs(start) < 1e-9) startInput.value = String(floor)
   }
 
   const setLocked = (locked: boolean) => {
