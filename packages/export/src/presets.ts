@@ -171,7 +171,7 @@ export function audioEncoderCandidates(container: ContainerFormat): Array<{ code
   ]
 }
 
-export function exportFileName(base: string, settings: ExportVideoSettings): string {
-  const safe = base.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'pjsk-preview'
+export function exportFileName(base: string, settings: ExportVideoSettings, fallback: string): string {
+  const safe = base.replace(/[\\/:*?"<>|]+/g, '_').trim() || fallback
   return `${safe}_${settings.width}x${settings.height}_${settings.fps}fps.${settings.container}`
 }

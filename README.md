@@ -5,8 +5,9 @@ LLLL 谱面预览工作区。统一前端提供 LLLL 舞台（3D/2D 相机切换
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
 | `apps/web` | 唯一浏览器前端 | 源码 MIT；构建产物 AGPL-3.0-only |
-| `packages/llll-preview` | LLLL 解析、WebGL 渲染、HUD、音频与视频导出 | MIT |
-| `packages/pjsk-preview` | PJSK WASM 渲染、谱面适配与视频导出 | AGPL-3.0-only |
+| `packages/llll-preview` | LLLL 解析、WebGL 渲染、HUD 与音频 | MIT |
+| `packages/pjsk-preview` | PJSK WASM 渲染与谱面适配 | AGPL-3.0-only |
+| `packages/export` | 视频导出核心：逐帧编码、离线混音与封装 | MIT |
 | `packages/flat-preview` | 2D 解析与几何，供 SVG 导出交叉校验 | MIT |
 | `packages/chart-svg` | 静态 SVG 图片导出 | MIT |
 

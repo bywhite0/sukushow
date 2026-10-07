@@ -20,6 +20,9 @@ import { START_CLIP_CURVES, START_CLIP_DURATION, type ClipKey, type StartCurveNa
 
 export { START_CLIP_DURATION };
 
+/** 导出时间轴上写死的开场区间：开场过场占走带时间轴的 [−START_CLIP_DURATION, 0)。 */
+export const EXPORT_OPENING = { startSec: -START_CLIP_DURATION, endSec: 0 } as const;
+
 /**
  * 0 秒待机显示的静止帧（秒）。clip 1.75–3.0 s 所有曲线静止（描边条到位、全员不透明），
  * 取其起点；原版过场之后再无 HUD 入场动画，HUD 在 3.0–3.667 s 的整体淡出中露出。

@@ -1,12 +1,12 @@
 /**
  * 导出音频：把导出期间收集到的音效事件（时间戳列表）与 BGM 离线混成一条 PCM。
  *
- * 移植自 PJSK 实现（src/export/audioMix.ts），与视图无关：
- * - oneShot：在 startSec 开始，从素材 offsetSec 处播放，播完为止（endSec 有限时在该时刻截断）；
- * - loop：长按循环音，startSec ~ endSec 循环；循环点由调用方给出（MixInput.loopPoints），
- *   缺省沿用 pjsk 的护边规则（素材超过 6000 帧时留 3000 帧）；llll 实时播放是整段循环，传 () => null；
- * - gain 为单个事件的最终增益（llll 已乘上所在总线的音量），soundVolume 是整条音效总线的增益；
- * - BGM 在输出时刻 bgmStartSec 处开始（音频偏移设置已折算在内）。
+ * 事件口径：
+ * - oneShot：在 startSec 开始，从素材 offsetSec 处播放；endSec 有限且晚于 startSec 时在该时刻截断，否则播完；
+ * - loop：长按循环音，startSec ~ endSec 循环；循环点由 MixInput.loopPoints 给出，
+ *   缺省用 loopPointsFor 的护边规则（素材超过 6000 帧时两端各留 3000 帧），返回 null 为整段循环；
+ * - 单个事件的最终增益 = 事件 gain × soundVolume；
+ * - BGM 在帧源时间轴的 bgmStartSec 处开始（音频偏移设置已折算在内）。
  */
 
 export type CapturedSoundEvent = {
@@ -107,7 +107,7 @@ export type MixInput = {
   soundVolume: number
   soundBuffers: ReadonlyMap<string, AudioBuffer>
   events: readonly CapturedSoundEvent[]
-  /** 循环音的循环点；缺省 = loopPointsFor（pjsk 护边规则），返回 null = 整段循环。 */
+  /** 循环音的循环点；缺省用 loopPointsFor 的护边规则，返回 null 为整段循环。 */
   loopPoints?: (key: string, buffer: AudioBuffer) => { loopStart: number; loopEnd: number } | null
 }
 

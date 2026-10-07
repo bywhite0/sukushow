@@ -1,12 +1,8 @@
 /**
  * 导出用虚拟时钟：固定步长逐帧推进，与墙钟无关。
  *
- * 帧 i 的时刻 = t0 + i / fps（走带时间轴）。时刻直接由整数帧号算出，
+ * 帧 i 的时刻 = t0 + i / fps（帧源自己的时间轴）。时刻直接由整数帧号算出，
  * 不做浮点累加，长视频也不会漂移；时间戳（µs）同理由帧号算出，保证严格单调。
- *
- * 移植自 PJSK 实现 的导出模块（src/export/clock.ts），去掉了 pjsk 专用的开场卡片常量：
- * 可导出的最早时刻由调用方给出（llll：开场过场开启时为 −START_CLIP_DURATION，否则 0）。
- * 该模块与视图无关，供统一前端的导出流程复用。
  */
 
 export type ExportRange = {
@@ -14,16 +10,24 @@ export type ExportRange = {
   endSec: number
 }
 
+/** 帧源时间轴上写死的开场区间（开场过场 / 开场卡片）。 */
+export type OpeningSpan = {
+  readonly startSec: number
+  readonly endSec: number
+}
+
 /**
- * 规范化导出区间：夹到 [minStartSec, durationSec]，终点不早于起点。
+ * 规范化导出区间：包含开场时最早从开场起点导出，不包含时从开场终点起；
+ * 终点不晚于 durationSec，且不早于起点。
  */
 export function resolveExportRange(
   requested: Partial<ExportRange>,
   durationSec: number,
-  minStartSec = 0,
+  opening: OpeningSpan,
+  includeOpening: boolean,
 ): ExportRange {
-  const duration = Number.isFinite(durationSec) ? durationSec : 0
-  const minStart = Math.min(Number.isFinite(minStartSec) ? minStartSec : 0, duration)
+  const duration = Math.max(0, Number.isFinite(durationSec) ? durationSec : 0)
+  const minStart = Math.min(includeOpening ? opening.startSec : opening.endSec, duration)
   let startSec = Number.isFinite(requested.startSec) ? Number(requested.startSec) : minStart
   let endSec = Number.isFinite(requested.endSec) ? Number(requested.endSec) : duration
   startSec = Math.min(Math.max(startSec, minStart), duration)
@@ -48,7 +52,7 @@ export class VirtualClock {
     return this.frameCount / this.fps
   }
 
-  /** 第 index 帧对应的走带时刻（秒）。 */
+  /** 第 index 帧对应的帧源时刻（秒）。 */
   timeAt(index: number) {
     return this.startSec + index / this.fps
   }

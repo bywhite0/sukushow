@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { OPENING_CARD_DURATION_SEC, VirtualClock, resolveExportRange } from '../src/export/clock'
-import { loopPhaseToOffset, loopPointsFor, scheduleSoundEvents, type CapturedSoundEvent } from '../src/export/audioMix'
+import { VirtualClock, resolveExportRange, type OpeningSpan } from '../src/clock'
+import { loopPhaseToOffset, loopPointsFor, scheduleSoundEvents, type CapturedSoundEvent } from '../src/audioMix'
 import {
   RESOLUTION_PRESETS,
   audioEncoderCandidates,
@@ -10,7 +10,7 @@ import {
   exportFileName,
   h264Level,
   vp9CodecString,
-} from '../src/export/presets'
+} from '../src/presets'
 
 describe('VirtualClock', () => {
   it('frame times come from the integer index (no drift)', () => {
@@ -41,15 +41,36 @@ describe('VirtualClock', () => {
 })
 
 describe('resolveExportRange', () => {
-  it('defaults to the whole song and clamps to duration', () => {
-    expect(resolveExportRange({}, 120, true)).toEqual({ startSec: 0, endSec: 120 })
-    expect(resolveExportRange({ startSec: -3, endSec: 999 }, 120, true)).toEqual({ startSec: 0, endSec: 120 })
-    expect(resolveExportRange({ startSec: 50, endSec: 40 }, 120, true)).toEqual({ startSec: 50, endSec: 50 })
+  // 两种写死的开场：走带时间轴上负时刻的开场过场，输出时间轴开头的开场卡片
+  const intro: OpeningSpan = { startSec: -3.6666667461395264, endSec: 0 }
+  const card: OpeningSpan = { startSec: 0, endSec: 4 }
+
+  it('defaults to the opening start when the opening is included', () => {
+    expect(resolveExportRange({}, 120, card, true)).toEqual({ startSec: 0, endSec: 120 })
+    expect(resolveExportRange({}, 120, intro, true)).toEqual({ startSec: intro.startSec, endSec: 120 })
   })
 
-  it('skips the opening card when disabled', () => {
-    expect(resolveExportRange({ startSec: 0 }, 120, false).startSec).toBe(OPENING_CARD_DURATION_SEC)
-    expect(resolveExportRange({ startSec: 30 }, 120, false).startSec).toBe(30)
+  it('starts from the opening end when the opening is excluded', () => {
+    expect(resolveExportRange({}, 120, card, false)).toEqual({ startSec: 4, endSec: 120 })
+    expect(resolveExportRange({ startSec: 0 }, 120, card, false).startSec).toBe(4)
+    expect(resolveExportRange({ startSec: -2 }, 120, intro, false).startSec).toBe(0)
+  })
+
+  it('clamps starts below the floor and keeps starts inside the range', () => {
+    expect(resolveExportRange({ startSec: -10 }, 120, intro, true).startSec).toBe(intro.startSec)
+    expect(resolveExportRange({ startSec: -3.667 }, 120, intro, true).startSec).toBe(intro.startSec)
+    expect(resolveExportRange({ startSec: 30 }, 120, intro, true).startSec).toBe(30)
+    expect(resolveExportRange({ startSec: 30 }, 120, card, false).startSec).toBe(30)
+  })
+
+  it('clamps to duration and never ends before the start', () => {
+    expect(resolveExportRange({ startSec: -3, endSec: 999 }, 120, card, true)).toEqual({ startSec: 0, endSec: 120 })
+    expect(resolveExportRange({ startSec: 50, endSec: 40 }, 120, card, true)).toEqual({ startSec: 50, endSec: 50 })
+  })
+
+  it('handles songs shorter than the opening and invalid durations', () => {
+    expect(resolveExportRange({}, 2, card, false)).toEqual({ startSec: 2, endSec: 2 })
+    expect(resolveExportRange({}, Number.NaN, card, true)).toEqual({ startSec: 0, endSec: 0 })
   })
 })
 
@@ -85,6 +106,25 @@ describe('scheduleSoundEvents', () => {
     expect(out).toHaveLength(2)
     expect(out[0]).toMatchObject({ type: 'loop', whenSec: 0, offsetSec: 2, stopSec: 2 })
     expect(out[1]).toMatchObject({ type: 'loop', whenSec: 5, offsetSec: 0, stopSec: 10 })
+  })
+
+  it('cuts one-shots that were stopped mid-way (seek) and drops those stopped before t0', () => {
+    const cut = (startSec: number, endSec: number): CapturedSoundEvent => ({ type: 'oneShot', key: 'allPerfect', gain: 1, startSec, endSec, offsetSec: 0 })
+    const out = scheduleSoundEvents([cut(9, 12), cut(8, 9.5)], 10, 20, durations)
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ whenSec: 0, stopSec: 2 })
+    expect(out[0]!.offsetSec).toBeCloseTo(1, 9)
+  })
+
+  it('plays one-shots to the end when endSec is -1 or +Infinity', () => {
+    const open = (endSec: number): CapturedSoundEvent => ({ type: 'oneShot', key: 'tap', gain: 1, startSec: 11, endSec, offsetSec: 0 })
+    const out = scheduleSoundEvents([open(-1), open(Number.POSITIVE_INFINITY)], 10, 20, durations)
+    expect(out.map((item) => item.stopSec)).toEqual([-1, -1])
+  })
+
+  it('plays the whole buffer when loop points are null', () => {
+    expect(loopPhaseToOffset(2.5, 2, null)).toBeCloseTo(0.5, 9)
+    expect(loopPhaseToOffset(0.25, 2, null)).toBeCloseTo(0.25, 9)
   })
 
   it('uses the same guarded loop points as live playback', () => {
@@ -152,7 +192,9 @@ describe('presets', () => {
     expect(audioEncoderCandidates('webm').map((item) => item.codec)).toEqual(['opus'])
   })
 
-  it('makes safe file names', () => {
-    expect(exportFileName('a/b:c', { container: 'mp4', width: 1280, height: 720, fps: 30, bitrateMbps: 12 })).toBe('a_b_c_1280x720_30fps.mp4')
+  it('makes safe file names with the caller fallback', () => {
+    expect(exportFileName('a/b:c', { container: 'mp4', width: 1280, height: 720, fps: 30, bitrateMbps: 12 }, 'llll-preview')).toBe('a_b_c_1280x720_30fps.mp4')
+    expect(exportFileName('  ', { container: 'webm', width: 1920, height: 1080, fps: 60, bitrateMbps: 20 }, 'llll-preview')).toBe('llll-preview_1920x1080_60fps.webm')
+    expect(exportFileName('', { container: 'mp4', width: 1280, height: 720, fps: 30, bitrateMbps: 12 }, 'pjsk-preview')).toBe('pjsk-preview_1280x720_30fps.mp4')
   })
 })
