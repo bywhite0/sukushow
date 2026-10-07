@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
 import { decodeChart } from '@sukushow/chart/chart';
-import { defaultLayout, timeY } from '../src/layout';
+import { defaultLayout, timeY, yTime } from '../src/layout';
 import { type SpriteLibrary, renderSvg } from '../src/svg';
 
 /** 与渲染器同一口径的数字格式（去掉浮点噪声、最多三位小数）。 */
@@ -238,6 +238,74 @@ describe('SVG 结构', () => {
     ]);
     const part = renderSvg(chart, lib(), opts({ range: { from: 20, to: 22 } })).svg;
     expect(part).toContain('<path fill="url(#bg0)"');
+  });
+});
+
+/**
+ * 取出 Hold 端头的时刻（升序，三位小数）。每个端头是九宫格三段，
+ * 只有左段的 viewBox 从 `0 0` 起，按它计数；时刻由中心 y 反推。
+ */
+const holdCapTimes = (svg: string, chart: { duration: number }) => {
+  const lay = { ...defaultLayout(), duration: chart.duration };
+  const left = /<svg x="[-\d.]+" y="([-\d.]+)" width="[-\d.]+" height="([-\d.]+)" viewBox="0 0 [^"]*" preserveAspectRatio="none"><use xlink:href="#sp-ui_sc2_ingame_notes_hold"\/><\/svg>/g;
+  return [...svg.matchAll(left)]
+    .map(m => Number(yTime(Number(m[1]) + Number(m[2]) / 2, lay).toFixed(3)))
+    .sort((a, b) => a - b);
+};
+
+describe('Hold 链汇合与零长段', () => {
+  // 原版 `HoldMeshView.ProcessView`（4.12.0 `0x4AECEB0`）从传入 unit 起顺 `Next` 逐段写网格，
+  // 不按 Uid 去重；视图由 `NoteResolver` 逐 unit 发放，故汇合后的共用段被每条链各画一遍，
+  // 端头也各按自己的链首/链尾画。下面按这个口径断言。
+
+  it('两条链汇合：共用段各画一遍，端头按各自链首与链尾', () => {
+    // 1、2 的尾端都在 2 秒接到 3；3 的前驱按后写覆盖记为 2。
+    const chart = chartOf([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
+      { Uid: 2, just: '1.5', holds: ['2.0'], Flags: flags(1, 30, 40, 10, 20) },
+      { Uid: 3, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 10, 20) },
+    ]);
+    expect(chart.roots.map(r => r.uid)).toEqual([1, 2]);
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0 }));
+    // 端头：两条链各画自己的头尾，链尾 3 于是出现两次。
+    expect(holdCapTimes(svg, chart)).toEqual([1, 1.5, 3, 3]);
+    // 宽带：1、2 各 2 条半边，共用的 3 被两条链各画一次，合计 8。
+    expect(stats.holds).toBe(8);
+    // 音符数仍按 Uid 去重。
+    expect(stats.notes).toBe(3);
+  });
+
+  it('多级汇合：三条链各画到链尾', () => {
+    // 1 → 5；2 → 4 → 5；3 → 4。三条链共用链尾 5。
+    const chart = chartOf([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
+      { Uid: 2, just: '1.0', holds: ['1.5'], Flags: flags(1, 30, 40, 30, 40) },
+      { Uid: 3, just: '1.2', holds: ['1.5'], Flags: flags(1, 45, 55, 30, 40) },
+      { Uid: 4, just: '1.5', holds: ['2.0'], Flags: flags(1, 30, 40, 10, 20) },
+      { Uid: 5, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 10, 20) },
+    ]);
+    expect(chart.roots.map(r => r.uid)).toEqual([1, 2, 3]);
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0 }));
+    expect(holdCapTimes(svg, chart)).toEqual([1, 1, 1.2, 3, 3, 3]);
+    // 段：三条链各走一遍 —— 1、5（链 1）；2、4、5（链 2）；3、4、5（链 3），共 8 段 × 2 半边。
+    expect(stats.holds).toBe(16);
+    expect(stats.notes).toBe(5);
+  });
+
+  it('零长链中节点不出面，但计入音符数', () => {
+    // 405131 EXPERT #117/#118/#120 同型：斜段 → 零长瞬移段 → 斜段；另有一条同刻起始的独立 Hold。
+    const chart = chartOf([
+      { Uid: 1, just: '0', holds: ['1'], Flags: flags(1, 0, 14, 15, 29) },
+      { Uid: 2, just: '1', holds: ['1'], Flags: flags(1, 15, 29, 45, 59) },
+      { Uid: 3, just: '1', holds: ['1.5'], Flags: flags(1, 0, 14, 0, 14) },
+      { Uid: 4, just: '1', holds: ['2'], Flags: flags(1, 45, 59, 30, 44) },
+    ]);
+    const { svg, stats } = renderSvg(chart, lib(), opts({ aspect: 0 }));
+    // 1、3、4 各两条半边；零长的 2 没有纵向跨度。
+    expect(stats.holds).toBe(6);
+    expect(stats.notes).toBe(chart.notes.length);
+    // 端头：两条链各自的首尾。
+    expect(holdCapTimes(svg, chart)).toEqual([0, 1, 1.5, 2]);
   });
 });
 
