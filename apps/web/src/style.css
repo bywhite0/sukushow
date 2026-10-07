@@ -141,6 +141,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 #view-root.workspace-content .check input { margin: 0 6px 0 0; accent-color: var(--shell-accent); }
 #view-root.workspace-content .inspector-footer { padding: 16px 20px; border-top: 1px solid var(--shell-line); color: var(--shell-muted); font-size: 10px; }
 .workspace-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 8px 24px; border-top: 1px solid var(--shell-line); background: var(--shell-bg); color: var(--shell-muted); font-size: 10px; }
+.workspace-footer a { color: inherit; text-underline-offset: 2px; }
+.workspace-footer a:hover { color: var(--shell-text); }
 kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); border-radius: 3px; font: inherit; }
 .view-loading { display: grid; place-items: center; height: 100%; color: var(--shell-muted); font-size: 12px; }
 .view-loading-card { width: min(360px, calc(100% - 48px)); padding: 20px; border: 1px solid var(--shell-line); border-radius: 10px; background: var(--shell-surface); box-shadow: 0 14px 40px oklch(0% 0 0 / .28); }

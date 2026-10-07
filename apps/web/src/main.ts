@@ -75,7 +75,7 @@ app.innerHTML = `
     </header>
     <div id="view-root" class="workspace-content view-llll"></div>
     <footer class="workspace-footer">
-      <span>非官方研究工具 · 原格式谱面预览</span>
+      <span>非官方研究工具 · 原格式谱面预览 · <a href="https://github.com/bywhite0/sukushow" target="_blank" rel="noreferrer">源码（AGPL-3.0）</a></span>
       <span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span>
     </footer>
   </div>
