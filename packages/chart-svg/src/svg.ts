@@ -144,7 +144,7 @@ export interface MetaPanel {
 
 /** 渲染统计，便于脚本与测试自检。 */
 export interface RenderStats {
-  /** 画出的音符数（去重，含 Hold 链节点）。 */
+  /** 画出的音符数（去重，含 Hold 链节点；不出面的零长节点也计入）。 */
   notes: number;
   /** 瞬时音符数（去重）。 */
   instants: number;
@@ -480,18 +480,19 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
     }
 
     // ── Hold 宽带与端头 ────────────────────────────────────────────────
-    // 串链允许汇合（两个节点可指向同一后继），故顺链遍历要去重，否则汇合点会画两遍。
-    const seen = new Set<number>();
+    // 原版 `HoldMeshView.ProcessView`（4.12.0 `0x4AECEB0`）从传入 unit 起顺 `Next` 逐段写网格、
+    // 不按 Uid 去重，而视图由 `NoteResolver` 逐 unit 发放：串链允许汇合时，共用段被每条链各画一遍、
+    // 端头也各按自己的链首链尾画。此处照此口径，不做去重。
     for (const root of chart.roots) {
       if (root.type !== 1) continue;
       let node: Note | undefined = root, tail: Note = root;
       while (node) {
-        if (seen.has(node.uid)) break;
-        seen.add(node.uid);
         const y0 = timeY(node.time, lay), y1 = timeY(node.end, lay);
         // 区间重叠而非两端都在窗内——长带可能两端都在窗外却横穿画面。
-        if (node.end > node.time && overlaps(y0, y1)) {
-          for (const half of bandHalves(node, lay)) {
+        if (overlaps(y0, y1)) {
+          // 零长节点没有纵向跨度，不出面，但仍是谱面里的一个音符。
+          const halves = node.end > node.time ? bandHalves(node, lay) : [];
+          for (const half of halves) {
             const { def, path } = bandElement(half, grads.length);
             grads.push(def);
             body.push(path);

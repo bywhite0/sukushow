@@ -54,7 +54,8 @@ for (const file of files) {
     // 出图版（默认横版）只查不抛错与统计不翻倍。
     const wide = renderSvg(chart, lib, common);
 
-    if (stats.notes > chart.notes.length) throw new Error(`音符统计 ${stats.notes} > ${chart.notes.length}`);
+    // 整谱单列出图时每个音符都在窗内，零长节点也计入，统计应与谱面音符数相等。
+    if (stats.notes !== chart.notes.length) throw new Error(`音符统计 ${stats.notes} ≠ ${chart.notes.length}`);
     if (stats.holds > chart.notes.length * 2) throw new Error(`Hold 半边统计 ${stats.holds} 异常`);
     // 切列不改变「谱面里有多少音符」。
     if (wide.stats.notes !== stats.notes) throw new Error(`切列后音符数变了：${stats.notes} → ${wide.stats.notes}`);
