@@ -26,7 +26,13 @@
 
 ## 同时押
 
-按判定时刻分组，容差 4 ms。只有链首与链尾参与：链首取 `just`，链尾取末节点终点；链中节点的接缝不参与分组。
+`ChartResolver.GetLines` @0x4869830 按判定时刻分组，容差 4 ms：
+
+- 把每个 unit 的链首 `(Just, false, Uid)` 与真链尾 `(Holds[^1], true, Uid)` 汇成一串元组。
+- `GroupBy(time, NoteLineComparer)` 按时刻分组。分组谓词 `NoteLineComparer.Equals` @0x4AE6D54 尾调用 `RhythmGameConsts.IsSameTime` @0x485CF8C，容差常量 `[0x1AA1440] = 0.004f`（4 ms）。
+- 只保留 `Count > 1` 的组（过滤器 @0x486A36C 的 `cmp w0, #2; b.lt` 在 +0x74）。
+
+**汇合链的同一个链尾会重复进组**：每条链独立贡献自己的链首 + 链尾，两条链共享同一个后继节点时，该节点作为尾端会出现两次。全量 617 张谱面有 100 组含重复点，其中 9 组（8 张谱）整组只有这一个音符。渲染层按组内全部点的 min/max 取跨度（3D 按中心取跨度宽度为 0，SVG 按左右沿取跨度画出短线），不去重。
 
 ## 最大连击
 
