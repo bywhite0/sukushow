@@ -67,6 +67,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .text-button:hover { color: var(--shell-text); }
 .workspace[data-view="pjsk"] #aspect-mount { display: none; }
 
+/* 对话框与侧边栏共用的表单组件样式（全局作用域，供 <body> 下的对话框继承）。 */
+.primary { min-width: 100px; min-height: 40px; padding: 8px 20px; border: 0; border-radius: 6px; background: var(--shell-accent); color: var(--shell-ink); font-size: 13px; }
+.primary:hover { background: oklch(86% .08 350); }
+.setting { display: block; margin: 0 0 24px; }
+.setting > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; font-size: 12px; }
+.setting output { margin-left: auto; color: var(--shell-accent); font-family: Consolas, monospace; }
+.setting small { color: var(--shell-muted); font-size: 10px; line-height: 1.6; }
+.setting input[type="range"] { width: 100%; height: 20px; margin: 0; accent-color: var(--shell-accent); }
+.setting input[type="number"], .setting select { width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--shell-line); border-radius: 5px; background: var(--shell-raised); color: var(--shell-text); }
+.check { display: flex; align-items: center; min-height: 32px; margin: 4px 0 12px; line-height: 1.5; }
+.check input { margin: 0 6px 0 0; accent-color: var(--shell-accent); }
+select option:disabled { color: var(--shell-muted); }
+
 .workspace-content { min-width: 0; min-height: 0; overflow: hidden; }
 #view-root.workspace-content > main {
   width: 100%; height: 100%; min-height: 0; max-width: none; margin: 0;
@@ -112,8 +125,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 #view-root.workspace-content .transport[aria-busy="true"] #time { color: var(--shell-muted); }
 #view-root.workspace-content .transport > input { width: 100%; height: 20px; margin: 0 0 12px; accent-color: var(--shell-accent); }
 #view-root.workspace-content .transport-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-#view-root.workspace-content .primary { min-width: 100px; min-height: 40px; padding: 8px 20px; border: 0; border-radius: 6px; background: var(--shell-accent); color: var(--shell-ink); font-size: 13px; }
-#view-root.workspace-content .primary:hover { background: oklch(86% .08 350); }
 #view-root.workspace-content #time { color: var(--shell-text); font: 12px Consolas, monospace; }
 #view-root.workspace-content .rate-label { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--shell-muted); font-size: 11px; }
 #view-root.workspace-content .rate-label select { min-height: 36px; padding: 4px 8px; border: 1px solid var(--shell-line); border-radius: 5px; background: var(--shell-raised); color: var(--shell-text); }
@@ -131,14 +142,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 #view-root.workspace-content .panel, #view-root.workspace-content .panel:first-child { padding: 0; border: 0; }
 #view-root.workspace-content .panel[hidden] { display: none; }
 #view-root.workspace-content .panel > h2 { margin: 0 0 24px; color: var(--shell-muted); font-size: 11px; font-weight: 500; letter-spacing: .08em; }
-#view-root.workspace-content .setting { display: block; margin: 0 0 24px; }
-#view-root.workspace-content .setting > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; font-size: 12px; }
-#view-root.workspace-content .setting output { margin-left: auto; color: var(--shell-accent); font-family: Consolas, monospace; }
-#view-root.workspace-content .setting small { color: var(--shell-muted); font-size: 10px; line-height: 1.6; }
-#view-root.workspace-content .setting input[type="range"] { width: 100%; height: 20px; margin: 0; accent-color: var(--shell-accent); }
-#view-root.workspace-content .setting input[type="number"], #view-root.workspace-content .setting select { width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--shell-line); border-radius: 5px; background: var(--shell-raised); color: var(--shell-text); }
-#view-root.workspace-content .check { display: flex; align-items: center; min-height: 32px; margin: 4px 0 12px; line-height: 1.5; }
-#view-root.workspace-content .check input { margin: 0 6px 0 0; accent-color: var(--shell-accent); }
 #view-root.workspace-content .inspector-footer { padding: 16px 20px; border-top: 1px solid var(--shell-line); color: var(--shell-muted); font-size: 10px; }
 .workspace-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 8px 24px; border-top: 1px solid var(--shell-line); background: var(--shell-bg); color: var(--shell-muted); font-size: 10px; }
 .workspace-footer a { color: inherit; text-underline-offset: 2px; }
