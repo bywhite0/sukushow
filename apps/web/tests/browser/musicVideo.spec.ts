@@ -93,6 +93,9 @@ test('MV 播放到音频结束后仍继续显示到电影自身结尾', async ({
   await openMv(page, request);
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.player.transport.duration)).toBeGreaterThan(83);
   await expect(page.locator('#stage-canvas')).toHaveAttribute('data-mv', '103103');
+  await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
+    node.value = '80'; node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame(80)?.currentTime ?? -1)).toBeCloseTo(80, 1);
 });
 
