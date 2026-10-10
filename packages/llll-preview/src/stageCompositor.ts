@@ -33,6 +33,8 @@ export class StageCompositor {
   private readonly ctx: CanvasRenderingContext2D;
   private dim = 0;
   private dotPattern: { pattern: CanvasPattern; dpr: number } | null = null;
+  private backgroundCanvas: HTMLCanvasElement | null = null;
+  private backgroundKey: { cssW: number; cssH: number; dpr: number; dim: number; bg: HTMLImageElement | null; dot: HTMLImageElement | null } | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     // alpha: true —— 不透明画布会让 Chrome 用 LCD 亚像素抗锯齿画字（彩边）；原 DOM 过场在合成层里是灰度抗锯齿。
@@ -67,27 +69,36 @@ export class StageCompositor {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
     ctx.filter = 'none';
-    this.drawLiveBg(view);
+    const bg = image(LIVE_BG_URL), dot = image(LIVE_BG_DOT_URL);
+    const key = this.backgroundKey;
+    if (!this.backgroundCanvas) this.backgroundCanvas = document.createElement('canvas');
+    const background = this.backgroundCanvas;
+    if (!key || key.cssW !== view.cssW || key.cssH !== view.cssH || key.dpr !== view.dpr ||
+        key.dim !== this.dim || key.bg !== bg || key.dot !== dot) {
+      this.ensureSize(background, view);
+      const bgCtx = background.getContext('2d')!;
+      this.drawLiveBg(bgCtx, view, bg, dot);
+      this.backgroundKey = { cssW: view.cssW, cssH: view.cssH, dpr: view.dpr, dim: this.dim, bg, dot };
+    }
+    ctx.drawImage(background, 0, 0);
     if (layers.gl && layers.gl.width > 0 && layers.gl.height > 0) ctx.drawImage(layers.gl, 0, 0, pw, ph);
     layers.hud?.draw(ctx, view);
     layers.startAnim?.draw(ctx, view);
     layers.comboResult?.draw(ctx, view);
   }
 
-  private drawLiveBg(view: StageView): void {
-    const ctx = this.ctx, d = view.dpr;
-    const pw = this.canvas.width, ph = this.canvas.height;
+  private drawLiveBg(ctx: CanvasRenderingContext2D, view: StageView, bg: HTMLImageElement | null, dot: HTMLImageElement | null): void {
+    const d = view.dpr;
+    const pw = ctx.canvas.width, ph = ctx.canvas.height;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, pw, ph);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    const bg = image(LIVE_BG_URL);
     if (bg) {
       // 宽 100%、aspect-ratio 1:1、translate(−50%, −50%) 居中
       const side = view.cssW * d;
       ctx.drawImage(bg, (pw - side) / 2, (ph - side) / 2, side, side);
     }
-    const dot = image(LIVE_BG_DOT_URL);
     if (dot && dot.naturalWidth > 0) {
       if (!this.dotPattern || this.dotPattern.dpr !== d) {
         const p = ctx.createPattern(dot, 'repeat');
