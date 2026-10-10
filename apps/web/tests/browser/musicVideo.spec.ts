@@ -68,12 +68,29 @@ test('原包电影轨道非零起点：开始前保持普通背景，之后按�
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame(4)?.currentTime ?? -1)).toBeCloseTo(4 - 1.9666666666666668, 1);
 });
 
- test('MV 播放到音频结束后仍继续显示到电影自身结尾', async ({ page, request }) => {
+ test('曲终横幅等待 304109 的实际 BGM 结束，而不是只按 PlayTime 触发', async ({ page, request }) => {
+  const song = '304109';
+  const list = await (await request.get('/song-list.json')).json();
+  const entry = list.songs.find((item: any) => item.id === song);
+  const chart = await request.get(`/assets/chart/${entry.charts.MASTER}`);
+  const audio = await request.get(`/assets/audio/bgm_${entry.soundId}.ogg`, { method: 'HEAD' });
+  test.skip(!chart.ok() || !audio.ok(), '本地 304109 谱面 / BGM 尚未准备');
+  await page.goto(`/?song=${song}&difficulty=MASTER`);
+  await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
+  await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
+    node.value = '104.4'; node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-result', '');
+  await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
+    node.value = '106.9'; node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-result', '0');
+});
+
+
+test('MV 播放到音频结束后仍继续显示到电影自身结尾', async ({ page, request }) => {
   test.setTimeout(90_000);
   await openMv(page, request);
-  await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
-    node.value = '80'; node.dispatchEvent(new Event('input', { bubbles: true }));
-  });
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.player.transport.duration)).toBeGreaterThan(83);
   await expect(page.locator('#stage-canvas')).toHaveAttribute('data-mv', '103103');
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame(80)?.currentTime ?? -1)).toBeCloseTo(80, 1);

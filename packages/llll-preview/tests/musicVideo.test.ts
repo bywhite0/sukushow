@@ -90,6 +90,16 @@ describe('MusicVideo', () => {
     mv.dispose();
   });
 
+  it('does not change video loading state when a movie frame is unavailable after success', async () => {
+    const mv = new MusicVideo(() => {});
+    mv.setEnabled(true);
+    const ready = mv.setUrl('/assets/mv/103103.mp4', 2, 3);
+    create().loaded();
+    expect(await ready).toBe(true);
+    expect(mv.useVideoBackground).toBe(true);
+    mv.dispose();
+  });
+
   it('syncs playing, pause, preroll and rate to the music clock without audio', () => {
     const mv = new MusicVideo(() => {});
     mv.setUrl('/assets/mv/103103.mp4');

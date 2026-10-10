@@ -27,6 +27,7 @@ import {
   type PreviewSettings,
 } from './llll/settingsPersist';
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize } from '../resourceLoading';
+import { resultStartTime } from '../finishTime';
 export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore };
 
 export function mount({ root, toolbar, songSelection }: LlllMountContext) {
@@ -394,8 +395,9 @@ void (async()=>{
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
 let baseDuration = chart.duration;
-/** 曲终时刻 FinishTime = MusicsRecord.PlayTime(ms) / 1000（LiveEnd.Is = FinishTime ≤ t）；无曲目元数据时为 null，不播曲终横幅。 */
+/** 曲终时刻：主数据 PlayTime 与已解码 BGM 实际时长取较晚者。 */
 let finishTime: number | null = null;
+let resultBaseFinishTime: number | null = null;
 function applyFever(win: FeverWindow | null, source: string) {
  visualRevision++;
  hud.setFeverWindow(win);
@@ -403,6 +405,10 @@ function applyFever(win: FeverWindow | null, source: string) {
  player?.transport.setDuration(chart.duration);
  metadata();
  el('fever-status').textContent = win ? `${source}：${win.start}–${win.end} 秒` : '未配置 Fever';
+}
+function applyResultFinishTime(){
+ finishTime=resultStartTime(resultBaseFinishTime,player?.audioDuration??null);
+ applyFever(automaticFever,'歌曲元数据');
 }
 function restoreFever() {
  input('opt-fever-start').value = automaticFever ? String(automaticFever.start) : '';
@@ -414,6 +420,8 @@ function restoreFever() {
 function setChartFever(filename: string) {
  baseDuration = chart.duration;
  automaticFever = feverForSong(parseChartName(filename)?.musicId);
+ resultBaseFinishTime=finishTimeForSong(parseChartName(filename)?.musicId);
+ finishTime=resultStartTime(resultBaseFinishTime,player?.audioDuration??null);
  restoreFever();
 }
 function editFever() {
@@ -748,13 +756,13 @@ async function loadSongById(songId:string,difficulty:string){
   },downloadSizes.get(selectedMvUrl ?? ''));
   const mvEnd=selectedMvUrl?mvStartSec+mvDurationSec:0;
   if(mvEnd>0)chart.duration=Math.max(chart.duration,mvEnd);
-  currentMvId=selectedMvUrl?song.id:'';finishTime=finishTimeForSong(songId);comboResult.hide();setChartFever(chartFile);
+  currentMvId=selectedMvUrl?song.id:'';comboResult.hide();setChartFever(chartFile);
   el('chart-name').textContent=`${song.title} [${difficulty}]`;
   setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
   player?.transport.setDuration(chart.duration);metadata();
   task.update(3,`正在解码 BGM${bgm?`（${formatResourceSize(bgm.byteLength)}）`:''}…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   let hasBgm=false;
-  if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
+  if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);if(hasBgm){finishTime=resultStartTime(resultBaseFinishTime,player.audioDuration);applyFever(automaticFever,'歌曲元数据');}}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
   if(id!==generation)return;
   task.update(3,'正在加载曲绘…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   if(coverUrl)await preloadImages([coverUrl],(state)=>updateDownload(coverUrl,'曲绘',state));
