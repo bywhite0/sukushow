@@ -27,6 +27,8 @@ export class AudioPlayer {
   setOffset(seconds:number){if(!Number.isFinite(seconds))throw new Error('偏移必须是有限数');this.offset=seconds;this.sync();}
   /** 已解码的 BGM（导出离线混音用）。 */
   get audioBuffer(){return this.buffer;}
+  /** 已解码 BGM 的实际时长（秒）。 */
+  get audioDuration(){return this.buffer?.duration??null;}
   /** 音乐音量（0..1）。 */
   get volume(){return this.gain.gain.value;}
   setVolume(volume:number){this.gain.gain.value=Math.max(0,Math.min(1,volume));}
