@@ -8,7 +8,7 @@ import { AudioPlayer } from '@sukushow/llll-preview/audio';
 import { CapturingSeOutput, createWebAudioSeOutput, SeResolver } from '@sukushow/llll-preview/se';
 import { PreviewRenderer } from '@sukushow/llll-preview/renderer';
 import { LiveHud } from '@sukushow/llll-preview/hud';
-import { imagesSettled, loadHudFonts, preloadImages } from '@sukushow/llll-preview/canvasKit';
+import { imagesSettled, loadHudFonts, loadedImageRevision, preloadImages } from '@sukushow/llll-preview/canvasKit';
 import type { ExportFrameSource } from '@sukushow/export';
 import { installExportDialog, probeAllConfigs } from './exportDialog';
 import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '@sukushow/llll-preview/stageCompositor';
@@ -223,6 +223,7 @@ applyAspect(aspectId);
 let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
 /** 视频导出进行中：实时循环已暂停，走带 / 键盘操作无效。 */
 let exporting=false;
+let visualRevision=0;
 const stage=el<HTMLDivElement>('stage');
 const loading=createResourceLoading(stage,root.querySelector<HTMLElement>('.transport')!);
 const hudTextureUrls=LiveHud.textureUrls();
@@ -240,6 +241,7 @@ const initialResourceDone=new Set<string>();
 const resourceName=(url:string)=>url.split('/').pop()??url;
 const initialResourceTotal=()=>totalResourceSize(initialResourceSizes);
 const reportInitialResource=(url:string,phase:'download'|'ready',downloaded?:number,detail=`资源 ${resourceName(url)}`)=>{
+ if(phase==='ready')visualRevision++;
  if(phase==='download'&&!initialResourceDownloads.has(url))initialResourceDownloads.set(url,0);
  if(downloaded!==undefined)initialResourceDownloads.set(url,Math.max(0,downloaded));
  if(phase==='ready'){
@@ -373,6 +375,7 @@ let baseDuration = chart.duration;
 /** 曲终时刻 FinishTime = MusicsRecord.PlayTime(ms) / 1000（LiveEnd.Is = FinishTime ≤ t）；无曲目元数据时为 null，不播曲终横幅。 */
 let finishTime: number | null = null;
 function applyFever(win: FeverWindow | null, source: string) {
+ visualRevision++;
  hud.setFeverWindow(win);
  chart.duration = Math.max(baseDuration, win?.end ?? 0, finishTime === null ? 0 : finishTime + COMBO_RESULT_CLIP_DURATION);
  player?.transport.setDuration(chart.duration);
@@ -488,6 +491,16 @@ applyScoreCfg();
 
 let frame=0;
 let comboLastT=0;
+let lastLiveFrame: { time: number; chart: typeof chart; playing: boolean; revision: number; image: number; hudTexture: number; resultTexture: boolean; width: number; height: number; dpr: number; mode: string } | null = null;
+const invalidatePreview=()=>{visualRevision++;};
+const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-grid','opt-lane-dark','opt-bg-dark',
+ 'opt-judge-y','opt-fs-y','opt-perfect-plus','opt-judgement-output','opt-fast-slow','opt-fever',
+ 'opt-ap-continue','opt-start-anim','opt-combo-result','opt-hit-effect','rank-preview','tech-score','opt-appeal','opt-mastery'];
+for(const id of visualInputs){
+ const control=el(id);
+ control.addEventListener('input',invalidatePreview);
+ control.addEventListener('change',invalidatePreview);
+}
 /** 实时预览的视口：舞台 CSS 尺寸 × min(dpr, 2)（与渲染器同一上限）。 */
 function liveView():StageView{
  const stage=el('stage');
@@ -515,14 +528,25 @@ function animate(){
   const tr=player.transport,was=tr.playing,t=tr.time;
   if(was&&!tr.playing){player.pause();se?.pause();}
   const playing=tr.playing;
-  hud.sync(chart,t,playing);syncComboResult(t,was&&playing);
-  renderer.setPlaying(playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);
-  input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;
-  // 过场：停在起点未播放 = 待机静止帧；[start, 0) 内按走带时间取 clip 帧（可暂停 / 拖动）。
-  startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);
-  composeStage(liveView());
-  const skip=playing&&t<0;
-  el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');
+  const view=liveView();
+  const next={time:t,chart,playing,revision:visualRevision,image:loadedImageRevision(),
+   hudTexture:hud.textureRevision,resultTexture:comboResult.texturesReady,
+   width:view.cssW,height:view.cssH,dpr:view.dpr,mode:renderer.getCameraMode()};
+  const previous=lastLiveFrame;
+  const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||
+   previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||
+   previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||
+   previous.dpr!==next.dpr||previous.mode!==next.mode;
+  if(playing||changed){
+   hud.sync(chart,t,playing);syncComboResult(t,was&&playing);
+   renderer.setPlaying(playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);
+   input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;
+   startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);
+   composeStage(view);
+   const skip=playing&&t<0;
+   el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');
+   lastLiveFrame=next;
+  }
  }
  frame=requestAnimationFrame(animate);
 }animate();
@@ -613,6 +637,7 @@ function createExportSource(opts:{intro:boolean}):ExportFrameSource{
    renderer?.setFixedSize(null);renderer?.setPhaseSteps(1);
    canvas.classList.remove('exporting');
    startAnim.show(null);
+   lastLiveFrame=null;
    exporting=false;
    if(player){player.setRate(Number(el<HTMLSelectElement>('rate').value));seekTo(resumeAt);}
    comboLastT=resumeAt;

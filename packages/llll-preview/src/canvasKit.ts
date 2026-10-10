@@ -19,6 +19,8 @@ export function hudFont(weight: number, size: number): string {
 // ── 贴图缓存 ─────────────────────────────────────────────────────
 type ImageEntry = { img: HTMLImageElement; state: 'loading' | 'ok' | 'error'; done: Promise<void> };
 const images = new Map<string, ImageEntry>();
+let imageRevision = 0;
+export const loadedImageRevision = () => imageRevision;
 export type ImageLoadProgress = { url: string; phase: 'download' | 'ready' };
 type ImageProgressListener = (progress: ImageLoadProgress) => void;
 const imageListeners = new Map<string, Set<ImageProgressListener>>();
@@ -44,11 +46,12 @@ function entry(url: string): ImageEntry {
   img.onload = () => {
     void img.decode().catch(() => undefined).then(() => {
       rec.state = img.naturalWidth > 0 ? 'ok' : 'error';
+      imageRevision++;
       notifyImage(url, 'ready');
       resolveDone();
     });
   };
-  img.onerror = () => { rec.state = 'error'; notifyImage(url, 'ready'); resolveDone(); };
+  img.onerror = () => { rec.state = 'error'; imageRevision++; notifyImage(url, 'ready'); resolveDone(); };
   img.src = url;
   images.set(url, e);
   return e;

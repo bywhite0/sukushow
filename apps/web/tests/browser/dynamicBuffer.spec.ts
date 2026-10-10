@@ -155,6 +155,9 @@ test('空画面不提交动态缓冲，密集谱仅提交活跃顶点', async ({
     const probe = (window as any).__webglUpload;
     probe.uploads = [];
     probe.active = true;
+    const timeline = document.querySelector<HTMLInputElement>('#timeline')!;
+    timeline.value = '12.001';
+    timeline.dispatchEvent(new Event('input', { bubbles: true }));
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     probe.active = false;
     return probe.uploads.reduce((a: number, b: number) => a + b, 0);
