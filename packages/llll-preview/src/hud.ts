@@ -334,6 +334,8 @@ export class LiveHud {
   private apRateBurstSparks: ApRateSpark[] = [];
   /** 两种火花贴图拆成的 R/G/B 单通道图（预乘），用于按顶点色逐通道加色。 */
   private readonly apRateTexChannels = new Map<string, { ch: HTMLCanvasElement[] }>();
+  private apRateTextureRevision = 0;
+  get textureRevision(): number { return this.apRateTextureRevision; }
   /** #41 Bg_core 的 `Default-Particle` 像素（非预乘 RGBA）。 */
   private apRateCoreTex: { w: number; h: number; px: Uint8ClampedArray } | null = null;
   /** 爆发是否已建好（区别于 `apRateFlashAt` 的动画时基）。 */
@@ -742,7 +744,7 @@ export class LiveHud {
         const ctx = c.getContext('2d', { willReadFrequently: true });
         if (!ctx) return;
         ctx.drawImage(img, 0, 0);
-        try { cb(ctx.getImageData(0, 0, c.width, c.height)); } catch { /* 无像素访问时跳过 */ }
+        try { cb(ctx.getImageData(0, 0, c.width, c.height)); this.apRateTextureRevision++; } catch { /* 无像素访问时跳过 */ }
       };
       img.src = `/rg/fx/tex/${name}`;
     };
