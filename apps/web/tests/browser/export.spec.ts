@@ -6,6 +6,7 @@ test.setTimeout(120_000);
 
 /** 开发服务器以 /@fs/ 提供工作区包源码；与应用导入的 @sukushow/llll-preview/se 是同一模块实例。 */
 const SE_MODULE_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/se.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
+const COMPOSITOR_MODULE_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/stageCompositor.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
 
 async function prepare(page: Page) {
   await page.goto('/');
@@ -51,6 +52,49 @@ test('30 fps 导出将音效推进到片段终点，下载后恢复预览', asyn
   await page.locator('[data-download]').click();
   expect((await download).suggestedFilename()).toMatch(/1280x720_30fps\.mp4$/);
   await restored(page);
+});
+
+test('导出第一帧与合成舞台一致且包含 Canvas HUD', async ({ page }) => {
+  await prepare(page);
+  await page.evaluate(async (url) => {
+    (window as any).__exportCompositorModule = await import(url);
+    const original = VideoEncoder.prototype.encode;
+    VideoEncoder.prototype.encode = function(frame, options) {
+      original.call(this, frame, options);
+      if ((window as any).__exportHudPixels) return;
+      const stage = document.querySelector<HTMLCanvasElement>('#stage-canvas')!;
+      const info = (window as any).__LPW__;
+      const view = { cssW: stage.width, cssH: stage.height, dpr: 1 };
+      const comparison = document.createElement('canvas');
+      const { StageCompositor } = (window as any).__exportCompositorModule;
+      const noHud = new StageCompositor(comparison);
+      noHud.setBackgroundDim(info.compositor.backgroundDim);
+      noHud.draw(view, { gl: document.querySelector<HTMLCanvasElement>('#chart-canvas'), hud: null, startAnim: info.startAnim, comboResult: info.comboResult });
+      const x = 100, y = 30, w = 400, h = 230;
+      const source = document.createElement('canvas');
+      source.width = w; source.height = h;
+      const ctx = source.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(stage, x, y, w, h, 0, 0, w, h);
+      const withHud = ctx.getImageData(0, 0, w, h).data.slice();
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(frame, x, y, w, h, 0, 0, w, h);
+      const encodedFrame = ctx.getImageData(0, 0, w, h).data;
+      let frameMaxDelta = 0;
+      for (let i = 0; i < withHud.length; i++) frameMaxDelta = Math.max(frameMaxDelta, Math.abs(withHud[i] - encodedFrame[i]));
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(comparison, x, y, w, h, 0, 0, w, h);
+      const withoutHud = ctx.getImageData(0, 0, w, h).data;
+      (window as any).__exportHudPixels = {
+        hud: withHud.reduce((count, value, index) => count + (value !== withoutHud[index] ? 1 : 0), 0),
+        frameMaxDelta,
+      };
+    };
+  }, COMPOSITOR_MODULE_URL);
+  await page.locator('[data-start]').click();
+  await expect(page.locator('[data-download]')).toBeVisible({ timeout: 60_000 });
+  const pixels = await page.evaluate(() => (window as any).__exportHudPixels as { hud: number; frameMaxDelta: number });
+  expect(pixels.frameMaxDelta).toBe(0);
+  expect(pixels.hud).toBeGreaterThan(0);
 });
 
 test('取消导出后恢复位置、倍率及控件，允许重试', async ({ page }) => {

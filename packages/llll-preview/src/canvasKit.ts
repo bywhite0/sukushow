@@ -296,11 +296,26 @@ export function drawOutlinedText(
 
 // ── 分组合成（CSS opacity / filter / mask 的隔离组）──────────────────
 const pool: HTMLCanvasElement[] = [];
+const MAX_SCRATCH = 16;
+const MAX_IDLE_PIXELS = 16 * 1024 * 1024;
 
 function takeScratch(w: number, h: number): HTMLCanvasElement {
-  const c = pool.pop() ?? document.createElement('canvas');
-  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const i = pool.findIndex(c => c.width === w && c.height === h);
+  if (i >= 0) return pool.splice(i, 1)[0];
+  const c = pool.length >= MAX_SCRATCH ? pool.shift()! : document.createElement('canvas');
+  c.width = w; c.height = h;
   return c;
+}
+
+function returnScratch(scratch: HTMLCanvasElement): void {
+  const pixels = scratch.width * scratch.height;
+  if (pixels > MAX_IDLE_PIXELS) return;
+  let idle = pixels + pool.reduce((sum, c) => sum + c.width * c.height, 0);
+  while (pool.length && (pool.length >= MAX_SCRATCH || idle > MAX_IDLE_PIXELS)) {
+    const removed = pool.shift()!;
+    idle -= removed.width * removed.height;
+  }
+  pool.push(scratch);
 }
 
 export type GroupOptions = {
@@ -330,8 +345,8 @@ function deviceBounds(ctx: Ctx, r: Rect, pad: number, cw: number, ch: number): {
 }
 
 /**
- * 在一张同尺寸的临时画布上画 draw()，再按 alpha / composite / filter 整体合成回来，
- * 对应 CSS 里 opacity、filter、mask、mix-blend-mode 形成的隔离组。
+ * 有界无滤镜组按包围盒分配画布，滤镜及无边界组保持全尺寸；
+ * 仍按原 alpha、遮罩、混合与滤镜顺序绘制 CSS 隔离组。
  */
 export function drawGroup(ctx: Ctx, opts: GroupOptions, draw: (g: Ctx) => void): void {
   const alpha = opts.alpha ?? 1;
@@ -339,28 +354,24 @@ export function drawGroup(ctx: Ctx, opts: GroupOptions, draw: (g: Ctx) => void):
   const cw = ctx.canvas.width, ch = ctx.canvas.height;
   const box = opts.bounds ? deviceBounds(ctx, opts.bounds, opts.pad ?? 2, cw, ch) : { x: 0, y: 0, w: cw, h: ch };
   if (!box) return;
-  const scratch = takeScratch(cw, ch);
+  const fullSize = !!opts.filter || !opts.bounds;
+  const scratch = takeScratch(fullSize ? cw : box.w, fullSize ? ch : box.h);
   const g = scratch.getContext('2d')!;
+  const offsetX = fullSize ? 0 : box.x, offsetY = fullSize ? 0 : box.y;
+  const m = ctx.getTransform();
+  const setGroupTransform = () => g.setTransform(m.a, m.b, m.c, m.d, m.e - offsetX, m.f - offsetY);
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
-  // Scratch canvases are pooled between groups. A filtered group is
-  // composited from the whole scratch canvas (the filter can expand pixels
-  // beyond `box`), so clearing only the current bounds would retain pixels
-  // from the previous group and leak them into the HUD. This is especially
-  // visible when the combo-over-100 flash reuses a scratch that previously
-  // contained another sprite row. Unfiltered groups copy only `box` below,
-  // so they can keep the cheaper bounds-only clear.
-  if (opts.filter) g.clearRect(0, 0, cw, ch);
-  else g.clearRect(box.x, box.y, box.w, box.h);
+  g.clearRect(0, 0, scratch.width, scratch.height);
   g.beginPath();
-  g.rect(box.x, box.y, box.w, box.h);
+  g.rect(box.x - offsetX, box.y - offsetY, box.w, box.h);
   g.clip();
-  g.setTransform(ctx.getTransform());
+  setGroupTransform();
   g.imageSmoothingEnabled = ctx.imageSmoothingEnabled;
   g.imageSmoothingQuality = ctx.imageSmoothingQuality;
   draw(g);
   if (opts.mask) {
-    g.setTransform(ctx.getTransform());
+    setGroupTransform();
     g.globalAlpha = 1;
     g.filter = 'none';
     g.globalCompositeOperation = 'destination-in';
@@ -372,10 +383,10 @@ export function drawGroup(ctx: Ctx, opts: GroupOptions, draw: (g: Ctx) => void):
   ctx.globalAlpha = Math.min(1, alpha);
   ctx.globalCompositeOperation = opts.composite ?? 'source-over';
   if (opts.filter) ctx.filter = opts.filter;
-  if (opts.filter) ctx.drawImage(scratch, 0, 0);
-  else ctx.drawImage(scratch, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+  if (fullSize) ctx.drawImage(scratch, 0, 0);
+  else ctx.drawImage(scratch, 0, 0, box.w, box.h, box.x, box.y, box.w, box.h);
   ctx.restore();
-  pool.push(scratch);
+  returnScratch(scratch);
 }
 
 /** 把贴图着成纯色（rgb = color，alpha = 贴图 alpha），用于 CSS 的 background-color + mask-image。 */

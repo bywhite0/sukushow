@@ -2,6 +2,7 @@ import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import feverTrailColors from './feverTrailColors.json';
 import { feverEntrance, CORE_MOVE_END } from './feverAnimation';
 import * as THREE from 'three';
+import { flushDynamicGeometry } from './dynamicBuffer';
 import type { Chart } from '@sukushow/chart/chart';
 import { BORDER, Y, edges, worldX } from './geometry';
 import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab, FxMat } from './rgAssets';
@@ -219,13 +220,7 @@ class FxBatch {
     this.mesh.renderOrder = order;
   }
   reset() { this.n = 0; }
-  flush() {
-    this.geo.setDrawRange(0, this.n);
-    (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.uv as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.tint as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.sliceW as THREE.BufferAttribute).needsUpdate = true;
-  }
+  flush() { flushDynamicGeometry(this.geo, this.n); }
   dispose() { this.geo.dispose(); (this.mesh.material as THREE.Material).dispose(); }
 }
 

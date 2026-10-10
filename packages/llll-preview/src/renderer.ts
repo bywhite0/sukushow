@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Chart, Note } from '@sukushow/chart/chart';
 import { BORDER, Y, createSlope, edges, holdSegment, worldX, lanePitch } from './geometry';
 import { gridLaneCount } from './rgOptions';
+import { flushDynamicGeometry } from './dynamicBuffer';
 import { HitFx } from './fx';
 import { FeverLayers } from './feverLayers';
 import {
@@ -57,7 +58,7 @@ class OldBatch {
     const a = [x - w / 2, y - dy, -z - dz], b = [x + w / 2, y - dy, -z - dz], c = [x + w / 2, y + dy, -z + dz], d = [x - w / 2, y + dy, -z + dz];
     this.triangle([...a, ...b, ...c], color, alpha); this.triangle([...a, ...c, ...d], color, alpha);
   }
-  flush() { this.geometry.setDrawRange(0, this.count); this.geometry.attributes.position.needsUpdate = true; this.geometry.attributes.tint.needsUpdate = true; }
+  flush() { flushDynamicGeometry(this.geometry, this.count); }
   dispose() { this.geometry.dispose(); this.material.dispose(); }
 }
 
@@ -75,12 +76,7 @@ class TexBatch {
     this.mesh.frustumCulled = false; this.mesh.renderOrder = order;
   }
   reset() { this.n = 0; }
-  flush() {
-    this.geo.setDrawRange(0, this.n);
-    (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.uv as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.tint as THREE.BufferAttribute).needsUpdate = true;
-  }
+  flush() { flushDynamicGeometry(this.geo, this.n); }
   dispose() { this.geo.dispose(); (this.mesh.material as THREE.Material).dispose(); }
 }
 
