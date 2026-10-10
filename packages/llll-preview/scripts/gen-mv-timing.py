@@ -7,11 +7,38 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 
 import UnityPy
 
 DEFAULT_OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src', 'mv-timing.json'))
+
+
+def movie_duration_from_ffprobe(movie):
+    candidates = [movie]
+    local_name = os.path.basename(movie).replace('music_lyric_video_', '').replace('.usm', '.mp4')
+    local_mp4 = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'apps', 'web', 'public', 'assets', 'mv', local_name))
+    if local_mp4 not in candidates:
+        candidates.append(local_mp4)
+    for candidate in candidates:
+        if not os.path.isfile(candidate):
+            continue
+        probe = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration:stream=duration', '-of', 'json', candidate],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(probe.stdout)
+        values = [payload.get('format', {}).get('duration')]
+        values.extend(stream.get('duration') for stream in payload.get('streams', []))
+        for value in values:
+            if value not in (None, 'N/A'):
+                duration = float(value)
+                if duration > 0:
+                    return duration
+    raise ValueError(f'{movie}: ffprobe 返回无效时长')
 
 
 def extract_timing(source_dir):
@@ -30,11 +57,17 @@ def extract_timing(source_dir):
         if len(mana) != 1 or len(mana[0].get('m_Clips', [])) != 1:
             raise ValueError(f'{song_id}: Cri Mana Track 应有且仅有一个片段')
         clip = mana[0]['m_Clips'][0]
+        movie_clips = [asset for asset in tracks if asset.get('m_Name') == 'CriManaClip']
+        if len(movie_clips) != 1:
+            raise ValueError(f'{song_id}: 应有且仅有一个 CriManaClip')
+        movie_duration = movie_clips[0].get('m_clipDuration')
+        if not isinstance(movie_duration, (int, float)) or movie_duration <= 0:
+            movie_duration = movie_duration_from_ffprobe(movie)
         if clip['m_ClipIn'] != 0 or clip['m_TimeScale'] != 1:
             raise ValueError(f'{song_id}: 未支持的电影片段入点或速度')
         if song_id not in clip['m_DisplayName']:
             raise ValueError(f'{song_id}: 电影片段名称与曲目不符')
-        timings[song_id] = [clip['m_Start'], clip['m_Duration']]
+        timings[song_id] = [clip['m_Start'], movie_duration]
     return timings
 
 

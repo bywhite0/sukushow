@@ -352,6 +352,8 @@ input('chart-file').onchange=async()=>{
   if(selectedMvUrl&&state.downloadedBytes!==undefined)downloads.set(selectedMvUrl,state.downloadedBytes);
   task.update(2,state.phase==='download'?'正在加载 MV…':'MV 已就绪',{downloadedBytes:downloadedBytes(),totalBytes});
  },mvTotalBytes);
+ const mvEnd=selectedMvUrl?mvStartSec+mvDurationSec:0;
+ if(mvEnd>0)chart.duration=Math.max(chart.duration,mvEnd);
  currentMvId=selectedMvUrl?matched!.id:'';
  task.update(2,`应用谱面（${formatResourceSize(file.size)}）…`,{downloadedBytes:downloadedBytes(),totalBytes});chart=next;finishTime=finishTimeForSong(parseChartName(file.name)?.musicId);comboResult.hide();setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();const mvLoaded=await mvReady;
   if(selectedMvUrl&&!mvLoaded)task.fail('MV 加载失败；已回退默认背景。');
@@ -744,6 +746,8 @@ async function loadSongById(songId:string,difficulty:string){
    if(selectedMvUrl&&state.downloadedBytes!==undefined)downloads.set(selectedMvUrl,state.downloadedBytes);
    task.update(4,state.phase==='download'?'正在加载 MV…':'MV 已就绪',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
   },downloadSizes.get(selectedMvUrl ?? ''));
+  const mvEnd=selectedMvUrl?mvStartSec+mvDurationSec:0;
+  if(mvEnd>0)chart.duration=Math.max(chart.duration,mvEnd);
   currentMvId=selectedMvUrl?song.id:'';finishTime=finishTimeForSong(songId);comboResult.hide();setChartFever(chartFile);
   el('chart-name').textContent=`${song.title} [${difficulty}]`;
   setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});

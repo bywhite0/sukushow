@@ -31,7 +31,7 @@
 
 - 顶部工具栏导入谱面与本地音乐；预览区下方集中放置时间轴、播放、重播、倍率和全屏。
 - 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类，标签支持方向键及 Home / End；击中特效位于「显示与特效」，技术分位于「计分」。
-- `settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能开关保留配置入口，尚未接入对应语音或技能演出。MV 开关已接入节奏游戏画面：原包 `RhythmGameMainSceneParam.ShouldMusicVideo` 要求 `IsVideoMode == 1` 且 `EnableMusicVideo` 开启（4.12.0 `libil2cpp.so` RVA 0x4AEB2E0）；`MusicLyricVideoResolver.Process` 使用当前时刻减去电影片段起点（RVA 0x4997D80）。58 首曲目的起点与时长提取自对应 `__live_*_timeline.playable.assetbundle` 的 `Cri Mana Track` 首片段，见 `packages/llll-preview/src/mv-timing.json`；15 首起点非零。可用 `python packages/llll-preview/scripts/gen-mv-timing.py <4L/cache/plain>` 重建。电影无音轨，使用 `link-assets.py --only mv` 和 ffmpeg stream copy 重封装至不入库的 `apps/web/public/assets/mv/`；MV 已成功加载后，舞台始终处于 MV 背景模式，视频当前帧暂不可用时使用黑色 fallback，不再绘制默认背景；资源加载失败时才回退默认背景。曲目加载进度包含 MV 的 HEAD 大小与 `loadeddata` 就绪状态。
+- `settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能开关保留配置入口，尚未接入对应语音或技能演出。MV 开关已接入节奏游戏画面：原包 `RhythmGameMainSceneParam.ShouldMusicVideo` 要求 `IsVideoMode == 1` 且 `EnableMusicVideo` 开启（4.12.0 `libil2cpp.so` RVA 0x4AEB2E0）；`MusicLyricVideoResolver.Process` 使用当前时刻减去电影片段起点（RVA 0x4997D80）。58 首曲目的 MV 起点与电影自身时长提取自对应 `Cri Mana Track` / `CriManaClip`（`m_Start` / `m_clipDuration`）；MV 不按 BGM `PlayTime` 或 `Cri Mana Track.m_Duration` 提前停止。见 `packages/llll-preview/src/mv-timing.json`；15 首起点非零。电影无音轨，使用 `link-assets.py --only mv` 和 ffmpeg stream copy 重封装至不入库的 `apps/web/public/assets/mv/`；MV 已成功加载后，舞台始终处于 MV 背景模式，视频当前帧暂不可用时使用黑色 fallback，不再绘制默认背景；资源加载失败时才回退默认背景。曲目加载进度包含 MV 的 HEAD 大小与 `loadeddata` 就绪状态。
 
 ## 参考
 

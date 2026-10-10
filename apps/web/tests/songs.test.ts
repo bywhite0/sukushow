@@ -42,6 +42,12 @@ describe('曲目列表 apps/web/public/song-list.json', () => {
     expect(songAssets(song).mvStartSec).toBeCloseTo(2.1333333333333333, 9);
     expect(songAssets(list.songs.find((entry) => entry.id === '103103')!).mvStartSec).toBe(0);
   });
+  it('MV 持续到电影自身结尾，不按 BGM 结束或 Timeline 轨道时长提前截断', () => {
+    const song = list.songs.find((entry) => entry.id === '103103')!;
+    const assets = songAssets(song);
+    expect(assets.mvDurationSec).toBeCloseTo(83.06666666666666, 6);
+    expect(assets.mvDurationSec).toBeGreaterThan(song.playTime / 1000);
+  });
   it('搜索按空格分词 AND，默认隐藏无谱面', () => {
     const song = list.songs.find((s) => s.hasChart)!;
     expect(matchesQuery(song, song.id)).toBe(true);
