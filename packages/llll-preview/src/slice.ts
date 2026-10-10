@@ -123,10 +123,12 @@ export function pushSlicedNote(
 /** 拖尾截面垂直于轨迹，端点使用 Unity 世界坐标。 */
 export function pushTrailSegment(
   pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
-  a: number[], b: number[], width: number, color: number[],
-  endWidth = width, endColor = color,
+  a: number[] | { x: number; y: number; z: number }, b: number[] | { x: number; y: number; z: number },
+  width: number, color: number[], endWidth = width, endColor = color,
 ) {
-  const dx = b[0] - a[0], dy = b[1] - a[1], dz = a[2] - b[2];
+  const ax = Array.isArray(a) ? a[0] : a.x, ay = Array.isArray(a) ? a[1] : a.y, az = Array.isArray(a) ? a[2] : a.z;
+  const bx = Array.isArray(b) ? b[0] : b.x, by = Array.isArray(b) ? b[1] : b.y, bz = Array.isArray(b) ? b[2] : b.z;
+  const dx = bx - ax, dy = by - ay, dz = az - bz;
   if (Math.hypot(dx, dy, dz) < 1e-8 || (width <= 0 && endWidth <= 0) || n + 6 > cap) return n;
   // 轨迹方向与相机法线叉乘，得到朝向相机的带状截面。
   let sx = dy * UP_Y - dz * -UP_Z, sy = -dx * UP_Y, sz = dx * -UP_Z;
@@ -135,14 +137,19 @@ export function pushTrailSegment(
   const scale = 1 / (2 * (length < 1e-8 ? 1 : length));
   sx *= scale; sy *= scale; sz *= scale;
   const start = Math.max(0, width), end = Math.max(0, endWidth);
-  const next = pushQuad(pos, uv, col, n, cap, [
-    [a[0] - sx * start, a[1] - sy * start, -a[2] - sz * start],
-    [a[0] + sx * start, a[1] + sy * start, -a[2] + sz * start],
-    [b[0] + sx * end, b[1] + sy * end, -b[2] + sz * end],
-    [b[0] - sx * end, b[1] - sy * end, -b[2] - sz * end],
-  ], [[0, 0], [1, 0], [1, 1], [0, 1]], color);
-  for (const i of [2, 4, 5]) col.set(endColor, (n + i) * 4);
-  return next;
+  const x0 = ax - sx * start, y0 = ay - sy * start, z0 = -az - sz * start;
+  const x1 = ax + sx * start, y1 = ay + sy * start, z1 = -az + sz * start;
+  const x2 = bx + sx * end, y2 = by + sy * end, z2 = -bz + sz * end;
+  const x3 = bx - sx * end, y3 = by - sy * end, z3 = -bz - sz * end;
+  const [r, g, bl, al] = color;
+  put(pos, uv, col, n++, x0, y0, z0, 0, 0, r, g, bl, al);
+  put(pos, uv, col, n++, x1, y1, z1, 1, 0, r, g, bl, al);
+  put(pos, uv, col, n++, x2, y2, z2, 1, 1, r, g, bl, al);
+  put(pos, uv, col, n++, x0, y0, z0, 0, 0, r, g, bl, al);
+  put(pos, uv, col, n++, x2, y2, z2, 1, 1, r, g, bl, al);
+  put(pos, uv, col, n++, x3, y3, z3, 0, 1, r, g, bl, al);
+  for (const i of [2, 4, 5]) col.set(endColor, (n - 6 + i) * 4);
+  return n;
 }
 
 export function pushBillboard(
