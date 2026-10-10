@@ -3,8 +3,8 @@
  * .combo-result）改为按同一层序画进一张 2D 画布，实时预览与视频导出共用这一条路径。
  *
  * 层序与混合（对应原 CSS 层叠）：
- *  0. live-bg：白底 + in_game_difficulty_bg_101（边长 = 舞台宽的正方形，居中，拉伸铺满）
- *     + sc2_ingame_bg_pattern_dot（10 CSS px 平铺，从左上角起）+ Dim（黑，alpha = BackgroundDarkness/100）；
+ *  0. live-bg：无 MV 时白底 + in_game_difficulty_bg_101（边长 = 舞台宽的正方形，居中，拉伸铺满）
+ *     + sc2_ingame_bg_pattern_dot（10 CSS px 平铺）+ Dim（黑，alpha = BackgroundDarkness/100）；有 MV 时改画视频，不叠加静态背景与 Dim；
  *  1. 3D 画布（WebGL，render() 之后立即取，preserveDrawingBuffer 关闭也能拿到当帧）；
  *  2. HUD：.hud 自成层叠上下文；HUD 里的加色 / multiply 全在各自的隔离组内（ComboRoot、段位图标遮罩），
  *     组外只有普通 alpha 混合，而 source-over 满足结合律，所以直接画进舞台画布与先画独立图层再合成结果相同；
@@ -24,6 +24,8 @@ export type StageView = { cssW: number; cssH: number; dpr: number };
 
 export type StageLayers = {
   gl: HTMLCanvasElement | null;
+  video?: HTMLVideoElement | null;
+  videoBackground?: boolean;
   hud: Pick<LiveHud, 'draw'> | null;
   startAnim: Pick<StartAnimation, 'draw'> | null;
   comboResult: Pick<ComboResult, 'draw'> | null;
@@ -80,7 +82,15 @@ export class StageCompositor {
       this.drawLiveBg(bgCtx, view, bg, dot);
       this.backgroundKey = { cssW: view.cssW, cssH: view.cssH, dpr: view.dpr, dim: this.dim, bg, dot };
     }
-    ctx.drawImage(background, 0, 0);
+    const video = layers.video;
+    if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+      ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, pw, ph);
+    } else if (layers.videoBackground) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, pw, ph);
+    } else {
+      ctx.drawImage(background, 0, 0);
+    }
     if (layers.gl && layers.gl.width > 0 && layers.gl.height > 0) ctx.drawImage(layers.gl, 0, 0, pw, ph);
     layers.hud?.draw(ctx, view);
     layers.startAnim?.draw(ctx, view);

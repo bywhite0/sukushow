@@ -28,7 +28,19 @@ describe('曲目列表 apps/web/public/song-list.json', () => {
   });
   it('BGM / 封面 URL 以 soundId / jacketId 为准', () => {
     const song = list.songs.find((s) => s.hasChart && s.hasJacket)!;
-    expect(songAssets(song)).toEqual({ bgmUrl: `/assets/audio/bgm_${song.soundId}.ogg`, coverUrl: `/assets/jacket/${song.jacketId}.png` });
+    expect(songAssets(song)).toMatchObject({ bgmUrl: `/assets/audio/bgm_${song.soundId}.ogg`, coverUrl: `/assets/jacket/${song.jacketId}.png`, mvUrl: song.isVideoMode ? `/assets/mv/${song.id}.mp4` : null });
+  });
+  it('仅视频曲目按曲目 Id 查找 MV，不使用不同的 BGM SoundId', () => {
+    const mvSong = list.songs.find((song) => song.isVideoMode && song.soundId !== song.id)!;
+    const plainSong = list.songs.find((song) => !song.isVideoMode)!;
+    expect(songAssets(mvSong).mvUrl).toBe(`/assets/mv/${mvSong.id}.mp4`);
+    expect(songAssets(plainSong).mvUrl).toBeNull();
+  });
+  it('非零 MV 片段起点取原包时间线，不等于谱面零时刻', () => {
+    const song = list.songs.find((entry) => entry.id === '103106')!;
+    expect(song.isVideoMode).toBe(true);
+    expect(songAssets(song).mvStartSec).toBeCloseTo(2.1333333333333333, 9);
+    expect(songAssets(list.songs.find((entry) => entry.id === '103103')!).mvStartSec).toBe(0);
   });
   it('搜索按空格分词 AND，默认隐藏无谱面', () => {
     const song = list.songs.find((s) => s.hasChart)!;

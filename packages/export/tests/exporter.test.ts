@@ -182,6 +182,28 @@ function recordingSource(overrides: Partial<ExportFrameSource> = {}) {
 }
 
 describe('exportVideo frame source contract', () => {
+  it('waits for an asynchronous video seek before encoding each frame', async () => {
+    let resolveFrame!: () => void
+    const pendingFrame = new Promise<void>((resolve) => { resolveFrame = resolve })
+    let completed = false
+    const { source } = recordingSource({ renderAt: async () => { await pendingFrame; completed = true } })
+    const task = exportVideo(source, { ...request, endSec: -1 + 1 / 30 })
+    await vi.waitFor(() => expect(resolveFrame).toBeTypeOf('function'))
+    expect(frames).toHaveLength(0)
+    resolveFrame()
+    await task
+    expect(completed).toBe(true)
+    expect(frames).toHaveLength(1)
+  })
+
+  it('restores the source if seeking an export frame fails', async () => {
+    const end = vi.fn()
+    const { source } = recordingSource({ renderAt: async () => { throw new Error('seek failed') }, end })
+    await expect(exportVideo(source, { ...request, endSec: -1 + 1 / 30 })).rejects.toThrow('seek failed')
+    expect(frames).toHaveLength(0)
+    expect(end).toHaveBeenCalledTimes(1)
+  })
+
   it('begins with size, start time and fps, then renders frames on the virtual clock', async () => {
     const { source, calls } = recordingSource()
     const result = await exportVideo(source, request)

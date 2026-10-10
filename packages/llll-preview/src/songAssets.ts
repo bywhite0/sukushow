@@ -1,4 +1,5 @@
 import { cachedJsonResource, readResponseBytes, type DownloadProgress } from './resourceDownload'
+import mvTimings from './mv-timing.json'
 
 /**
  * 曲目资源解析：由曲目 Id 推导 BGM 与曲绘的本地路径。
@@ -60,6 +61,11 @@ export type SongAssets = {
   bgmUrl: string | null
   /** 曲绘的 URL；无对应资源时为 null。 */
   coverUrl: string | null
+  /** 浏览器可播放的曲目 MV；没有视频模式时为 null。 */
+  mvUrl: string | null
+  /** 原包 Cri Mana Track 首个片段的起点与时长（秒）。 */
+  mvStartSec: number
+  mvDurationSec: number
 }
 
 export type BinaryLoadProgress = DownloadProgress
@@ -84,10 +90,14 @@ export function loadSongList(onProgress?: (progress: SongListLoadProgress) => vo
 
 /** 由曲目条目推导 BGM / 曲绘 URL。 */
 export function songAssets(song: SongEntry): SongAssets {
+  const timing = song.isVideoMode ? (mvTimings as Record<string, number[]>)[song.id] : null
   return {
     bgmUrl: song.soundId ? `${BGM_BASE}/bgm_${song.soundId}.ogg` : null,
     // 曲绘用 4L 原始 PNG（288×288 RGBA）。
     coverUrl: song.hasJacket ? `${JACKET_BASE}/${song.jacketId}.png` : null,
+    mvUrl: timing ? `/assets/mv/${song.id}.mp4` : null,
+    mvStartSec: timing?.[0] ?? 0,
+    mvDurationSec: timing?.[1] ?? 0,
   }
 }
 

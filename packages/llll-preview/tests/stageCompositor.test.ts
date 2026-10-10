@@ -104,6 +104,41 @@ describe('StageCompositor background cache', () => {
     expect([created[0].width, created[0].height]).toEqual([320, 180]);
   });
 
+  it('draws a ready video before WebGL and HUD without rebuilding the cached fallback', () => {
+    const target = canvas();
+    const compositor = new StageCompositor(target);
+    const video = { readyState: 2, videoWidth: 1920, videoHeight: 1088 } as HTMLVideoElement;
+    const gl = canvas();
+    gl.width = 320; gl.height = 180;
+    const order: string[] = [];
+    const original = target.getContext('2d')!.drawImage.bind(target.getContext('2d'));
+    target.getContext('2d')!.drawImage = ((...args: unknown[]) => {
+      order.push(args[0] === video ? 'video' : args[0] === gl ? 'gl' : 'background');
+      (original as (...values: unknown[]) => void)(...args);
+    }) as CanvasRenderingContext2D['drawImage'];
+    const hud = { draw: () => { order.push('hud'); } };
+    compositor.setBackgroundDim(.35);
+    compositor.draw(view, { ...layers, video, gl, hud });
+    expect(order).toEqual(['video', 'gl', 'hud']);
+    expect(target.calls.fill).toBe(0);
+    expect(created[0].calls.fill).toBe(2);
+    expect(target.calls.draw[0]).toEqual([video, 0, 0, 1920, 1088, 0, 0, 320, 180]);
+    compositor.draw(view, { ...layers, video: null, gl, hud });
+    expect(order.slice(3)).toEqual(['background', 'gl', 'hud']);
+    expect(created[0].calls.fill).toBe(2);
+  });
+
+  it('uses a black MV fallback after the video has loaded instead of the default background', () => {
+    const target = canvas();
+    const compositor = new StageCompositor(target);
+    const gl = canvas();
+    gl.width = 320; gl.height = 180;
+    compositor.draw(view, { ...layers, gl, video: null, videoBackground: true });
+    expect(target.calls.draw).toHaveLength(1);
+    expect(target.calls.draw[0][0]).toBe(gl);
+    expect(target.calls.fill).toBe(1);
+  });
+
   it('keeps WebGL, HUD, intro and result on every draw after the cached background', () => {
     const target = canvas();
     const compositor = new StageCompositor(target);
