@@ -20,6 +20,8 @@ pnpm verify:shared-assets
 pnpm build
 pnpm test
 pnpm test:browser        # 先执行 pnpm --filter @sukushow/web exec playwright install chromium
+# 可选：从本地 4L/cache/plain 的 USM 无损重封装 MV（需 ffmpeg；源目录取 chart 配置或 LLLL_MV_DIR）
+python packages/llll-preview/scripts/link-assets.py --only mv
 ```
 
 许可按目录区分，见上表：MIT 部分的全文为 [LICENSE-MIT](LICENSE-MIT)，AGPL 部分的全文为 [LICENSE-AGPL](LICENSE-AGPL)，各目录另附自己的 LICENSE。依赖与许可边界见 [工作区说明](docs/workspace.md)，第三方来源与附带素材见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

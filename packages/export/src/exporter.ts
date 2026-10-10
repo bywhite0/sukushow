@@ -38,7 +38,7 @@ export type ExportFrameSource = {
    */
   begin(width: number, height: number, startSec: number, fps: number): void | Promise<void>
   /** 以注入时刻渲染一帧（正在播放语义）。 */
-  renderAt(outputTimeSec: number): void
+  renderAt(outputTimeSec: number, signal?: AbortSignal): void | Promise<void>
   /** 当前帧所在的画布；须在 renderAt 之后同一任务内取帧。 */
   readonly canvas: HTMLCanvasElement
   /**
@@ -210,7 +210,8 @@ export async function exportVideo(host: ExportFrameSource, request: ExportReques
     for (let index = 0; index < clock.frameCount; index += 1) {
       throwIfAborted()
       if (encoderError) throw encoderError
-      host.renderAt(clock.timeAt(index))
+      await host.renderAt(clock.timeAt(index), signal)
+      throwIfAborted()
       // WebGL 画布未开 preserveDrawingBuffer：必须在渲染后的同一任务里取帧。
       const frame = new VideoFrame(host.canvas, {
         timestamp: clock.timestampUs(index),

@@ -31,7 +31,7 @@
 
 - 顶部工具栏导入谱面与本地音乐；预览区下方集中放置时间轴、播放、重播、倍率和全屏。
 - 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类，标签支持方向键及 Home / End；击中特效位于「显示与特效」，技术分位于「计分」。
-- `src/settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能与 MV 开关保留配置入口，尚未接入对应语音、技能演出或视频播放。
+- `settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能开关保留配置入口，尚未接入对应语音或技能演出。MV 开关已接入节奏游戏画面：原包 `RhythmGameMainSceneParam.ShouldMusicVideo` 要求 `IsVideoMode == 1` 且 `EnableMusicVideo` 开启（4.12.0 `libil2cpp.so` RVA 0x4AEB2E0）；`MusicLyricVideoResolver.Process` 使用当前时刻减去电影片段起点（RVA 0x4997D80）。58 首曲目的起点与时长提取自对应 `__live_*_timeline.playable.assetbundle` 的 `Cri Mana Track` 首片段，见 `packages/llll-preview/src/mv-timing.json`；15 首起点非零。可用 `python packages/llll-preview/scripts/gen-mv-timing.py <4L/cache/plain>` 重建。电影无音轨，使用 `link-assets.py --only mv` 和 ffmpeg stream copy 重封装至不入库的 `apps/web/public/assets/mv/`；MV 已成功加载后，舞台始终处于 MV 背景模式，视频当前帧暂不可用时使用黑色 fallback，不再绘制默认背景；资源加载失败时才回退默认背景。曲目加载进度包含 MV 的 HEAD 大小与 `loadeddata` 就绪状态。
 
 ## 参考
 
@@ -43,7 +43,7 @@
 
 ## 非原版一致部分
 
-不宣称像素级还原。有 `apps/web/public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever 与局内 SE；未实现完整手动判定状态机、结算、角色技能、语音和 MV，不能视为完整对局客户端。
+不宣称像素级还原。有 `apps/web/public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever、局内 SE 与 MV 时间线；MV 在 Canvas 内铺满舞台，未复刻 CRI/Unity 的 UI 缩放与遮罩。未实现完整手动判定状态机、结算、角色技能和语音，不能视为完整对局客户端。
 
 JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端扩大视角和输入大小限制属于预览器行为。
 
