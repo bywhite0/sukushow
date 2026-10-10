@@ -20,6 +20,13 @@ export const LIVE_BG_DOT_URL = '/sc2_ingame_bg_pattern_dot.png';
 /** 点阵平铺单元（CSS px）。 */
 const DOT_TILE = 10;
 
+function containRect(srcW: number, srcH: number, dstW: number, dstH: number): [number, number, number, number] {
+  const scale = Math.min(dstW / srcW, dstH / srcH);
+  const width = srcW * scale;
+  const height = srcH * scale;
+  return [(dstW - width) / 2, (dstH - height) / 2, width, height];
+}
+
 export type StageView = { cssW: number; cssH: number; dpr: number };
 
 export type StageLayers = {
@@ -84,7 +91,10 @@ export class StageCompositor {
     }
     const video = layers.video;
     if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-      ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, pw, ph);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, pw, ph);
+      const [x, y, width, height] = containRect(video.videoWidth, video.videoHeight, pw, ph);
+      ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, x, y, width, height);
     } else if (layers.videoBackground) {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, pw, ph);

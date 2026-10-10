@@ -120,9 +120,17 @@ describe('StageCompositor background cache', () => {
     compositor.setBackgroundDim(.35);
     compositor.draw(view, { ...layers, video, gl, hud });
     expect(order).toEqual(['video', 'gl', 'hud']);
-    expect(target.calls.fill).toBe(0);
+    expect(target.calls.fill).toBe(1);
     expect(created[0].calls.fill).toBe(2);
-    expect(target.calls.draw[0]).toEqual([video, 0, 0, 1920, 1088, 0, 0, 320, 180]);
+    expect(target.calls.draw[0]![0]).toBe(video);
+    expect(target.calls.draw[0]![1]).toBe(0);
+    expect(target.calls.draw[0]![2]).toBe(0);
+    expect(target.calls.draw[0]![3]).toBe(1920);
+    expect(target.calls.draw[0]![4]).toBe(1088);
+    expect(target.calls.draw[0]![5]).toBeCloseTo(1.1764705882353041, 12);
+    expect(target.calls.draw[0]![6]).toBeCloseTo(0, 12);
+    expect(target.calls.draw[0]![7]).toBeCloseTo(317.6470588235294, 12);
+    expect(target.calls.draw[0]![8]).toBeCloseTo(180, 12);
     compositor.draw(view, { ...layers, video: null, gl, hud });
     expect(order.slice(3)).toEqual(['background', 'gl', 'hud']);
     expect(created[0].calls.fill).toBe(2);
@@ -137,6 +145,22 @@ describe('StageCompositor background cache', () => {
     expect(target.calls.draw).toHaveLength(1);
     expect(target.calls.draw[0][0]).toBe(gl);
     expect(target.calls.fill).toBe(1);
+  });
+
+  it('preserves MV aspect ratio inside a non-16:9 stage', () => {
+    const target = canvas();
+    const compositor = new StageCompositor(target);
+    const video = { readyState: 2, videoWidth: 1920, videoHeight: 1088 } as HTMLVideoElement;
+    compositor.draw({ cssW: 320, cssH: 240, dpr: 1 }, { ...layers, video, videoBackground: true });
+    expect(target.calls.draw[0]![0]).toBe(video);
+    expect(target.calls.draw[0]![1]).toBe(0);
+    expect(target.calls.draw[0]![2]).toBe(0);
+    expect(target.calls.draw[0]![3]).toBe(1920);
+    expect(target.calls.draw[0]![4]).toBe(1088);
+    expect(target.calls.draw[0]![5]).toBeCloseTo(0, 12);
+    expect(target.calls.draw[0]![6]).toBeCloseTo(29.33333333333333, 12);
+    expect(target.calls.draw[0]![7]).toBeCloseTo(320, 12);
+    expect(target.calls.draw[0]![8]).toBeCloseTo(181.33333333333334, 12);
   });
 
   it('keeps WebGL, HUD, intro and result on every draw after the cached background', () => {

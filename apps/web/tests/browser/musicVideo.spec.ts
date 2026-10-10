@@ -68,7 +68,19 @@ test('原包电影轨道非零起点：开始前保持普通背景，之后按�
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame(4)?.currentTime ?? -1)).toBeCloseTo(4 - 1.9666666666666668, 1);
 });
 
- test('导出含 MV 的片段时编码帧采集当前视频时刻，返回后恢复预览', async ({ page, request }) => {
+ test('MV 播放到音频结束后仍继续显示到电影自身结尾', async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await openMv(page, request);
+  await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
+    node.value = '80'; node.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).__LPW__.player.transport.duration)).toBeGreaterThan(83);
+  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-mv', '103103');
+  await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame(80)?.currentTime ?? -1)).toBeCloseTo(80, 1);
+});
+
+
+test('导出含 MV 的片段时编码帧采集当前视频时刻，返回后恢复预览', async ({ page, request }) => {
   test.setTimeout(120_000);
   await openMv(page, request);
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
