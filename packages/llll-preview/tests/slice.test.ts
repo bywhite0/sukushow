@@ -38,11 +38,49 @@ describe('拖尾线段几何', () => {
     expect(Array.from(b.col.slice(0, 4))).toEqual([1, 0, 0, 1]);
     expect(Array.from(b.col.slice(8, 12))).toEqual([0, 0, 1, 0]);
   });
+  it('终点颜色缺少分量时保留起点颜色的对应分量', () => {
+    const b = buffers(6);
+    pushTrailSegment(b.pos, b.uv, b.col, 0, b.cap,
+      { x: 0, y: 0, z: 0 }, { x: 0, y: 2, z: 0 }, 1, [1, .5, .25, .75], 1, [0, .2]);
+    for (const index of [2, 4, 5]) {
+      expect(Array.from(b.col.slice(index * 4, index * 4 + 4))).toEqual([0, Math.fround(.2), .25, .75]);
+    }
+  });
   it('零长度不产生几何，容量不足不写入', () => {
     const b = buffers(5);
     expect(pushTrailSegment(b.pos, b.uv, b.col, 0, 5, [0, 0, 0], [1, 0, 0], 1, [1, 1, 1, 1])).toBe(0);
     expect(pushTrailSegment(b.pos, b.uv, b.col, 0, 5, [0, 0, 0], [0, 0, 0], 1, [1, 1, 1, 1])).toBe(0);
     expect(b.pos.every(v => v === 0)).toBe(true);
+  });
+  it('直接使用轨迹点对象，斜向段的顶点、UV 与渐变颜色逐项保持原值', () => {
+    const b = buffers(12);
+    const n = pushTrailSegment(b.pos, b.uv, b.col, 3, b.cap,
+      { x: 1, y: 2, z: 3 }, { x: -2, y: 5, z: 7 }, .8,
+      [.1, .2, .3, .4], .15, [.9, .8, .7, .6]);
+    expect(n).toBe(9);
+    expect(Array.from(b.pos.slice(9, 27))).toEqual([
+      0.6628198027610779, 1.8199312686920166, -2.8821663856506348,
+      1.337180256843567, 2.1800687313079834, -3.1178336143493652,
+      -1.9367786645889282, 5.0337629318237305, -7.022093772888184,
+      0.6628198027610779, 1.8199312686920166, -2.8821663856506348,
+      -1.9367786645889282, 5.0337629318237305, -7.022093772888184,
+      -2.0632212162017822, 4.9662370681762695, -6.977906227111816,
+    ]);
+    expect(Array.from(b.uv.slice(6, 18))).toEqual([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
+    const start = Array.from(new Float32Array([.1, .2, .3, .4]));
+    const end = Array.from(new Float32Array([.9, .8, .7, .6]));
+    expect(Array.from(b.col.slice(12, 36))).toEqual([...start, ...start, ...end, ...start, ...end, ...end]);
+    expect(b.pos.slice(0, 9).every(v => v === 0)).toBe(true);
+  });
+  it('对象端点的尖端、零长度和容量边界不产生额外写入', () => {
+    const b = buffers(6);
+    const start = { x: 0, y: 0, z: 0 }, tip = { x: 0, y: 2, z: 0 };
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 0, b.cap, start, tip, 2, [1, 0, 0, 1], 0, [0, 0, 1, 0])).toBe(6);
+    expect(Array.from(b.pos)).toEqual([-1, 0, -0, 1, 0, 0, 0, 2, 0, -1, 0, -0, 0, 2, 0, 0, 2, -0]);
+    const original = Array.from(b.pos);
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 0, b.cap, start, start, 2, [1, 0, 0, 1])).toBe(0);
+    expect(pushTrailSegment(b.pos, b.uv, b.col, 1, b.cap, start, tip, 2, [1, 0, 0, 1])).toBe(1);
+    expect(Array.from(b.pos)).toEqual(original);
   });
 });
 

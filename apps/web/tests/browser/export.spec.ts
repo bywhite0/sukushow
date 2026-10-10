@@ -97,6 +97,54 @@ test('导出第一帧与合成舞台一致且包含 Canvas HUD', async ({ page }
   expect(pixels.hud).toBeGreaterThan(0);
 });
 
+test('密集谱拖尾导出时编码帧与舞台逐像素一致', async ({ page }) => {
+  const chart = {
+    Notes: Array.from({ length: 2000 }, (_, i) => ({
+      Uid: i + 1, just: String(Number((2 + i * .012).toFixed(4))),
+      Flags: (i % 48) * 65536 + (i % 48 + 3) * 16, holds: [],
+    })),
+    Bpms: [{ Time: 0, Bpm: 120 }],
+  };
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
+  await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
+  await page.locator('#chart-file').setInputFiles({ name: 'dense-trails.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(chart)) });
+  await expect(page.locator('#message')).toContainText('已加载 dense-trails.json');
+  await page.locator('#export-video').click();
+  await page.locator('[name="resolution"]').selectOption('720p');
+  await page.locator('[name="fps"]').selectOption('30');
+  await page.locator('[name="opening"]').uncheck();
+  await page.locator('[name="start"]').fill('10');
+  await page.locator('[name="end"]').fill('10.2');
+  await page.evaluate(() => {
+    const samples: { vertices: number; maxDelta: number }[] = [];
+    (window as any).__trailExportSamples = samples;
+    const original = VideoEncoder.prototype.encode;
+    VideoEncoder.prototype.encode = function(frame, options) {
+      original.call(this, frame, options);
+      const fx = (window as any).__LPW__.renderer.fx;
+      const vertices = [...fx.batches.values()].reduce((sum: number, batch: { n: number }) => sum + batch.n, 0);
+      const stage = document.querySelector<HTMLCanvasElement>('#stage-canvas')!;
+      const region = document.createElement('canvas');
+      region.width = 400; region.height = 250;
+      const ctx = region.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(stage, 440, 300, 400, 250, 0, 0, 400, 250);
+      const expected = ctx.getImageData(0, 0, 400, 250).data.slice();
+      ctx.clearRect(0, 0, 400, 250);
+      ctx.drawImage(frame, 440, 300, 400, 250, 0, 0, 400, 250);
+      const actual = ctx.getImageData(0, 0, 400, 250).data;
+      let maxDelta = 0;
+      for (let i = 0; i < actual.length; i++) maxDelta = Math.max(maxDelta, Math.abs(expected[i] - actual[i]));
+      samples.push({ vertices, maxDelta });
+    };
+  });
+  await page.locator('[data-start]').click();
+  await expect(page.locator('[data-download]')).toBeVisible({ timeout: 60_000 });
+  const samples = await page.evaluate(() => (window as any).__trailExportSamples as { vertices: number; maxDelta: number }[]);
+  expect(samples).toHaveLength(6);
+  expect(samples.every(sample => sample.vertices > 10000 && sample.maxDelta === 0)).toBe(true);
+});
+
 test('取消导出后恢复位置、倍率及控件，允许重试', async ({ page }) => {
   await prepare(page);
   await page.locator('[name="end"]').fill('30');

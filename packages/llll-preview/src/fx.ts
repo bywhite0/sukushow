@@ -925,7 +925,7 @@ export class HitFx {
         const before = batch.n;
         batch.n = pushTrailSegment(
           batch.pos, batch.uv, batch.col, batch.n, batch.cap,
-          [a.x, a.y, a.z], [b.x, b.y, b.z], widthAt(tailPhase), tailColor,
+          a, b, widthAt(tailPhase), tailColor,
           widthAt(headPhase), headColor,
         );
         this.scaleLaneVertices(batch.pos, before, batch.n, this.laneScaleFor(live));
