@@ -37,6 +37,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/mmw_preview/vendor/stb_image.h"
 #include "generated_resources.h"
+#include "fever_animation.h"
 
 extern "C"
 {
@@ -226,6 +227,7 @@ namespace
         float stageOpacity = 1.0f;
         float stageCover = 0.0f;
         int noteSkin = 0;
+        int effectProfile = 0;
         float chartPlayableEndSec = 0.0f;
         float previousChartTimeSec = -1000.0f;
         float scorePlusTriggerSec = -1000.0f;
@@ -250,6 +252,8 @@ namespace
         double totalFeverCount = 0.0;
         // 进度首次跨过阈值的时刻（歌曲秒），用于给入场动画定起点；<0 表示尚未跨过。
         double feverChanceAnimStartSec = -1.0;
+        double feverChanceTimelineStartSec = 0.0;
+        bool hasFeverChanceTimeline = false;
         // SuperFever 的视觉切换开关。⚠ llll 侧没有 superfever 的原版判定依据
         // （PJSK 靠多人局人数），故做成配置项、由用户指定，不伪装成原版口径。
         bool superFeverEnabled = false;
@@ -2640,10 +2644,6 @@ void main() {
     //   形状：左右竖条厚 11px；顶/底中段为空（x=960 处 y=0..79 恒为 0）
     //         ⇒ 不是闭合矩形；四角臂沿边平滑衰减，x≈205 处归零。
     //   颜色：白（饱和度 0.017）。亮度恒定，无呼吸/脉动。
-    constexpr float FEVER_FRAME_BORDER_PX = 11.0f;
-    constexpr float FEVER_FRAME_ARM_PX = 205.0f;
-    constexpr float FEVER_FRAME_PEAK_ALPHA = 0.95f;
-    constexpr float FEVER_FRAME_RGB[3] = {237.0f / 255.0f, 234.0f / 255.0f, 238.0f / 255.0f};
 
     // 【入场文字与紫色光束】fx_fever_v2
     //   容器 2.38s，但内容只有 1.20s：0.05s 起、0.25–0.30s 主峰、1.20s 结束。
@@ -2654,37 +2654,19 @@ void main() {
     //   (169,120,251)/(139,133,255) → 底 青 (90,210,237) → 蓝绿 (66,255,217)。
     //   旧值是 flat 暗紫 (115,84,140)。形状 tex_fever_v2 是白色 V-mask（描边宽度大体均匀），
     //   颜色全由该梯度给。
-    constexpr float FEVER_TEXT_DURATION_SEC = 1.20f;
-    constexpr float FEVER_TEXT_PEAK_SEC = 0.28f;
-    constexpr float FEVER_TEXT_CENTER_X = 957.0f;
-    constexpr float FEVER_TEXT_CENTER_Y = 533.0f;
-    constexpr float FEVER_TEXT_WIDTH = 453.0f;
-    constexpr float FEVER_TEXT_HEIGHT = 81.0f;
-    constexpr float FEVER_BEAM_APEX_Y = 60.0f;        // 光束两腿在中心汇聚处的高度
+    constexpr float FEVER_FRAME_WIDTH_UNITS = 17.8f;
+    constexpr float FEVER_FRAME_HEIGHT_UNITS = 10.0f;
+    constexpr float FEVER_FRAME_BORDER_X_PX = 255.0f;
+    constexpr float FEVER_FRAME_BORDER_Y_PX = 13.0f;
+    constexpr float FEVER_FRAME_PPU = 108.0f;
 
     // ---- FeverChance（入场）----
     // 取值依据是客户端的 FeverChance 特效素材 fx_fever_chance_v2（1920×1080）。
     // 充能阈值：照 PJSK 的 requireFeverProgress 缺省（0.7f）。
     constexpr float CHANCE_PROGRESS_THRESHOLD = 0.70f;
     // 入场动画的持续时间（仅用于把动画从跨阈值那一刻开始播；光束本身持续到 Fever 开始）。
-    constexpr float CHANCE_DURATION_SEC = 1.20f;      // 内容长度（容器 2.32s）
-    constexpr float CHANCE_PEAK_SEC = 0.25f;          // 主峰
-    constexpr float CHANCE_END_SEC = 0.40f;           // 光束收尽
-    constexpr float CHANCE_TEXT_CENTER_X = 960.0f;
-    constexpr float CHANCE_TEXT_CENTER_Y = 534.0f;
-    constexpr float CHANCE_TEXT_HEIGHT = 60.0f;       // 文字带高度（496..572，含光晕）
-    constexpr float CHANCE_TEXT_PEAK_ALPHA = 0.85f;
     // 光束中心线：顶点在顶部中央（左右各偏离中线 54.4px），斜率 0.837 向下张开到两底角。
-    constexpr float CHANCE_BEAM_APEX_HALF_SEP = 54.4f;
-    constexpr float CHANCE_BEAM_SLOPE = 0.837f;
-    constexpr float CHANCE_BEAM_PEAK_ALPHA = 0.95f;
-    constexpr int CHANCE_BEAM_SEGMENTS = 8;
     // 宽度剖面（y → 像素宽）：中间最宽、两端收窄，是叶形而不是三角。
-    constexpr float CHANCE_BEAM_WIDTH[][2] = {
-        {0.0f, 20.0f}, {120.0f, 31.0f}, {240.0f, 52.0f}, {360.0f, 77.0f},
-        {480.0f, 95.0f}, {600.0f, 85.0f}, {720.0f, 64.0f}, {840.0f, 40.0f},
-        {960.0f, 27.0f}, {1080.0f, 18.0f},
-    };
     // 光束不是实心四边形，而是「中心平顶 + 长尾」的柔和辉光。
     // 横截面以**宽度**归一：s = |dx| / (宽度/2)，环带按 s 切分。
     // 环带必须**互不重叠**：加色混合下重叠会累加成假亮，嵌套画会得到过亮的核心。
@@ -2714,7 +2696,6 @@ void main() {
     constexpr float FEVER_GAUGE_Y_OFFSET = 0.0f;       // 整条上移(目视微调;负=上移)
     // 计量条的额外层(素材真值,原实现缺失):描边 + 加色辉光。辉光的动画曲线
     // (clip_fevergauge_*)unity-rs 没导出,呼吸幅度/频率是占位值,可目视调。
-    constexpr float FEVER_GAUGE_OUTLINE_ALPHA = 0.9f;   // tex_FeverGauge_outline 描边强度
     constexpr float FEVER_GAUGE_LIGHT_ALPHA = 0.55f;    // tex_FeverGauge_light 加色辉光强度
     constexpr float FEVER_GAUGE_LIGHT_PULSE = 0.25f;    // 辉光呼吸幅度(±)
     constexpr float FEVER_GAUGE_LIGHT_PULSE_HZ = 1.2f;  // 辉光呼吸频率
@@ -2725,15 +2706,8 @@ void main() {
     // 世界单位 1 单位 = 100px、原点 = 画面中心 ⇒ 像素 = (960 + 100·x, 540 − 100·y)。
     // 淡入时长取自原包 `FadeInFeverLineText` 的 duration 参数
     // （FadeInFeverChance 的延续 lambda 传 0.2f）。
-    constexpr float FEVER_POINTER_FADE_SEC = 0.20f;
-    constexpr float FEVER_POINTER_CENTER_X = 1284.7f;
-    constexpr float FEVER_POINTER_CENTER_Y = 243.5f;
-    constexpr float FEVER_POINTER_WIDTH = 174.0f;
-    constexpr float FEVER_POINTER_HEIGHT = 54.0f;
-    constexpr float SUPER_POINTER_CENTER_X = 1206.2f;
-    constexpr float SUPER_POINTER_CENTER_Y = 129.5f;
-    constexpr float SUPER_POINTER_WIDTH = 306.0f;
-    constexpr float SUPER_POINTER_HEIGHT = 54.0f;
+    constexpr float FEVER_CHANCE_FADE_SEC = 0.20f;
+    constexpr float FEVER_GAUGE_LINE_TOP_Y = 243.5f;
     // 填充色由原包贴图 tex_fevergauge_color_03 逐像素给出（见绘制处），此处只留透明度。
     // 只画已充能段、随进度从底端生长；alpha 为判断值，可调。
     constexpr float CHANCE_GAUGE_FILL_ALPHA = 0.5f;  // mat_FeverGauge_color 的 _Color.a=0.502(UnityPy 实测)
@@ -2752,51 +2726,12 @@ void main() {
     // ---- Fever 紫光（fx_fever_v2）----
     // 与 FeverChance 中心线同族。tex_fever_v2 的 V-mask 描边宽度大体均匀（每腿约占
     // sprite 宽 0.29），故宽度剖面取近似均匀；绝对像素为视觉估计（mesh 变换未取到）。
-    constexpr float FEVER_BEAM_APEX_HALF_SEP = 45.0f;
-    constexpr float FEVER_BEAM_SLOPE = 0.838f;
-    constexpr float FEVER_BEAM_WIDTH[][2] = {
-        {0.0f, 40.0f}, {300.0f, 50.0f}, {600.0f, 52.0f}, {900.0f, 48.0f}, {1080.0f, 44.0f},
-    };
     // 颜色梯度（y→RGB，采自 eff_fever_grd 竖向：顶=品红、中=紫罗兰、底=蓝绿）。
-    constexpr float FEVER_BEAM_COLOR[][4] = {
-        {0.0f, 254.0f / 255.0f, 126.0f / 255.0f, 198.0f / 255.0f},
-        {135.0f, 231.0f / 255.0f, 122.0f / 255.0f, 214.0f / 255.0f},
-        {270.0f, 200.0f / 255.0f, 118.0f / 255.0f, 235.0f / 255.0f},
-        {405.0f, 169.0f / 255.0f, 120.0f / 255.0f, 251.0f / 255.0f},
-        {540.0f, 139.0f / 255.0f, 133.0f / 255.0f, 255.0f / 255.0f},
-        {675.0f, 116.0f / 255.0f, 165.0f / 255.0f, 255.0f / 255.0f},
-        {810.0f, 90.0f / 255.0f, 210.0f / 255.0f, 237.0f / 255.0f},
-        {945.0f, 69.0f / 255.0f, 249.0f / 255.0f, 219.0f / 255.0f},
-        {1080.0f, 66.0f / 255.0f, 255.0f / 255.0f, 217.0f / 255.0f},
-    };
     // SuperFever 梯度（eff_feversuper_grd）：黄→粉→紫→蓝→青，更满的彩虹。
-    constexpr float FEVER_SUPER_BEAM_COLOR[][4] = {
-        {0.0f, 255.0f / 255.0f, 241.0f / 255.0f, 127.0f / 255.0f},
-        {135.0f, 255.0f / 255.0f, 196.0f / 255.0f, 153.0f / 255.0f},
-        {270.0f, 255.0f / 255.0f, 140.0f / 255.0f, 186.0f / 255.0f},
-        {405.0f, 225.0f / 255.0f, 119.0f / 255.0f, 224.0f / 255.0f},
-        {540.0f, 164.0f / 255.0f, 121.0f / 255.0f, 253.0f / 255.0f},
-        {675.0f, 133.0f / 255.0f, 138.0f / 255.0f, 255.0f / 255.0f},
-        {810.0f, 104.0f / 255.0f, 181.0f / 255.0f, 246.0f / 255.0f},
-        {945.0f, 71.0f / 255.0f, 246.0f / 255.0f, 220.0f / 255.0f},
-        {1080.0f, 66.0f / 255.0f, 255.0f / 255.0f, 218.0f / 255.0f},
-    };
     // 颜色取自原包 tex_fevergauge_color_03 的左半暖金区（右半彩虹供计量条、左半金供
     // FeverChance 光带；素材里唯一的金色来源）。左半沿长度恒定为 (255,235,139) 暖金、
     // 横截面 pale→gold→pale。此处保留中段偏亮的发光包络（软辉光形状），色相按左半金校正
     // （R:G:B ≈ 1:0.922:0.545）。实机口径：FeverChance 金色，达 fever 线转 eff_fever_grd 彩虹。
-    constexpr float CHANCE_BEAM_COLOR[][4] = {
-        {0.0f, 78.0f / 255.0f, 72.0f / 255.0f, 43.0f / 255.0f},
-        {120.0f, 102.0f / 255.0f, 94.0f / 255.0f, 56.0f / 255.0f},
-        {240.0f, 156.0f / 255.0f, 144.0f / 255.0f, 85.0f / 255.0f},
-        {360.0f, 247.0f / 255.0f, 228.0f / 255.0f, 135.0f / 255.0f},
-        {480.0f, 252.0f / 255.0f, 232.0f / 255.0f, 137.0f / 255.0f},
-        {600.0f, 253.0f / 255.0f, 233.0f / 255.0f, 138.0f / 255.0f},
-        {720.0f, 182.0f / 255.0f, 168.0f / 255.0f, 99.0f / 255.0f},
-        {840.0f, 122.0f / 255.0f, 112.0f / 255.0f, 67.0f / 255.0f},
-        {960.0f, 88.0f / 255.0f, 81.0f / 255.0f, 48.0f / 255.0f},
-        {1080.0f, 70.0f / 255.0f, 65.0f / 255.0f, 38.0f / 255.0f},
-    };
 
     // ---- 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示 ----
     // 反汇编 MultiFeverView.UpdateFeverGauge（RVA 0x5370CA4）：feverGaugeFlash 只在 gauge
@@ -2810,6 +2745,7 @@ void main() {
     // 收窄）：单片顶宽 0.322u(32px)、底宽 1.47u(147px)，比计量条本体略宽略长，最宽在两底角
     // ——与「从两底角向顶点上扫」一致。中心线复用计量条真值 CHANCE_GAUGE_*；宽度端点为素材
     // 几何、绝对像素待目视微调。
+    constexpr int FEVER_GAUGE_FLASH_SEGMENTS = 8;
     constexpr float FEVER_GAUGE_FLASH_DELAY_SEC = 0.10f;
     constexpr float FEVER_GAUGE_FLASH_PEAK_SEC = 0.40f;
     constexpr float FEVER_GAUGE_FLASH_DURATION_SEC = 0.80f;
@@ -3194,6 +3130,51 @@ void main() {
             tint);
     }
 
+    void drawNineSlice(
+        ImDrawList* drawList,
+        const Texture& texture,
+        float x,
+        float y,
+        float width,
+        float height,
+        float sourceBorderX,
+        float sourceBorderY,
+        float pixelsPerUnit,
+        float viewportScale,
+        float alpha)
+    {
+        if (!drawList || texture.id == 0 || width <= 0.1f || height <= 0.1f) {
+            return;
+        }
+        const float targetBorderX = sourceBorderX / pixelsPerUnit * 100.0f * viewportScale;
+        const float targetBorderY = sourceBorderY / pixelsPerUnit * 100.0f * viewportScale;
+        const float sourceWidth = static_cast<float>(texture.width);
+        const float sourceHeight = static_cast<float>(texture.height);
+        const float left = std::min(targetBorderX, width * 0.5f);
+        const float right = std::min(targetBorderX, width * 0.5f);
+        const float top = std::min(targetBorderY, height * 0.5f);
+        const float bottom = std::min(targetBorderY, height * 0.5f);
+        const float xs[] = {x, x + left, x + width - right, x + width};
+        const float ys[] = {y, y + top, y + height - bottom, y + height};
+        const float us[] = {0.0f, sourceBorderX / sourceWidth, 1.0f - sourceBorderX / sourceWidth, 1.0f};
+        const float vs[] = {0.0f, sourceBorderY / sourceHeight, 1.0f - sourceBorderY / sourceHeight, 1.0f};
+        const ImU32 tint = IM_COL32(255, 255, 255, static_cast<int>(std::lround(clamp01(alpha) * 255.0f)));
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 3; ++col) {
+                drawHudImageUv(
+                    drawList,
+                    texture,
+                    xs[col],
+                    ys[row],
+                    xs[col + 1] - xs[col],
+                    ys[row + 1] - ys[row],
+                    ImVec2(us[col], vs[row]),
+                    ImVec2(us[col + 1], vs[row + 1]),
+                    tint);
+            }
+        }
+    }
+
     void drawHudImageClipX(
         ImDrawList* drawList,
         const Texture& texture,
@@ -3310,6 +3291,69 @@ void main() {
                 h01 * right.value + h11 * duration * right.inSlope;
         }
         return keys.back().value;
+    }
+
+    struct FeverFrameMaterial {
+        GLuint program = 0;
+        GLuint gradient = 0;
+        float time = 0;
+        std::array<float, 4> rect{};
+    };
+    FeverFrameMaterial gFeverFrameMaterial;
+
+    void useFeverFrameMaterial(const ImDrawList*, const ImDrawCmd*)
+    {
+        auto& material = gFeverFrameMaterial;
+        if (!material.program) {
+            material.program = createProgram(R"(#version 300 es
+precision highp float;
+layout(location=0) in vec2 Position;
+layout(location=1) in vec2 UV;
+layout(location=2) in vec4 Color;
+uniform mat4 ProjMtx;
+uniform vec4 Rect;
+out vec2 uv;
+out vec2 screenUv;
+out vec4 color;
+void main() {
+    uv = UV;
+    color = Color;
+    screenUv = (Position - Rect.xy) / Rect.zw;
+    screenUv.y = 1.0 - screenUv.y;
+    gl_Position = ProjMtx * vec4(Position, 0.0, 1.0);
+})", R"(#version 300 es
+precision highp float;
+uniform sampler2D Texture;
+uniform sampler2D Gradient;
+uniform float Time;
+in vec2 uv;
+in vec2 screenUv;
+in vec4 color;
+out vec4 result;
+void main() {
+    float angle = Time * 2.0;
+    float c = cos(angle), s = sin(angle);
+    vec2 p = screenUv - 0.5;
+    vec2 q = vec2(c*p.x-s*p.y, s*p.x+c*p.y) + 0.5;
+    q.y = 1.0 - q.y;
+    result = texture(Texture, uv) * texture(Gradient, q) * color;
+    result.rgb *= result.a;
+})");
+        }
+        GLint previous = 0;
+        GLfloat projection[16];
+        glGetIntegerv(GL_CURRENT_PROGRAM, &previous);
+        glGetUniformfv(previous, glGetUniformLocation(previous, "ProjMtx"), projection);
+        glUseProgram(material.program);
+        glUniformMatrix4fv(glGetUniformLocation(material.program, "ProjMtx"), 1, GL_FALSE, projection);
+        glUniform4fv(glGetUniformLocation(material.program, "Rect"), 1, material.rect.data());
+        glUniform1f(glGetUniformLocation(material.program, "Time"), material.time);
+        glUniform1i(glGetUniformLocation(material.program, "Texture"), 0);
+        glUniform1i(glGetUniformLocation(material.program, "Gradient"), 1);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, material.gradient);
+        glActiveTexture(GL_TEXTURE0);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     }
 
     void useAdditiveBlend(const ImDrawList*, const ImDrawCmd*)
@@ -3746,7 +3790,7 @@ void main() {
         };
         beamGlowToUnderlay(renderer, px, py, 960.5f,
             CHANCE_GAUGE_APEX_HALF_SEP, CHANCE_GAUGE_SLOPE,
-            flashEnv, CHANCE_BEAM_SEGMENTS, flashWidthAt, flashColorAt);
+            flashEnv, FEVER_GAUGE_FLASH_SEGMENTS, flashWidthAt, flashColorAt);
     }
 
     // 计量条（fever_gauge_color/outline/light）沉到音符之下：在 GL renderFrame 的
@@ -3799,9 +3843,10 @@ void main() {
 
         // 计量条闪光先于本体推入欠幕层（在其下层），与旧 ImGui 顺序一致；
         // 此处已确认 chanceActive + feverDisplayEnabled。
-        const float chanceLocalSec = gPlayer.feverChanceAnimStartSec >= 0.0
-            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
-            : 0.0f;
+        const float chanceLocalSec = gPlayer.hasFeverChanceTimeline
+            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceTimelineStartSec)
+            : (gPlayer.feverChanceAnimStartSec >= 0.0
+                ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec) : 0.0f);
         if (gPlayer.superFeverEnabled) {
             feverFlashToUnderlay(renderer, px, py, chanceLocalSec, overlayAlpha);
         }
@@ -3810,7 +3855,7 @@ void main() {
         if (gaugeColorTex == nullptr || gaugeColorTex->id == 0) {
             return;
         }
-        const bool feverLineReached = yTop <= FEVER_POINTER_CENTER_Y;
+        const bool feverLineReached = yTop <= FEVER_GAUGE_LINE_TOP_Y;
         const float gU0 = feverLineReached ? 0.5f : 0.0f;
         const float gU1 = feverLineReached ? 1.0f : 0.5f;
         const float vFull = 1.0f - tTop;
@@ -3896,18 +3941,14 @@ void main() {
         const float feverEndLocalSec = static_cast<float>(gPlayer.feverEndSec) - static_cast<float>(gPlayer.feverStartSec);
         // 区间取 [start, end)，与 llll 客户端的 isFeverAt 同口径。
         const bool feverActive = feverLocalSec >= 0.0f && feverLocalSec < feverEndLocalSec;
-        const bool textActive =
-            feverLocalSec >= 0.0f && feverLocalSec < FEVER_TEXT_DURATION_SEC;
+        const auto textClip = gPlayer.superFeverEnabled ? fever::ClipId::Super : fever::ClipId::Fever;
+        const bool textActive = feverLocalSec >= 0.0f && feverLocalSec < fever::clip(textClip).duration;
         // ---- 充能（FeverChance）----
         // progress = feverCount / totalFeverCount（照 PJSK MultiScoreLogic.UpdateFever 的口径）。
         const float feverProgress = gPlayer.totalFeverCount > 0.0
             ? static_cast<float>(gPlayer.feverCount / gPlayer.totalFeverCount)
             : 0.0f;
         const bool charging = feverProgress >= CHANCE_PROGRESS_THRESHOLD;
-        // SuperFever 由**配置开关**决定（不设进度阈值）：progress 到 1.0 的时刻
-        // 就是最后一个前置音符，距 Fever 起点只剩零点几秒，按进度判定等于看不见。
-        // llll 侧没有 superfever 的原版判定依据，故整个充能阶段由开关选配色。
-        const bool superCharging = charging && gPlayer.superFeverEnabled;
         // 动画起点：进度首次跨过阈值的时刻。整场动画不能从 0 秒就开始跑，
         // 否则真正的入场时刻只剩一个尾巴。
         if (charging && gPlayer.feverChanceAnimStartSec < 0.0) {
@@ -3918,102 +3959,64 @@ void main() {
         }
         // 充能阶段持续到 Fever 开始为止（不按 1.2s 自动收尽）。
         const bool chanceActive = charging && feverLocalSec < 0.0;
-        const float chanceLocalSec = chanceActive && gPlayer.feverChanceAnimStartSec >= 0.0
-            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec)
-            : 0.0f;
+        const float chanceLocalSec = gPlayer.hasFeverChanceTimeline
+            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceTimelineStartSec)
+            : (chanceActive && gPlayer.feverChanceAnimStartSec >= 0.0
+                ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec) : 0.0f);
         if (!gPlayer.feverDisplayEnabled || (!feverActive && !textActive && !chanceActive)) {
             return;
         }
 
         const auto previewRectWindow = renderer.previewRectWindow();
-        const UiTransform tx = buildUiTransform(previewRectWindow[2], previewRectWindow[3]);
-        auto px = [&](float x) { return static_cast<float>(previewRectWindow[0]) + tx.offsetX + x * tx.scale; };
-        auto py = [&](float y) { return static_cast<float>(previewRectWindow[1]) + tx.offsetY + y * tx.scale; };
-        auto ps = [&](float value) { return value * tx.scale; };
+        const auto projection = fever::viewport(previewRectWindow[2], previewRectWindow[3]);
+        const float unit = projection.pixelsPerUnit;
+        auto px = [&](float x) { return previewRectWindow[0] + projection.width * 0.5f + x * unit; };
+        auto py = [&](float y) { return previewRectWindow[1] + projection.height * 0.5f - y * unit; };
         ImDrawList* overlay = ImGui::GetForegroundDrawList();
-
-        // FeverChance 入场：两束叶形暖金光带（顶点在顶部中央、向下张开到两底角）。
-        // 逐段绘制而非单个四边形 —— 宽度与颜色都沿轴变化，单四边形只能线性插值，
-        // 表达不了「中间最宽」的叶形轮廓。
-        if (chanceActive) {
-            const float localSec = chanceLocalSec;
-            const float beamT = clamp01(localSec / CHANCE_DURATION_SEC);
-            const float beamAlpha = beamT < 0.05f
-                ? 0.0f
-                : (beamT < CHANCE_PEAK_SEC / CHANCE_DURATION_SEC
-                       ? clamp01((beamT - 0.05f) / (CHANCE_PEAK_SEC / CHANCE_DURATION_SEC - 0.05f))
-                       : clamp01(1.0f - (beamT - CHANCE_PEAK_SEC / CHANCE_DURATION_SEC) /
-                                           (CHANCE_END_SEC / CHANCE_DURATION_SEC -
-                                            CHANCE_PEAK_SEC / CHANCE_DURATION_SEC)));
-
-            auto widthAt = [&](float y) {
-                constexpr int kN = static_cast<int>(sizeof(CHANCE_BEAM_WIDTH) / sizeof(CHANCE_BEAM_WIDTH[0]));
-                if (y <= CHANCE_BEAM_WIDTH[0][0]) return CHANCE_BEAM_WIDTH[0][1];
-                if (y >= CHANCE_BEAM_WIDTH[kN - 1][0]) return CHANCE_BEAM_WIDTH[kN - 1][1];
-                for (int i = 1; i < kN; ++i) {
-                    if (y <= CHANCE_BEAM_WIDTH[i][0]) {
-                        const float y0 = CHANCE_BEAM_WIDTH[i - 1][0];
-                        const float y1 = CHANCE_BEAM_WIDTH[i][0];
-                        const float k = (y - y0) / (y1 - y0);
-                        return CHANCE_BEAM_WIDTH[i - 1][1] +
-                               (CHANCE_BEAM_WIDTH[i][1] - CHANCE_BEAM_WIDTH[i - 1][1]) * k;
-                    }
-                }
-                return CHANCE_BEAM_WIDTH[kN - 1][1];
-            };
-            auto colorAt = [&](float y, float alpha) {
-                constexpr int kN = static_cast<int>(sizeof(CHANCE_BEAM_COLOR) / sizeof(CHANCE_BEAM_COLOR[0]));
-                float r = CHANCE_BEAM_COLOR[0][1];
-                float g = CHANCE_BEAM_COLOR[0][2];
-                float b = CHANCE_BEAM_COLOR[0][3];
-                if (y <= CHANCE_BEAM_COLOR[0][0]) {
-                    r = CHANCE_BEAM_COLOR[0][1]; g = CHANCE_BEAM_COLOR[0][2]; b = CHANCE_BEAM_COLOR[0][3];
-                } else if (y >= CHANCE_BEAM_COLOR[kN - 1][0]) {
-                    r = CHANCE_BEAM_COLOR[kN - 1][1]; g = CHANCE_BEAM_COLOR[kN - 1][2];
-                    b = CHANCE_BEAM_COLOR[kN - 1][3];
-                } else {
-                    for (int i = 1; i < kN; ++i) {
-                        if (y <= CHANCE_BEAM_COLOR[i][0]) {
-                            const float y0 = CHANCE_BEAM_COLOR[i - 1][0];
-                            const float y1 = CHANCE_BEAM_COLOR[i][0];
-                            const float k = (y - y0) / (y1 - y0);
-                            r = CHANCE_BEAM_COLOR[i - 1][1] +
-                                (CHANCE_BEAM_COLOR[i][1] - CHANCE_BEAM_COLOR[i - 1][1]) * k;
-                            g = CHANCE_BEAM_COLOR[i - 1][2] +
-                                (CHANCE_BEAM_COLOR[i][2] - CHANCE_BEAM_COLOR[i - 1][2]) * k;
-                            b = CHANCE_BEAM_COLOR[i - 1][3] +
-                                (CHANCE_BEAM_COLOR[i][3] - CHANCE_BEAM_COLOR[i - 1][3]) * k;
-                            break;
-                        }
-                    }
-                }
-                // SuperFever 配色（素材 fx_super_fever_v2）：紫 → 白核，
-                // 中段纯白、两端偏紫；普通版是整条纯紫（fx_fever_v2）。
-                if (superCharging) {
-                    const float k = clamp01(1.0f - std::fabs(y - 600.0f) / 600.0f);
-                    const float sr = 0.45f + (1.00f - 0.45f) * k;
-                    const float sg = 0.33f + (1.00f - 0.33f) * k;
-                    const float sb = 0.58f + (1.00f - 0.58f) * k;
-                    r = sr;
-                    g = sg;
-                    b = sb;
-                }
-                return IM_COL32(static_cast<int>(std::lround(r * 255.0f)),
-                                static_cast<int>(std::lround(g * 255.0f)),
-                                static_cast<int>(std::lround(b * 255.0f)),
-                                static_cast<int>(std::lround(clamp01(alpha) * 255.0f)));
-            };
-
-            if (beamAlpha > 0.001f) {
-                beginAdditive(overlay);
-                drawBeamGlow(overlay, px, py, 960.5f,
-                             CHANCE_BEAM_APEX_HALF_SEP, CHANCE_BEAM_SLOPE,
-                             beamAlpha * CHANCE_BEAM_PEAK_ALPHA * overlayAlpha,
-                             CHANCE_BEAM_SEGMENTS,
-                             widthAt,
-                             [&](float y, float a) { return colorAt(y, a); });
-                endAdditive(overlay);
+        auto drawTextClip = [&](fever::ClipId id, float time) {
+            const auto& animation = fever::clip(id, gPlayer.effectProfile);
+            beginAdditive(overlay);
+            for (std::size_t i = 0; i < animation.beamCount; ++i) {
+                const auto state = fever::beamPose(id, i, time, gPlayer.effectProfile);
+                if (state.alpha <= 0.001f) continue;
+                const auto& beam = animation.beams[i];
+                const auto& texture = requireTexture(hudTextures, "fever_flare");
+                drawHudImageRotated(overlay, texture, ImVec2(px(state.x), py(state.y)),
+                    texture.width * unit / beam.pixelsPerUnit * state.scaleX,
+                    texture.height * unit / beam.pixelsPerUnit * state.scaleY, beam.rotation,
+                    IM_COL32(beam.r * 255, beam.g * 255, beam.b * 255,
+                        clamp01(beam.a * state.alpha * overlayAlpha) * 255));
             }
+            endAdditive(overlay);
+            for (std::size_t i = 0; i < animation.count; ++i) {
+                const auto state = fever::pose(id, i, time, gPlayer.effectProfile);
+                if (state.alpha <= 0.001f) continue;
+                const auto& glyph = animation.glyphs[i];
+                const Texture& texture = requireTexture(hudTextures, glyph.texture);
+                const float width = glyph.width * unit / glyph.pixelsPerUnit * state.scaleX;
+                const float height = glyph.height * unit / glyph.pixelsPerUnit * state.scaleY;
+                drawHudImageUv(overlay, texture,
+                    px(state.x) - width * 0.5f, py(state.y) - height * 0.5f, width, height,
+                    ImVec2(glyph.rectX / texture.width, 1.0f - (glyph.rectY + glyph.height) / texture.height),
+                    ImVec2((glyph.rectX + glyph.width) / texture.width, 1.0f - glyph.rectY / texture.height),
+                    IM_COL32(255, 255, 255, clamp01(state.alpha * overlayAlpha) * 255));
+            }
+        };
+
+        // fever/1 的 Prefab 只有文字；Clip 中遗留的 over_L/R 没有目标节点。
+        if (chanceActive) {
+            drawTextClip(fever::ClipId::Chance, chanceLocalSec);
+            // APK FeverView 的 icon 根变换；FadeInFeverLineText 的时长为 0.2 秒。
+            const float alpha = clamp01(chanceLocalSec / FEVER_CHANCE_FADE_SEC) * overlayAlpha;
+            const auto drawPointer = [&](const char* key, float x, float y) {
+                const auto& texture = requireTexture(hudTextures, key);
+                const float width = texture.width * unit / 108.0f;
+                const float height = texture.height * unit / 108.0f;
+                drawHudImage(overlay, texture, px(x) - width * 0.5f, py(y) - height * 0.5f,
+                    width, height, alpha);
+            };
+            drawPointer("fever_pointer", 3.4319999f - 0.185f, 2.9649999f);
+            drawPointer("super_fever_pointer", 2.4619999f, 4.105f);
         }
 
         // 计量条闪光（fx_fever_gauge_flash_v2）已迁到 GL 欠幕层：见 feverFlashToUnderlay()，
@@ -4024,194 +4027,32 @@ void main() {
         // drawRuntime 之前用 GL 绘制，使音符盖在其上（见该函数）。几何/UV/alpha 与旧实现
         // 逐字一致，位置不变，仅渲染层级下沉。此处不再画计量条本体。
 
-        // ---- 计量条上的 Fever / SuperFever 指针 ----
-        // 原包口径：两个指针文字由 `FadeInFeverLineText` 在 `FadeInFeverChance`
-        // 里一起淡入（时长 0.2s），**不是**按状态二选一。
-        // 故两个都画，各自从 FeverChance 起点起 0.2s 淡入。
-        if (chanceActive && gPlayer.feverDisplayEnabled) {
-            const float pointerFade = clamp01(chanceLocalSec / FEVER_POINTER_FADE_SEC) * overlayAlpha;
-            if (pointerFade > 0.001f) {
-                const struct { const char* key; float cx, cy, w, h; } pointers[] = {
-                    {"fever_pointer", FEVER_POINTER_CENTER_X, FEVER_POINTER_CENTER_Y,
-                     FEVER_POINTER_WIDTH, FEVER_POINTER_HEIGHT},
-                    {"super_fever_pointer", SUPER_POINTER_CENTER_X, SUPER_POINTER_CENTER_Y,
-                     SUPER_POINTER_WIDTH, SUPER_POINTER_HEIGHT},
-                };
-                for (const auto& p : pointers) {
-                    if (const Texture* tex = findTexture(hudTextures, p.key)) {
-                        drawHudImage(overlay, *tex,
-                                     px(p.cx - p.w * 0.5f), py(p.cy - p.h * 0.5f),
-                                     ps(p.w), ps(p.h), pointerFade);
-                    }
-                }
-            }
-        }
-
         if (feverActive) {
-            // 边框：左右两条通高竖条（宽 11px）+ 上下四角的渐变淡出臂，
-            // 顶/底中段留空 —— 开口框，不是闭合矩形。颜色为白，亮度恒定。
-            const float baseAlpha = clamp01(FEVER_FRAME_PEAK_ALPHA * overlayAlpha);
-
-            const float b = FEVER_FRAME_BORDER_PX;   // 竖条宽 11px
-            const float a = FEVER_FRAME_ARM_PX;      // 四角臂的淡出长度
-            const float W = 1920.0f, H = 1080.0f;
-            const int alphaByte = static_cast<int>(std::lround(baseAlpha * 255.0f));
-            const ImU32 white = IM_COL32(
-                static_cast<int>(std::lround(FEVER_FRAME_RGB[0] * 255.0f)),
-                static_cast<int>(std::lround(FEVER_FRAME_RGB[1] * 255.0f)),
-                static_cast<int>(std::lround(FEVER_FRAME_RGB[2] * 255.0f)),
-                alphaByte);
-
-            // 臂的淡出：亮度沿边由角落的满值线性降到 0。
-            // 用「单 quad + 顶点色渐变」绘制：若改成密集小片，叠加混合会让
-            // 相邻片重叠累积出现饱和平台；顶点插值天然平滑、且只有一个 quad。
-            auto armColor = [&](float f) {
-                return IM_COL32(
-                    static_cast<int>(std::lround(FEVER_FRAME_RGB[0] * 255.0f)),
-                    static_cast<int>(std::lround(FEVER_FRAME_RGB[1] * 255.0f)),
-                    static_cast<int>(std::lround(FEVER_FRAME_RGB[2] * 255.0f)),
-                    static_cast<int>(std::lround(baseAlpha * clamp01(f) * 255.0f)));
-            };
-            const ImU32 armFull = armColor(1.0f);
-            const ImU32 armZero = armColor(0.0f);
-
-            beginAdditive(overlay);
-
-            // 紫色光束：底部两角向中心汇聚的倒 V。
-            // 原包是黑底加色层，这里用两个顶点色渐变四边形还原：底角亮、汇聚点透明。
-            {
-                const float beamT = clamp01(feverLocalSec / FEVER_TEXT_DURATION_SEC);
-                // 0.05s 起、0.25–0.30s 主峰、0.40s 后收尽。
-                const float beamAlpha = beamT < 0.05f
-                    ? 0.0f
-                    : (beamT < 0.28f ? clamp01((beamT - 0.05f) / 0.23f)
-                                     : clamp01(1.0f - (beamT - 0.28f) / 0.16f));
-                if (beamAlpha > 0.001f) {
-                    auto feverWidthAt = [&](float y) {
-                        constexpr int kN = static_cast<int>(sizeof(FEVER_BEAM_WIDTH) / sizeof(FEVER_BEAM_WIDTH[0]));
-                        if (y <= FEVER_BEAM_WIDTH[0][0]) return FEVER_BEAM_WIDTH[0][1];
-                        if (y >= FEVER_BEAM_WIDTH[kN - 1][0]) return FEVER_BEAM_WIDTH[kN - 1][1];
-                        for (int i = 1; i < kN; ++i) {
-                            if (y <= FEVER_BEAM_WIDTH[i][0]) {
-                                const float y0 = FEVER_BEAM_WIDTH[i - 1][0];
-                                const float y1 = FEVER_BEAM_WIDTH[i][0];
-                                const float k = (y - y0) / (y1 - y0);
-                                return FEVER_BEAM_WIDTH[i - 1][1] +
-                                       (FEVER_BEAM_WIDTH[i][1] - FEVER_BEAM_WIDTH[i - 1][1]) * k;
-                            }
-                        }
-                        return FEVER_BEAM_WIDTH[kN - 1][1];
-                    };
-                    auto feverColorAt = [&](float y, float a) {
-                        // 沿 y 采 eff_fever_grd 梯度（super 时用 eff_feversuper_grd）；
-                        // 加色叠加下核心自然提亮，无需另并白。
-                        const float (*tbl)[4] =
-                            gPlayer.superFeverEnabled ? FEVER_SUPER_BEAM_COLOR : FEVER_BEAM_COLOR;
-                        constexpr int kC =
-                            static_cast<int>(sizeof(FEVER_BEAM_COLOR) / sizeof(FEVER_BEAM_COLOR[0]));
-                        float r = tbl[0][1], g = tbl[0][2], b = tbl[0][3];
-                        if (y >= tbl[kC - 1][0]) {
-                            r = tbl[kC - 1][1]; g = tbl[kC - 1][2]; b = tbl[kC - 1][3];
-                        } else if (y > tbl[0][0]) {
-                            for (int i = 1; i < kC; ++i) {
-                                if (y <= tbl[i][0]) {
-                                    const float y0 = tbl[i - 1][0];
-                                    const float y1 = tbl[i][0];
-                                    const float k = (y - y0) / (y1 - y0);
-                                    r = tbl[i - 1][1] + (tbl[i][1] - tbl[i - 1][1]) * k;
-                                    g = tbl[i - 1][2] + (tbl[i][2] - tbl[i - 1][2]) * k;
-                                    b = tbl[i - 1][3] + (tbl[i][3] - tbl[i - 1][3]) * k;
-                                    break;
-                                }
-                            }
-                        }
-                        return IM_COL32(
-                            static_cast<int>(std::lround(clamp01(r) * 255.0f)),
-                            static_cast<int>(std::lround(clamp01(g) * 255.0f)),
-                            static_cast<int>(std::lround(clamp01(b) * 255.0f)),
-                            static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
-                    };
-                    drawBeamGlow(overlay, px, py, 960.0f,
-                                 FEVER_BEAM_APEX_HALF_SEP, FEVER_BEAM_SLOPE,
-                                 beamAlpha * 0.75f,
-                                 CHANCE_BEAM_SEGMENTS,
-                                 feverWidthAt,
-                                 feverColorAt);
-                }
-            }
-
-            // 左右通高竖条（整条等亮，无淡出）
-            overlay->AddRectFilled(ImVec2(px(0.0f), py(0.0f)), ImVec2(px(b), py(H)), white);
-            overlay->AddRectFilled(ImVec2(px(W - b), py(0.0f)), ImVec2(px(W), py(H)), white);
-
-            // 上下四条淡出臂：alpha 由角落的满值线性降到内侧的 0。
-            //   上左：UL=角(满) UR=内(0) BR=内(0) BL=角(满)
-            overlay->AddRectFilledMultiColor(ImVec2(px(0.0f), py(0.0f)), ImVec2(px(a), py(b)),
-                                             armFull, armZero, armZero, armFull);
-            //   上右：UL=内(0) UR=角(满)
-            overlay->AddRectFilledMultiColor(ImVec2(px(W - a), py(0.0f)), ImVec2(px(W), py(b)),
-                                             armZero, armFull, armFull, armZero);
-            //   下左
-            overlay->AddRectFilledMultiColor(ImVec2(px(0.0f), py(H - b)), ImVec2(px(a), py(H)),
-                                             armFull, armZero, armZero, armFull);
-            //   下右
-            overlay->AddRectFilledMultiColor(ImVec2(px(W - a), py(H - b)), ImVec2(px(W), py(H)),
-                                             armZero, armFull, armFull, armZero);
+            const float frameAlpha = clamp01(overlayAlpha);
+            const Texture& frame = requireTexture(hudTextures, "fever_frame");
+            gFeverFrameMaterial.gradient = requireTexture(hudTextures,
+                gPlayer.superFeverEnabled ? "super_fever_frame_color" : "fever_frame_color").id;
+            gFeverFrameMaterial.time = chartTimeSec;
+            gFeverFrameMaterial.rect = {static_cast<float>(previewRectWindow[0]),
+                static_cast<float>(previewRectWindow[1]), projection.width, projection.height};
+            overlay->AddCallback(useFeverFrameMaterial, nullptr);
+            drawNineSlice(
+                overlay,
+                frame,
+                static_cast<float>(previewRectWindow[0]),
+                static_cast<float>(previewRectWindow[1]),
+                projection.width,
+                projection.height,
+                FEVER_FRAME_BORDER_X_PX,
+                FEVER_FRAME_BORDER_Y_PX,
+                FEVER_FRAME_PPU,
+                unit / 100.0f,
+                frameAlpha);
             endAdditive(overlay);
         }
 
-        // FeverChance 的「FEVER CHANCE!」字样：暖金、字号比 FEVER! 小一号。
-        if (chanceActive && fonts.title != nullptr) {
-            const float localSec = chanceLocalSec;
-            const float progress = clamp01(localSec / CHANCE_DURATION_SEC);
-            const float peak = clamp01(CHANCE_PEAK_SEC / CHANCE_DURATION_SEC);
-            const float alpha = progress < peak
-                ? clamp01(progress / std::max(peak, 0.0001f))
-                : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
-            const char* chanceText = "FEVER CHANCE!";
-            const float chanceFontSize = CHANCE_TEXT_HEIGHT * 1.15f;
-            const ImVec2 chanceSize =
-                fonts.title->CalcTextSizeA(chanceFontSize, FLT_MAX, 0.0f, chanceText);
-            const float chanceX = CHANCE_TEXT_CENTER_X - chanceSize.x * 0.5f;
-            const float chanceY = CHANCE_TEXT_CENTER_Y - chanceSize.y * 0.5f;
-            // SuperFever 时文字走银白（super 版素材中段是纯白），普通版是暖金。
-            const int textR = superCharging ? 255 : 230;
-            const int textG = superCharging ? 254 : 189;
-            const int textB = superCharging ? 255 : 78;
-            const ImU32 chanceColor = IM_COL32(
-                textR, textG, textB,
-                static_cast<int>(std::lround(
-                    clamp01(alpha * CHANCE_TEXT_PEAK_ALPHA * overlayAlpha) * 255.0f)));
-            beginAdditive(overlay);
-            overlay->AddText(fonts.title, ps(chanceFontSize),
-                             ImVec2(px(chanceX), py(chanceY)), chanceColor, chanceText);
-            endAdditive(overlay);
-        }
-
-        if (textActive && fonts.title != nullptr) {
-            // 入场：快速冲到峰值后缓慢收尾（对齐 fx_fever_v2 的 2.38s 节奏）。
-            const float progress = clamp01(feverLocalSec / FEVER_TEXT_DURATION_SEC);
-            const float peak = clamp01(FEVER_TEXT_PEAK_SEC / FEVER_TEXT_DURATION_SEC);
-            const float alpha = progress < peak
-                ? clamp01(progress / std::max(peak, 0.0001f))
-                : clamp01(1.0f - (progress - peak) / std::max(1.0f - peak, 0.0001f));
-            // 位置与字号按素材稳定段 bbox：中心 (957,533)、高 81px。
-            // SuperFever 态换成「SUPER FEVER!」横幅（否则整场都显示 FEVER! 是错的）。
-            const char* text = gPlayer.superFeverEnabled ? "SUPER FEVER!" : "FEVER!";
-            const float fontSize = FEVER_TEXT_HEIGHT * 1.15f;
-            const ImVec2 textSize = fonts.title->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-            const float textX = FEVER_TEXT_CENTER_X - textSize.x * 0.5f;
-            const float textY = FEVER_TEXT_CENTER_Y - textSize.y * 0.5f;
-            const ImU32 color =
-                IM_COL32(255, 255, 255, static_cast<int>(std::lround(clamp01(alpha * overlayAlpha) * 255.0f)));
-            beginAdditive(overlay);
-            overlay->AddText(
-                fonts.title,
-                ps(fontSize),
-                ImVec2(px(textX), py(textY)),
-                color,
-                text);
-            endAdditive(overlay);
+        if (textActive) {
+            drawTextClip(textClip, feverLocalSec);
         }
     }
 
@@ -4778,11 +4619,37 @@ void main() {
         }
         addHudTexture("intro_grad", "overlay/start_grad.png");
         addHudTexture("custom_score_icon", "overlay/custom-score/icon.png");
-        addHudTexture("fever_pointer", "overlay/fever-native/fever-pointer.png");
-        addHudTexture("super_fever_pointer", "overlay/fever-native/super-fever-pointer.png");
-        addHudTexture("fever_gauge_color", "overlay/fever-native/fever-gauge-color.png");
-        addHudTexture("fever_gauge_light", "overlay/fever-native/fever-gauge-light.png");
-        addHudTexture("fever_gauge_outline", "overlay/fever-native/fever-gauge-outline.png");
+        addHudTexture("fever_frame", "overlay/fever-native/effect-feverchance-02.png");
+        addHudTexture("fever_frame_color", "overlay/fever-native/eff-fever-grd.png");
+        addHudTexture("super_fever_frame_color", "overlay/fever-native/eff-fever-super-grd.png");
+        addHudTexture("fever_text_atlas", "overlay/fever-native/tex-fever-v2.png");
+        addHudTexture("fever_chance_text_atlas", "overlay/fever-native/tex-fever-chance-v2.png");
+        addHudTexture("super_fever_text_atlas", "overlay/fever-native/tex-super-fever-v2.png");
+        addHudTexture("fever_pointer", "overlay/fever-native/text-line-fever.png");
+        addHudTexture("super_fever_pointer", "overlay/fever-native/text-line-super-fever.png");
+        addHudTexture("fever_flare", "overlay/fever-native/tex-fever-flare-01.png");
+        addHudTexture("fever_beam", "overlay/fever-native/tex-fever-light.png");
+        addHudTexture("fever_beam_mask", "overlay/fever-native/tex-fever-light-mask.png");
+        addHudTexture("fever_beam_gradient", "overlay/fever-native/tex-fever-gradation-01.png");
+        addHudTexture("fever_gauge_color", "overlay/fever-native/tex-fever-gauge-color-03.png");
+        addHudTexture("fever_gauge_flash", "overlay/fever-native/tex-fever-gauge-flash.png");
+        addHudTexture("fever_gauge_light", "overlay/fever-native/tex-fever-gauge-light.png");
+        addHudTexture("fever_gauge_outline", "overlay/fever-native/tex-fever-gauge-outline.png");
+        for (const char* name : {"F", "E1", "E2", "V", "R", "!"}) {
+            addHudTexture(
+                std::string("fever_sprite_fever_") + name,
+                std::string("overlay/fever-native/sprites/fever/") + name + ".png");
+        }
+        for (const char* name : {"F", "E1", "E2", "V", "R", "C1", "H", "A", "N", "C2", "E3", "!"}) {
+            addHudTexture(
+                std::string("fever_sprite_chance_") + name,
+                std::string("overlay/fever-native/sprites/chance/") + name + ".png");
+        }
+        for (const char* name : {"S", "U", "P", "E1", "R1", "R2", "F", "E2", "V", "E3", "!!"}) {
+            addHudTexture(
+                std::string("fever_sprite_super_") + name,
+                std::string("overlay/fever-native/sprites/super/") + name + ".png");
+        }
         // 计量条 color 贴图沿长度(V)滚动（SuperFever MaterialST offset）需 WRAP_T=REPEAT；256×256 是 POT，WebGL2 下 NPOT/REPEAT 也可。
         if (auto it = hudTextures.find("fever_gauge_color"); it != hudTextures.end() && it->second.id != 0) {
             glBindTexture(GL_TEXTURE_2D, it->second.id);
@@ -4804,6 +4671,10 @@ void main() {
 
     void destroyHudTextures(std::unordered_map<std::string, Texture>& hudTextures)
     {
+        if (gFeverFrameMaterial.program) {
+            glDeleteProgram(gFeverFrameMaterial.program);
+            gFeverFrameMaterial.program = 0;
+        }
         for (auto& [_, texture] : hudTextures) {
             if (texture.id != 0) {
                 glDeleteTextures(1, &texture.id);
@@ -5625,6 +5496,7 @@ extern "C"
         gPlayer.stageOpacity = std::clamp(stageOpacity, 0.0f, 1.0f);
         gPlayer.stageCover = std::clamp(stageCover, 0.0f, 1.0f);
         gPlayer.noteSkin = noteSkin == 1 ? 1 : 0;
+        gPlayer.effectProfile = effectProfile == 1 ? 1 : 0;
         if (gPlayer.renderer) {
             gPlayer.renderer->setEffectOpacity(gPlayer.effectOpacity);
             gPlayer.renderer->setStageOpacity(gPlayer.stageOpacity);
@@ -5653,6 +5525,13 @@ extern "C"
     {
         gPlayer.feverStartSec = startSec;
         gPlayer.feverEndSec = endSec;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverChanceStart(double timeSec, int enabled)
+    {
+        gPlayer.feverChanceTimelineStartSec = timeSec;
+        gPlayer.hasFeverChanceTimeline = enabled != 0 && std::isfinite(timeSec);
+        gPlayer.feverChanceAnimStartSec = -1.0;
     }
 
     EMSCRIPTEN_KEEPALIVE void setPlayerFeverCharge(double feverCount, double totalFeverCount)

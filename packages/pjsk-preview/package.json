@@ -13,6 +13,7 @@
     "build:wasm": "node ./scripts/build-wasm.mjs",
     "build": "pnpm run build:wasm && pnpm run typecheck",
     "test": "vitest run",
+    "test:fever-native": "node ./scripts/test-fever-animation.mjs",
     "typecheck": "tsc --noEmit",
     "smoke:export": "node ./scripts/export-smoke.mjs"
   },
