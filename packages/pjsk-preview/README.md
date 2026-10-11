@@ -31,7 +31,11 @@ Fever Bundle：0 包含 `over_L/R` 光束，1 不包含。充能动画起点取�
 边框移植客户端 `Sekai/RhythmGame/Fever-Frame` 的屏幕 UV 旋转渐变公式，使用谱面时钟驱动。
 阈值指针直接提取自客户端 APK 的 `text_lineFever` / `text_lineSuperFever`，采用 `FeverView`
 的根节点位置及 Sprite PPU，不再用缺少来源的旧 PNG。
-尚未完整还原：Profile 0 粒子系统与充能条闪光。
+充能条使用原包网格、108 PPU 投影和两段填充（普通阈值占 0.882，满值为 1）。
+色条按 Fever-Lane 的横截面 UV 与 `_Value` 裁剪，不添加占位底色、软边遮罩或呼吸光。
+闪光起点独立取严格超过 70% 的音符时间；SuperFever 色条读取原包 1.5 秒 MaterialST 曲线。
+预览仍以谱面音符计数映射 70%/100% 阈值，未模拟多人判定与客户端逐帧进度平滑。
+尚未完整还原：Profile 0 粒子系统；闪光的排序范围及进度裁剪仍需逐项核验。
 当前入场曲线验证不代表以上部分已完成原包对齐。
 
 本包依赖 `@sukushow/export` 与 `@sukushow/llll-preview`（均为 MIT）；MIT 包不依赖本包。

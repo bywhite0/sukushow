@@ -38,6 +38,7 @@
 #include "../vendor/mmw_preview/vendor/stb_image.h"
 #include "generated_resources.h"
 #include "fever_animation.h"
+#include "fever_gauge.h"
 
 extern "C"
 {
@@ -254,6 +255,8 @@ namespace
         double feverChanceAnimStartSec = -1.0;
         double feverChanceTimelineStartSec = 0.0;
         bool hasFeverChanceTimeline = false;
+        double feverFlashStartSec = 0.0;
+        bool hasFeverFlashStart = false;
         // SuperFever 的视觉切换开关。⚠ llll 侧没有 superfever 的原版判定依据
         // （PJSK 靠多人局人数），故做成配置项、由用户指定，不伪装成原版口径。
         bool superFeverEnabled = false;
@@ -1764,12 +1767,17 @@ namespace
         // （与 drawFeverOverlay 的 px()/py() 同一空间）推入四边形，这里转 clip
         // （reciprocalW=1，屏幕对齐无透视，像素位置与 ImGui overlay 完全一致），
         // 在 drawRuntime(音符) 之前绘制，从而让音符盖在其上。每帧用完即清。
+        enum class UnderlayEffect { Textured, Gauge };
         struct UnderlayBatch
         {
             GLuint textureId = 0;
             GLuint maskTextureId = 0;
             BlendMode blend = BlendMode::Normal;
+            UnderlayEffect effect = UnderlayEffect::Textured;
+            float fill = 1.0f;
             std::vector<float> vertices;
+            std::array<float, 4> gaugeEdges{};
+            float gaugeOffsetX = 0.0f;
         };
         std::vector<UnderlayBatch> mUnderlayBatches;
 
@@ -1786,13 +1794,16 @@ namespace
         }
 
         // 取批次：内容/遮罩纹理与混合都一致才合并，否则新建（保持提交顺序）。
-        std::vector<float>& underlayBatch(GLuint texId, GLuint maskId, BlendMode blend)
+        std::vector<float>& underlayBatch(GLuint texId, GLuint maskId, BlendMode blend,
+            UnderlayEffect effect = UnderlayEffect::Textured, float fill = 1.0f)
         {
             if (mUnderlayBatches.empty() ||
                 mUnderlayBatches.back().textureId != texId ||
                 mUnderlayBatches.back().maskTextureId != maskId ||
-                mUnderlayBatches.back().blend != blend) {
-                mUnderlayBatches.push_back(UnderlayBatch{texId, maskId, blend, {}});
+                mUnderlayBatches.back().blend != blend ||
+                mUnderlayBatches.back().effect != effect ||
+                mUnderlayBatches.back().fill != fill) {
+                mUnderlayBatches.push_back(UnderlayBatch{texId, maskId, blend, effect, fill, {}});
             }
             return mUnderlayBatches.back().vertices;
         }
@@ -1823,6 +1834,25 @@ namespace
             pushUnderlayVertex(out, c[0], uvs[0], m[0], color);
             pushUnderlayVertex(out, c[2], uvs[2], m[2], color);
             pushUnderlayVertex(out, c[3], uvs[3], m[3], color);
+        }
+
+        void pushUnderlayGaugeQuad(GLuint texId, const std::array<Vec2, 4>& screenPts,
+            const std::array<Vec2, 4>& uvs, const Color& color, float fill)
+        {
+            if (texId == 0 || fill <= 0.0f) return;
+            const float w = static_cast<float>(std::max(1, mPixelWidth));
+            const float h = static_cast<float>(std::max(1, mPixelHeight));
+            auto toClip = [&](const Vec2& p) { return Vec2{p.x / w * 2.0f - 1.0f, 1.0f - p.y / h * 2.0f}; };
+            mUnderlayBatches.push_back(UnderlayBatch{texId, mWhiteTex, BlendMode::Normal, UnderlayEffect::Gauge, fill, {}});
+            auto& batch = mUnderlayBatches.back();
+            batch.gaugeEdges = {screenPts[0].x, screenPts[1].x, screenPts[2].x, screenPts[3].x};
+            batch.gaugeOffsetX = uvs[0].x;
+            std::vector<float>& out = batch.vertices;
+            constexpr std::array<Vec2, 4> meshUvs{Vec2{0, 1}, Vec2{1, 1}, Vec2{0, 0}, Vec2{1, 0}};
+            const std::array<Vec2, 4> c{toClip(screenPts[0]), toClip(screenPts[1]), toClip(screenPts[2]), toClip(screenPts[3])};
+            for (const auto index : {2, 1, 0, 2, 3, 1}) {
+                pushUnderlayVertex(out, c[index], uvs[index], meshUvs[index], color);
+            }
         }
 
         // 纯色顶点渐变四边形（内容用 1x1 白纹理，颜色取自各顶点）推入欠幕层，
@@ -1859,12 +1889,20 @@ namespace
             if (mUnderlayBatches.empty()) {
                 return;
             }
-            glUseProgram(mUnderlayProgram);
+            GLuint activeProgram = 0;
             glBindVertexArray(mUnderlayVao);
             glBindBuffer(GL_ARRAY_BUFFER, mUnderlayVbo);
             for (UnderlayBatch& batch : mUnderlayBatches) {
-                if (batch.vertices.empty()) {
-                    continue;
+                if (batch.vertices.empty()) continue;
+                const GLuint program = batch.effect == UnderlayEffect::Gauge ? mGaugeProgram : mUnderlayProgram;
+                if (program != activeProgram) {
+                    glUseProgram(program);
+                    activeProgram = program;
+                }
+                if (batch.effect == UnderlayEffect::Gauge) {
+                    glUniform1f(glGetUniformLocation(program, "uFill"), batch.fill);
+                    glUniform4fv(glGetUniformLocation(program, "uEdges"), 1, batch.gaugeEdges.data());
+                    glUniform1f(glGetUniformLocation(program, "uOffsetX"), batch.gaugeOffsetX);
                 }
                 if (batch.blend == BlendMode::Additive) {
                     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
@@ -1939,6 +1977,25 @@ namespace
             return {0, 0, mPixelWidth, mPixelHeight};
         }
 
+        Vec2 gaugeLanePoint(float worldX, float worldY) const
+        {
+            const auto projection = fever::viewport(mPixelWidth, mPixelHeight);
+            const float y = mPixelHeight * 0.5f - worldY * projection.pixelsPerUnit;
+            // stage.png 左外边线在贴图 (942.5,47) 与 (273,850)；沿同一投影定位。
+            const auto top = mWorldToClip.convert((942.5f - STAGE_TEX_WIDTH * .5f) / STAGE_LANE_WIDTH * STAGE_NUM_LANES,
+                WORLD_STAGE_TOP + 47.0f / STAGE_LANE_HEIGHT);
+            const auto bottom = mWorldToClip.convert((273.0f - STAGE_TEX_WIDTH * .5f) / STAGE_LANE_WIDTH * STAGE_NUM_LANES,
+                WORLD_STAGE_TOP + 850.0f / STAGE_LANE_HEIGHT);
+            const float topY = (1 - top.y) * mPixelHeight * .5f;
+            const float bottomY = (1 - bottom.y) * mPixelHeight * .5f;
+            const float t = (y - topY) / (bottomY - topY);
+            const float edge = -(top.x + (bottom.x - top.x) * t) * mPixelWidth * .5f;
+            const float meshT = (4.10f - worldY) / 9.86f;
+            const float inner = 1.552f + (9.78f - 1.552f) * meshT;
+            const float distance = edge + (std::abs(worldX) - inner) * projection.pixelsPerUnit;
+            return {mPixelWidth * .5f + (worldX < 0 ? -distance : distance), y};
+        }
+
         void present()
         {
             glFlush();
@@ -1963,6 +2020,7 @@ namespace
         GLuint mVbo = 0;
         GLuint mWhiteTex = 0;
         GLuint mUnderlayProgram = 0;  // 欠幕层双纹理程序：内容 × 顶点色 × mask.a
+        GLuint mGaugeProgram = 0;
         GLuint mUnderlayVao = 0;
         GLuint mUnderlayVbo = 0;
 
@@ -2138,6 +2196,27 @@ void main() {
 }
 )GLSL";
             mUnderlayProgram = createProgram(kUnderlayVertexShader, kUnderlayFragmentShader);
+            static constexpr const char* kGaugeFragmentShader = R"GLSL(#version 300 es
+precision mediump float;
+in vec2 vUv;
+in vec2 vMaskUv;
+in vec4 vColor;
+uniform sampler2D uTexture;
+uniform float uFill;
+uniform vec4 uEdges;
+uniform float uOffsetX;
+out vec4 outColor;
+void main() {
+    if (uFill < vMaskUv.y) discard;
+    float inner = mix(uEdges.z, uEdges.x, vMaskUv.y);
+    float outer = mix(uEdges.w, uEdges.y, vMaskUv.y);
+    float u = (gl_FragCoord.x - inner) / (outer - inner);
+    outColor = texture(uTexture, vec2(u * 0.5 + uOffsetX, 1.0 - vUv.y)) * vColor;
+}
+)GLSL";
+            mGaugeProgram = createProgram(kUnderlayVertexShader, kGaugeFragmentShader);
+            glUseProgram(mGaugeProgram);
+            glUniform1i(glGetUniformLocation(mGaugeProgram, "uTexture"), 0);
             glUseProgram(mUnderlayProgram);
             glUniform1i(glGetUniformLocation(mUnderlayProgram, "uTexture"), 0);
             glUniform1i(glGetUniformLocation(mUnderlayProgram, "uMask"), 1);
@@ -2501,6 +2580,14 @@ void main() {
                 glDeleteProgram(mEffectProgram);
                 mEffectProgram = 0;
             }
+            if (mGaugeProgram != 0) {
+                glDeleteProgram(mGaugeProgram);
+                mGaugeProgram = 0;
+            }
+            if (mUnderlayProgram != 0) {
+                glDeleteProgram(mUnderlayProgram);
+                mUnderlayProgram = 0;
+            }
             if (mVbo != 0) {
                 glDeleteBuffers(1, &mVbo);
                 mVbo = 0;
@@ -2508,6 +2595,18 @@ void main() {
             if (mVao != 0) {
                 glDeleteVertexArrays(1, &mVao);
                 mVao = 0;
+            }
+            if (mUnderlayVbo != 0) {
+                glDeleteBuffers(1, &mUnderlayVbo);
+                mUnderlayVbo = 0;
+            }
+            if (mUnderlayVao != 0) {
+                glDeleteVertexArrays(1, &mUnderlayVao);
+                mUnderlayVao = 0;
+            }
+            if (mWhiteTex != 0) {
+                glDeleteTextures(1, &mWhiteTex);
+                mWhiteTex = 0;
             }
 
             destroyTexture(mBackground);
@@ -2660,99 +2759,7 @@ void main() {
     constexpr float FEVER_FRAME_BORDER_Y_PX = 13.0f;
     constexpr float FEVER_FRAME_PPU = 108.0f;
 
-    // ---- FeverChance（入场）----
-    // 取值依据是客户端的 FeverChance 特效素材 fx_fever_chance_v2（1920×1080）。
-    // 充能阈值：照 PJSK 的 requireFeverProgress 缺省（0.7f）。
-    constexpr float CHANCE_PROGRESS_THRESHOLD = 0.70f;
-    // 入场动画的持续时间（仅用于把动画从跨阈值那一刻开始播；光束本身持续到 Fever 开始）。
-    // 光束中心线：顶点在顶部中央（左右各偏离中线 54.4px），斜率 0.837 向下张开到两底角。
-    // 宽度剖面（y → 像素宽）：中间最宽、两端收窄，是叶形而不是三角。
-    // 光束不是实心四边形，而是「中心平顶 + 长尾」的柔和辉光。
-    // 横截面以**宽度**归一：s = |dx| / (宽度/2)，环带按 s 切分。
-    // 环带必须**互不重叠**：加色混合下重叠会累加成假亮，嵌套画会得到过亮的核心。
-    struct BeamGlowBand { float s0; float s1; float alpha; };
-    // ---- 充能计量条（gauge）----
-    // 形状取自解密素材 fx_fever_gauge / fever_lane_mesh（4 顶点直边梯形，L/R 两片镜像）。
-    // 素材几何（项目约定 1u=100px、原点=屏幕中心）：单片顶宽 0.168u(16.8px)、底宽 0.89u(89px)，
-    // 中心线外扩斜率 0.871，左侧中心线顶端 px≈(796,130) —— 与旧 CHANCE_BEAM 公式在顶端仅差
-    // ~1px，印证 prefab 同一约定、root≈屏幕中心。光束（fx_fever_chance_v2）是纯粒子无 mesh，
-    // 故计量条中心线改用素材真值，并与光束解耦（不动 CHANCE_BEAM_*，避免影响光束标定）：
-    // 计量条闪光中心线仍复用这两个(见 fx_fever_gauge_flash_v2 绘制);计量条本体已改为直接
-    // 按 fever_lane_mesh 四顶点画,不再用中心线+宽度表。
-    constexpr float CHANCE_GAUGE_APEX_HALF_SEP = 50.9f;
-    constexpr float CHANCE_GAUGE_SLOPE = 0.871f;
-    // 计量条本体几何 = fever_lane_mesh 单臂 4 顶点(两臂镜像),坐标在 1920×1080 fever 空间,
-    // 按 1u=100px、原点=屏幕中心换算(root 是否在屏幕中心无原包截图佐证,以下端点可目视微调):
-    //   顶端 world(±1.552~1.720, 4.10) → y=130、内缘偏移 155.2 / 外缘 172.0
-    //   底端 world(±9.780~10.670, -5.76) → y=1116、内缘 978.0 / 外缘 1067.0
-    // 贴图 tex_FeverGauge_color_03 全幅不透明,U:内=0/外=1(经 MaterialST 半图 → 金 0~0.5/彩虹 0.5~1),V:顶=1/底=0。
-    constexpr float GAUGE_MESH_CENTER_X = 960.0f;
-    constexpr float GAUGE_MESH_TOP_Y = 130.0f;
-    constexpr float GAUGE_MESH_BOT_Y = 1116.0f;
-    constexpr float GAUGE_MESH_INNER_TOP = 155.2f;
-    constexpr float GAUGE_MESH_INNER_BOT = 978.0f;
-    constexpr float GAUGE_MESH_OUTER_TOP = 172.0f;
-    constexpr float GAUGE_MESH_OUTER_BOT = 1067.0f;
-    constexpr float FEVER_GAUGE_Y_OFFSET = 0.0f;       // 整条上移(目视微调;负=上移)
-    // 计量条的额外层(素材真值,原实现缺失):描边 + 加色辉光。辉光的动画曲线
-    // (clip_fevergauge_*)unity-rs 没导出,呼吸幅度/频率是占位值,可目视调。
-    constexpr float FEVER_GAUGE_LIGHT_ALPHA = 0.55f;    // tex_FeverGauge_light 加色辉光强度
-    constexpr float FEVER_GAUGE_LIGHT_PULSE = 0.25f;    // 辉光呼吸幅度(±)
-    constexpr float FEVER_GAUGE_LIGHT_PULSE_HZ = 1.2f;  // 辉光呼吸频率
-    // ---- 计量条上的 Fever / SuperFever 指针 ----
-    // 取自原包 UI（对象 icon_fever / icon_superFever，pivot 居中 0.5,0.5）：
-    //   icon_fever      localPosition (3.247, 2.965)、m_Size 1.7407×0.5370
-    //   icon_superFever localPosition (2.462, 4.105)、m_Size 3.0648×0.5370
-    // 世界单位 1 单位 = 100px、原点 = 画面中心 ⇒ 像素 = (960 + 100·x, 540 − 100·y)。
-    // 淡入时长取自原包 `FadeInFeverLineText` 的 duration 参数
-    // （FadeInFeverChance 的延续 lambda 传 0.2f）。
     constexpr float FEVER_CHANCE_FADE_SEC = 0.20f;
-    constexpr float FEVER_GAUGE_LINE_TOP_Y = 243.5f;
-    // 填充色由原包贴图 tex_fevergauge_color_03 逐像素给出（见绘制处），此处只留透明度。
-    // 只画已充能段、随进度从底端生长；alpha 为判断值，可调。
-    constexpr float CHANCE_GAUGE_FILL_ALPHA = 0.5f;  // mat_FeverGauge_color 的 _Color.a=0.502(UnityPy 实测)
-
-    // 环带 alpha 取自素材横截面的归一化均值，与实现同一测量口径，可逐点对账：
-    //   s:  0.0    0.4    0.8    1.2    1.6    2.0    2.4    2.8    3.2    3.6    4.0
-    //   v: 1.00   0.73   0.40   0.28   0.22   0.15   0.11   0.07   0.05   0.02   0.01
-    // 注意尾巴到 s≈4 就归零，不能铺得更远：铺宽了光束会明显偏实、偏宽。
-    constexpr BeamGlowBand BEAM_GLOW_BANDS[] = {
-        {0.0f, 0.4f, 1.00f}, {0.4f, 0.8f, 0.73f}, {0.8f, 1.2f, 0.40f},
-        {1.2f, 1.6f, 0.28f}, {1.6f, 2.0f, 0.22f}, {2.0f, 2.4f, 0.15f},
-        {2.4f, 2.8f, 0.11f}, {2.8f, 3.2f, 0.07f}, {3.2f, 3.6f, 0.05f},
-        {3.6f, 4.0f, 0.02f}, {4.0f, 4.4f, 0.01f},
-    };
-
-    // ---- Fever 紫光（fx_fever_v2）----
-    // 与 FeverChance 中心线同族。tex_fever_v2 的 V-mask 描边宽度大体均匀（每腿约占
-    // sprite 宽 0.29），故宽度剖面取近似均匀；绝对像素为视觉估计（mesh 变换未取到）。
-    // 颜色梯度（y→RGB，采自 eff_fever_grd 竖向：顶=品红、中=紫罗兰、底=蓝绿）。
-    // SuperFever 梯度（eff_feversuper_grd）：黄→粉→紫→蓝→青，更满的彩虹。
-    // 颜色取自原包 tex_fevergauge_color_03 的左半暖金区（右半彩虹供计量条、左半金供
-    // FeverChance 光带；素材里唯一的金色来源）。左半沿长度恒定为 (255,235,139) 暖金、
-    // 横截面 pale→gold→pale。此处保留中段偏亮的发光包络（软辉光形状），色相按左半金校正
-    // （R:G:B ≈ 1:0.922:0.545）。实机口径：FeverChance 金色，达 fever 线转 eff_fever_grd 彩虹。
-
-    // ---- 计量条闪光（fx_fever_gauge_flash_v2）= SuperFever 充能指示 ----
-    // 反汇编 MultiFeverView.UpdateFeverGauge（RVA 0x5370CA4）：feverGaugeFlash 只在 gauge
-    // 充过普通阈值、进 super 区间时 SetActive 一次（s9>0，s9=(value-requireFever)/
-    // (requireSuper-requireFever)；feverState 1→2 后不再重触发）—— super 专属、一发，不是
-    // 普通 FeverChance、也不是持续辉光。本项目无 super 阈值、由开关代表 super，且充能态起点
-    // （progress 跨 0.7）即 super 入口，故仅 superFeverEnabled 且充能态时自 chanceLocalSec=0
-    // 放一发。形状纹理 tex_fevergauge_flash 为白色 → 取白色加色辉光。
-    // 时序包络为近似一发（起→峰→尽），权威曲线见动画 clip_fevergauge_flash_v2_01。
-    // 几何取自解密素材 fever_lane_effect_mesh（fx_fever_gauge_flash_v2 的独立 mesh，直边线性
-    // 收窄）：单片顶宽 0.322u(32px)、底宽 1.47u(147px)，比计量条本体略宽略长，最宽在两底角
-    // ——与「从两底角向顶点上扫」一致。中心线复用计量条真值 CHANCE_GAUGE_*；宽度端点为素材
-    // 几何、绝对像素待目视微调。
-    constexpr int FEVER_GAUGE_FLASH_SEGMENTS = 8;
-    constexpr float FEVER_GAUGE_FLASH_DELAY_SEC = 0.10f;
-    constexpr float FEVER_GAUGE_FLASH_PEAK_SEC = 0.40f;
-    constexpr float FEVER_GAUGE_FLASH_DURATION_SEC = 0.80f;
-    constexpr float FEVER_GAUGE_FLASH_RGB[3] = {1.0f, 1.0f, 1.0f};
-    constexpr float FEVER_GAUGE_FLASH_WIDTH[][2] = {
-        {0.0f, 24.0f}, {1080.0f, 147.0f},
-    };
 
     constexpr float HUD_INTRO_DURATION_SEC = 4.0f;
     constexpr float INTRO_CLEAN_BG_DURATION_SEC = 0.0f;
@@ -3625,129 +3632,7 @@ void main() {
         return fonts;
     }
 
-    /**
-     * Fever 特效：屏幕左右两侧的彩虹边条 + 入场「FEVER!」字样。
-     *
-     * 视觉按 PJSK 官方素材（TootieJin/pjsekai-overlay-APPEND 的 extra-assets/fever，
-     * fx_fever_v2 / fx_fever_chance_v2）：玩家侧描述为「フィーバー中に
-     * 画面の左右が虹色になる」，故彩虹落在**画面左右边缘**，不是判定线。
-     *
-     * 本函数是纯时间函数（无内部状态），因此跳转/暂停后画面自洽，
-     * 不会出现「seek 到 Fever 中段却补播入场」的问题。
-     */
-    /**
-     * 沿一条光束绘制「阶梯式辉光」。
-     *
-     * @param widthAt   y → 宽度（px）
-     * @param colorAt   (y, alpha) → ImU32
-     * @param apexHalf  顶点处距画面中线的横向偏移
-     * @param slope     中心线斜率（向下张开）
-     * @param peakAlpha 整体增益
-     */
-    template <typename WidthFn, typename ColorFn>
-    void drawBeamGlow(
-        ImDrawList* overlay,
-        const std::function<float(float)>& px,
-        const std::function<float(float)>& py,
-        float screenCenterX,
-        float apexHalf,
-        float slope,
-        float peakAlpha,
-        int segments,
-        WidthFn widthAt,
-        ColorFn colorAt)
-    {
-        constexpr int kBandCount = static_cast<int>(sizeof(BEAM_GLOW_BANDS) / sizeof(BEAM_GLOW_BANDS[0]));
-        // 半宽：宽度的一半（宽度本身是在阈值 40 处量得的）。
-        auto halfAt = [&](float y) { return widthAt(y) * 0.5f; };
-
-        for (int side = 0; side < 2; ++side) {
-            const float dir = (side == 0) ? -1.0f : 1.0f;
-            for (int i = 0; i < segments; ++i) {
-                const float y0 = 1080.0f * static_cast<float>(i) / static_cast<float>(segments);
-                const float y1 = 1080.0f * static_cast<float>(i + 1) / static_cast<float>(segments);
-                const float c0 = screenCenterX + dir * (apexHalf + slope * y0);
-                const float c1 = screenCenterX + dir * (apexHalf + slope * y1);
-                const float h0 = halfAt(y0);
-                const float h1 = halfAt(y1);
-                // 环带以中心线为轴对称铺开：两侧各一遍，否则宽度只有设计值的一半。
-                for (int bs = 0; bs < 2; ++bs) {
-                    const float bd = (bs == 0) ? -1.0f : 1.0f;
-                    for (int b = 0; b < kBandCount; ++b) {
-                        const float s0 = BEAM_GLOW_BANDS[b].s0;
-                        const float s1 = BEAM_GLOW_BANDS[b].s1;
-                        const float bandAlpha = BEAM_GLOW_BANDS[b].alpha;
-                        const ImU32 c0b = colorAt(y0, peakAlpha * bandAlpha);
-                        const ImU32 c1b = colorAt(y1, peakAlpha * bandAlpha);
-                        // s0/s1 是到中心线的归一距离；bd 决定落在哪一侧。
-                        addQuadGradient(
-                            overlay,
-                            ImVec2(px(c1 + bd * s1 * h1), py(y1)), ImVec2(px(c1 + bd * s0 * h1), py(y1)),
-                            ImVec2(px(c0 + bd * s0 * h0), py(y0)), ImVec2(px(c0 + bd * s1 * h0), py(y0)),
-                            c1b, c1b, c0b, c0b);
-                    }
-                }
-            }
-        }
-    }
-
-    inline Color imu32ToColor(ImU32 c)
-    {
-        return Color{
-            static_cast<float>((c >> IM_COL32_R_SHIFT) & 0xFFu) / 255.0f,
-            static_cast<float>((c >> IM_COL32_G_SHIFT) & 0xFFu) / 255.0f,
-            static_cast<float>((c >> IM_COL32_B_SHIFT) & 0xFFu) / 255.0f,
-            static_cast<float>((c >> IM_COL32_A_SHIFT) & 0xFFu) / 255.0f,
-        };
-    }
-
-    // drawBeamGlow 的 GL 欠幕层版：几何/环带/颜色算法与 drawBeamGlow 逐字一致，只把
-    // addQuadGradient 换成 renderer.pushUnderlaySolidQuad(加色)。供 fever 计量条闪光沉到音符之下。
-    template <typename WidthFn, typename ColorFn>
-    void beamGlowToUnderlay(
-        GlRenderer& renderer,
-        const std::function<float(float)>& px,
-        const std::function<float(float)>& py,
-        float screenCenterX,
-        float apexHalf,
-        float slope,
-        float peakAlpha,
-        int segments,
-        WidthFn widthAt,
-        ColorFn colorAt)
-    {
-        constexpr int kBandCount = static_cast<int>(sizeof(BEAM_GLOW_BANDS) / sizeof(BEAM_GLOW_BANDS[0]));
-        auto halfAt = [&](float y) { return widthAt(y) * 0.5f; };
-        for (int side = 0; side < 2; ++side) {
-            const float dir = (side == 0) ? -1.0f : 1.0f;
-            for (int i = 0; i < segments; ++i) {
-                const float y0 = 1080.0f * static_cast<float>(i) / static_cast<float>(segments);
-                const float y1 = 1080.0f * static_cast<float>(i + 1) / static_cast<float>(segments);
-                const float c0 = screenCenterX + dir * (apexHalf + slope * y0);
-                const float c1 = screenCenterX + dir * (apexHalf + slope * y1);
-                const float h0 = halfAt(y0);
-                const float h1 = halfAt(y1);
-                for (int bs = 0; bs < 2; ++bs) {
-                    const float bd = (bs == 0) ? -1.0f : 1.0f;
-                    for (int b = 0; b < kBandCount; ++b) {
-                        const float s0 = BEAM_GLOW_BANDS[b].s0;
-                        const float s1 = BEAM_GLOW_BANDS[b].s1;
-                        const float bandAlpha = BEAM_GLOW_BANDS[b].alpha;
-                        const Color c0b = imu32ToColor(colorAt(y0, peakAlpha * bandAlpha));
-                        const Color c1b = imu32ToColor(colorAt(y1, peakAlpha * bandAlpha));
-                        renderer.pushUnderlaySolidQuad(
-                            {Vec2{px(c1 + bd * s1 * h1), py(y1)}, Vec2{px(c1 + bd * s0 * h1), py(y1)},
-                             Vec2{px(c0 + bd * s0 * h0), py(y0)}, Vec2{px(c0 + bd * s1 * h0), py(y0)}},
-                            {c1b, c1b, c0b, c0b},
-                            BlendMode::Additive);
-                    }
-                }
-            }
-        }
-    }
-
-    // 计量条闪光(fx_fever_gauge_flash_v2)= SuperFever 充能指示：一发白色加色辉光上扫，
-    // 迁到 GL 欠幕层（原在 drawFeverOverlay 里走 drawBeamGlow），envelope/几何逐字照搬。
+    // 原包闪光曲线与 SpriteMask，按独立触发时刻采样。
     void feverFlashToUnderlay(
         GlRenderer& renderer,
         const std::unordered_map<std::string, Texture>& hudTextures,
@@ -3810,7 +3695,9 @@ void main() {
         const float feverProgress = gPlayer.totalFeverCount > 0.0
             ? static_cast<float>(gPlayer.feverCount / gPlayer.totalFeverCount)
             : 0.0f;
-        const bool charging = feverProgress >= CHANCE_PROGRESS_THRESHOLD;
+        const bool charging = gPlayer.hasFeverChanceTimeline
+            ? chartTimeSec >= gPlayer.feverChanceTimelineStartSec && feverLocalSec < 0.0f
+            : fever::gauge::visible(feverProgress, feverLocalSec);
         if (charging && gPlayer.feverChanceAnimStartSec < 0.0) {
             gPlayer.feverChanceAnimStartSec = chartTimeSec;
         }
@@ -3822,97 +3709,33 @@ void main() {
             return;
         }
 
+        // 充能条网格、材质与两段填充均由 fx_fever_gauge 和客户端 UpdateFeverGauge 定义。
         const auto previewRectWindow = renderer.previewRectWindow();
-        const UiTransform tx = buildUiTransform(previewRectWindow[2], previewRectWindow[3]);
-        auto px = [&](float x) { return static_cast<float>(previewRectWindow[0]) + tx.offsetX + x * tx.scale; };
-        auto py = [&](float y) { return static_cast<float>(previewRectWindow[1]) + tx.offsetY + y * tx.scale; };
-        const float chanceSpanProgress = clamp01(
-            (feverProgress - CHANCE_PROGRESS_THRESHOLD) /
-            std::max(1.0f - CHANCE_PROGRESS_THRESHOLD, 0.0001f));
-        const float tTop = clamp01(1.0f - chanceSpanProgress);
-        auto lerpf = [](float lo, float hi, float t) { return lo + (hi - lo) * t; };
-        const float yTop = lerpf(GAUGE_MESH_TOP_Y, GAUGE_MESH_BOT_Y, tTop) + FEVER_GAUGE_Y_OFFSET;
-        const float yBot = GAUGE_MESH_BOT_Y + FEVER_GAUGE_Y_OFFSET;
-
-        // 计量条闪光先于本体推入欠幕层（在其下层），与旧 ImGui 顺序一致；
-        // 此处已确认 chanceActive + feverDisplayEnabled。
-        const float chanceLocalSec = gPlayer.hasFeverChanceTimeline
-            ? chartTimeSec - static_cast<float>(gPlayer.feverChanceTimelineStartSec)
-            : (gPlayer.feverChanceAnimStartSec >= 0.0
-                ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec) : 0.0f);
-        if (gPlayer.superFeverEnabled) {
-            feverFlashToUnderlay(renderer, hudTextures, chanceLocalSec, overlayAlpha);
+        const auto projection = fever::viewport(previewRectWindow[2], previewRectWindow[3]);
+        const float unit = projection.pixelsPerUnit;
+        auto px = [&](float x) { return previewRectWindow[0] + projection.width * 0.5f + x * unit; };
+        auto py = [&](float y) { return previewRectWindow[1] + projection.height * 0.5f - y * unit; };
+        const float fillValue = fever::gauge::fill(feverProgress);
+        const float flashLocalSec = gPlayer.hasFeverFlashStart
+            ? chartTimeSec - static_cast<float>(gPlayer.feverFlashStartSec) : -1.0f;
+        if (fever::gauge::flashVisible(feverProgress, gPlayer.superFeverEnabled, flashLocalSec, gPlayer.effectProfile)) {
+            feverFlashToUnderlay(renderer, hudTextures, flashLocalSec, overlayAlpha);
         }
-
         const Texture* gaugeColorTex = findTexture(hudTextures, "fever_gauge_color");
-        if (gaugeColorTex == nullptr || gaugeColorTex->id == 0) {
-            return;
-        }
-        const bool feverLineReached = yTop <= FEVER_GAUGE_LINE_TOP_Y;
-        const float gU0 = feverLineReached ? 0.5f : 0.0f;
-        const float gU1 = feverLineReached ? 1.0f : 0.5f;
-        const float vFull = 1.0f - tTop;
-        const float vColor = vFull * 0.94f;
-        const float innerTopOff = lerpf(GAUGE_MESH_INNER_TOP, GAUGE_MESH_INNER_BOT, tTop);
-        const float outerTopOff = lerpf(GAUGE_MESH_OUTER_TOP, GAUGE_MESH_OUTER_BOT, tTop);
-        float itx[2], otx[2], ibx[2], obx[2];
-        for (int s = 0; s < 2; ++s) {
-            const float dir = (s == 0) ? -1.0f : 1.0f;
-            itx[s] = GAUGE_MESH_CENTER_X + dir * innerTopOff;
-            otx[s] = GAUGE_MESH_CENTER_X + dir * outerTopOff;
-            ibx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_BOT;
-            obx[s] = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_BOT;
-        }
-        // 横截面软边遮罩 UV：只取 outline 中段 [inset, 1-inset]，避开最虚的两端 → 收窄软边（不然两侧糊）。
-        constexpr float kGaugeMaskInset = 0.30f;
-        const std::array<Vec2, 4> maskUv{
-            Vec2{1.0f - kGaugeMaskInset, 0.0f}, Vec2{kGaugeMaskInset, 0.0f},
-            Vec2{kGaugeMaskInset, 1.0f}, Vec2{1.0f - kGaugeMaskInset, 1.0f}};
-        // 项3：SuperFever 时 color 贴图沿长度(V)滚动（MaterialST offset，需 color 纹理 WRAP_T=REPEAT）。
-        // 速率=原包实证：clip_FeverGauge_SuperFever 的 offset 在 1.5s(loop) 内线性滚 1.0(-0.14→-1.14)=0.667/s。
-        constexpr float kFlowSpeed = 1.0f / 1.5f;
-        const float colorVoff = gPlayer.superFeverEnabled ? std::fmod(chartTimeSec * kFlowSpeed, 1.0f) : 0.0f;
-        auto quad = [&](GLuint tex, float u0, float u1, float vtop, float voff, const Color& col, BlendMode bl, GLuint maskId) {
-            for (int s = 0; s < 2; ++s) {
-                renderer.pushUnderlayQuad(tex,
-                    {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
-                     Vec2{px(itx[s]), py(yTop)}, Vec2{px(otx[s]), py(yTop)}},
-                    {Vec2{u1, voff}, Vec2{u0, voff}, Vec2{u0, vtop + voff}, Vec2{u1, vtop + voff}}, col, bl,
-                    maskId, maskId ? &maskUv : nullptr);
+        if (gaugeColorTex == nullptr || gaugeColorTex->id == 0) return;
+        const float offsetX = fever::gauge::colorOffsetX(feverProgress);
+        const float offsetY = gPlayer.superFeverEnabled && offsetX > 0.0f
+            ? fever::gauge::colorOffsetY(flashLocalSec) : 0.0f;
+        const Color tint{1.0f, 1.0f, 1.0f, fever::gauge::materialAlpha * overlayAlpha};
+        for (const auto& mesh : {fever::gauge::rightMesh, fever::gauge::leftMesh}) {
+            std::array<Vec2, 4> points;
+            std::array<Vec2, 4> uvs;
+            for (std::size_t i = 0; i < mesh.size(); ++i) {
+                points[i] = renderer.gaugeLanePoint(mesh[i].x, mesh[i].y);
+                const float u = (i % 2 == 0) ? 0.0f : 1.0f;
+                uvs[i] = {u * 0.5f + offsetX, (i < 2 ? 0.94f : 0.0f) + offsetY};
             }
-        };
-        // 项2：color 层用 tex_fevergauge_outline 作横截面软边遮罩（中间实两边虚），
-        // 替代原「独立平铺一层 outline」——color × mask.a 才是原包那种软边计量条。
-        const Texture* outlineTex = findTexture(hudTextures, "fever_gauge_outline");
-        const GLuint maskId = (outlineTex && outlineTex->id != 0) ? outlineTex->id : 0;
-        const Color colorTint{1.0f, 1.0f, 1.0f, clamp01(CHANCE_GAUGE_FILL_ALPHA * overlayAlpha)};
-        // 半透明轨道底：整条 fever_lane_mesh 全长(TOP_Y→BOT_Y)垫底、色同轨道底、半透明，
-        // 已充能段在其上填充。原包计量条整条一直半透明显示，不是「未充能段不画」。
-        // ⚠ 底色 kBaseRgb 为占位(深轨道底调)，透明度 kBaseAlpha 待目视调。
-        constexpr float kBaseRgb[3] = {0.10f, 0.11f, 0.14f};
-        constexpr float kBaseAlpha = 0.30f;
-        {
-            const Color baseCol{kBaseRgb[0], kBaseRgb[1], kBaseRgb[2], clamp01(kBaseAlpha * overlayAlpha)};
-            const float yFull = GAUGE_MESH_TOP_Y + FEVER_GAUGE_Y_OFFSET;
-            for (int s = 0; s < 2; ++s) {
-                const float dir = (s == 0) ? -1.0f : 1.0f;
-                const float itxF = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_INNER_TOP;
-                const float otxF = GAUGE_MESH_CENTER_X + dir * GAUGE_MESH_OUTER_TOP;
-                renderer.pushUnderlaySolidQuad(
-                    {Vec2{px(obx[s]), py(yBot)}, Vec2{px(ibx[s]), py(yBot)},
-                     Vec2{px(itxF), py(yFull)}, Vec2{px(otxF), py(yFull)}},
-                    {baseCol, baseCol, baseCol, baseCol}, BlendMode::Normal, maskId, maskId ? &maskUv : nullptr);
-            }
-        }
-        quad(gaugeColorTex->id, gU0, gU1, vColor, colorVoff, colorTint, BlendMode::Normal, maskId);
-        // 加色辉光：tex_fevergauge_light 横截面「两边亮中间空」本身即 lane 边缘软辉光
-        // （等价原包 SpriteMask 里 lane_light 的边缘光），不再叠横截面 mask、不滚动。
-        const Texture* lightTex = findTexture(hudTextures, "fever_gauge_light");
-        if (lightTex != nullptr && lightTex->id != 0) {
-            const float pulse = 1.0f + FEVER_GAUGE_LIGHT_PULSE *
-                std::sin(chartTimeSec * FEVER_GAUGE_LIGHT_PULSE_HZ * 6.2831853f);
-            const Color lightTint{1.0f, 1.0f, 1.0f, clamp01(FEVER_GAUGE_LIGHT_ALPHA * pulse * overlayAlpha)};
-            quad(lightTex->id, 0.0f, 1.0f, vFull, 0.0f, lightTint, BlendMode::Additive, 0);
+            renderer.pushUnderlayGaugeQuad(gaugeColorTex->id, points, uvs, tint, fillValue);
         }
     }
 
@@ -3941,7 +3764,9 @@ void main() {
         const float feverProgress = gPlayer.totalFeverCount > 0.0
             ? static_cast<float>(gPlayer.feverCount / gPlayer.totalFeverCount)
             : 0.0f;
-        const bool charging = feverProgress >= CHANCE_PROGRESS_THRESHOLD;
+        const bool charging = gPlayer.hasFeverChanceTimeline
+            ? chartTimeSec >= gPlayer.feverChanceTimelineStartSec && feverLocalSec < 0.0f
+            : fever::gauge::visible(feverProgress, feverLocalSec);
         // 动画起点：进度首次跨过阈值的时刻。整场动画不能从 0 秒就开始跑，
         // 否则真正的入场时刻只剩一个尾巴。
         if (charging && gPlayer.feverChanceAnimStartSec < 0.0) {
@@ -5526,6 +5351,12 @@ extern "C"
         gPlayer.feverChanceTimelineStartSec = timeSec;
         gPlayer.hasFeverChanceTimeline = enabled != 0 && std::isfinite(timeSec);
         gPlayer.feverChanceAnimStartSec = -1.0;
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerFeverFlashStart(double timeSec, int enabled)
+    {
+        gPlayer.feverFlashStartSec = timeSec;
+        gPlayer.hasFeverFlashStart = enabled != 0 && std::isfinite(timeSec);
     }
 
     EMSCRIPTEN_KEEPALIVE void setPlayerFeverCharge(double feverCount, double totalFeverCount)

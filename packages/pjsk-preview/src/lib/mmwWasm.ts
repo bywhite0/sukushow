@@ -1,4 +1,4 @@
-import { feverChargeStart } from './feverCharge'
+import { feverChargeStart, FeverChargeTimeline } from './feverCharge'
 import { mmwWasmFilename } from '../generated/mmwWasmAsset'
 import type { CapturedSoundEvent } from '@sukushow/export'
 import type { PreviewRuntimeConfig, ScoreTextFormat, SessionMetadata, TransportState, WasmPlayerSnapshot } from './types'
@@ -300,8 +300,7 @@ export class MmwWasmPlayer {
    * 推进 FeverChance 充能。
    *
    * 口径照 PJSK：`progress = feverCount / totalFeverCount`，
-   * 其中 totalFeverCount = Fever 段起点之前的可判定音符数，
-   * feverCount = 其中已经过去的那些。分母由谱面静态算好，分子每帧推进。
+   * 只接收充能窗口内的音符数，不包含歌曲起点到充能开始之前的音符。
    */
   setFeverCharge(feverCount: number, totalFeverCount: number) {
     this.assertReady().ccall('setPlayerFeverCharge', null, ['number', 'number'], [
@@ -327,12 +326,15 @@ export class MmwWasmPlayer {
    * 不能交给某个循环代为推进：直接调 `renderFrame()` 的路径会绕过循环。
    */
   private feverChargeTimes: number[] = []
+  private feverChargeTimeline = new FeverChargeTimeline([])
 
-  setFeverChargeTimes(times: number[]) {
+  setFeverChargeTimes(times: number[], chanceStartSec = feverChargeStart(times)) {
     this.feverChargeTimes = times
     this.assertReady().ccall('setPlayerFeverChanceStart', null, ['number', 'number'], [
-      feverChargeStart(times), times.length ? 1 : 0,
+      chanceStartSec, Number.isFinite(chanceStartSec) && (times.length > 0 || arguments.length > 1) ? 1 : 0,
     ])
+    this.feverChargeTimeline = new FeverChargeTimeline(times)
+    this.assertReady().ccall('setPlayerFeverFlashStart', null, ['number', 'number'], [0, 0])
   }
 
   renderFrame() {
@@ -345,9 +347,11 @@ export class MmwWasmPlayer {
 
   private updateFeverCharge(chartTime: number) {
     if (!this.feverChargeTimes.length) return
-    let n = 0
-    while (n < this.feverChargeTimes.length && this.feverChargeTimes[n] <= chartTime) n += 1
-    this.setFeverCharge(n, this.feverChargeTimes.length)
+    const state = this.feverChargeTimeline.at(chartTime)
+    this.setFeverCharge(state.progress * this.feverChargeTimes.length, this.feverChargeTimes.length)
+    this.assertReady().ccall('setPlayerFeverFlashStart', null, ['number', 'number'], [
+      state.flashStart ?? 0, state.flashStart === null ? 0 : 1,
+    ])
   }
 
   /**
