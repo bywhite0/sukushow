@@ -1,3 +1,4 @@
+import { feverChargeStart } from './feverCharge'
 import { mmwWasmFilename } from '../generated/mmwWasmAsset'
 import type { CapturedSoundEvent } from '@sukushow/export'
 import type { PreviewRuntimeConfig, ScoreTextFormat, SessionMetadata, TransportState, WasmPlayerSnapshot } from './types'
@@ -329,6 +330,9 @@ export class MmwWasmPlayer {
 
   setFeverChargeTimes(times: number[]) {
     this.feverChargeTimes = times
+    this.assertReady().ccall('setPlayerFeverChanceStart', null, ['number', 'number'], [
+      feverChargeStart(times), times.length ? 1 : 0,
+    ])
   }
 
   renderFrame() {

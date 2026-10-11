@@ -30,6 +30,34 @@ const CORE_TEXTURES = [
   'effect.png',
 ]
 
+/** PJSK live effect/fever 原包贴图；这些资源缺失时不允许退回程序化特效。 */
+export const FEVER_TEXTURE_FILES = [
+  'overlay/fever-native/tex-fever-v2.png',
+  'overlay/fever-native/tex-fever-chance-v2.png',
+  'overlay/fever-native/tex-super-fever-v2.png',
+  'overlay/fever-native/eff-fever-grd.png',
+  'overlay/fever-native/eff-fever-super-grd.png',
+  'overlay/fever-native/effect-feverchance-02.png',
+  'overlay/fever-native/effect-fever-gradation.png',
+  'overlay/fever-native/tex-fever-gradation-01.png',
+  'overlay/fever-native/tex-common-tri-01.png',
+  'overlay/fever-native/tex-fever-gauge-color-03.png',
+  'overlay/fever-native/tex-fever-gauge-flash.png',
+  'overlay/fever-native/tex-fever-gauge-light.png',
+  'overlay/fever-native/tex-fever-gauge-outline.png',
+  'overlay/fever-native/tex-fever-light.png',
+  'overlay/fever-native/tex-fever-flare-01.png',
+  'overlay/fever-native/text-line-fever.png',
+  'overlay/fever-native/text-line-super-fever.png',
+  'overlay/fever-native/tex-fever-light-mask.png',
+] as const
+
+export const FEVER_SPRITE_FILES = [
+  ...['F', 'E1', 'E2', 'V', 'R', '!'].map((name) => `overlay/fever-native/sprites/fever/${name}.png`),
+  ...['F', 'E1', 'V', 'E2', 'R', 'C1', 'H', 'A', 'N', 'C2', 'E3', '!'].map((name) => `overlay/fever-native/sprites/chance/${name}.png`),
+  ...['S', 'U', 'P', 'E1', 'R1', 'R2', 'F', 'E2', 'V', 'E3', '!!'].map((name) => `overlay/fever-native/sprites/super/${name}.png`),
+] as const
+
 const OVERLAY_TEXTURES = [
   'overlay/bggen/v3/base.png',
   'overlay/bggen/v3/bottom.png',
@@ -54,11 +82,8 @@ const OVERLAY_TEXTURES = [
   'overlay/ap-native/flare.png',
   'overlay/ap-native/flash.png',
   'overlay/ap-native/sparkle.png',
-  'overlay/fever-native/fever-pointer.png',
-  'overlay/fever-native/super-fever-pointer.png',
-  'overlay/fever-native/fever-gauge-color.png',
-  'overlay/fever-native/fever-gauge-light.png',
-  'overlay/fever-native/fever-gauge-outline.png',
+  ...FEVER_TEXTURE_FILES,
+  ...FEVER_SPRITE_FILES,
 ]
 
 const RANKS = ['d', 'c', 'b', 'a', 's'] as const

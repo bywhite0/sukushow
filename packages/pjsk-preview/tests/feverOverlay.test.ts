@@ -472,9 +472,9 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     const chanceSuper = await grabChance(0.9, 0.25, true)
     // super 关、同样进度：用于对照配色确实变了
     const chanceFullAt1 = await grabChance(0.9, 0.25, false)
-    // 指针：原包由 FadeInFeverChance 淡入（0.2s），故取「刚开始」与「已淡入完」两态。
-    const pointerEarly = await grabChance(0.9, 0.02)
-    const pointerSettled = await grabChance(0.9, 0.35)
+    // 原包 Chance Sprite 与光束由 FadeInFeverChance 淡入，取同一进度的两态。
+    const chanceEarly = await grabChance(0.9, 0.02)
+    const chanceSettled = await grabChance(0.9, 0.35)
     // 计量条：原包只在 FeverChance 态可见（StartProgress 里才 SetActive(true)），
     // 故阈值之下不应出现、阈值之上应随进度变化。同一动画时刻取图以隔离计量条。
     const gaugeBelow = await grabChance(0.5, 0.05)
@@ -506,10 +506,10 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
         { a, b },
       )
 
-    // 指针淡入：刚开始（0.02s）与已淡入完（0.35s）应有差异。
-    const pointerFade = await pixelDiffBetween(
-      (pointerEarly as any).onUrls[0],
-      (pointerSettled as any).onUrls[0],
+    // 原包 Chance Sprite/光束淡入：刚开始与稳定态必须有差异。
+    const chanceFade = await pixelDiffBetween(
+      (chanceEarly as any).onUrls[0],
+      (chanceSettled as any).onUrls[0],
     )
 
     // 计量条：阈值之下与「刚过阈值」应有差异（前者无计量条、后者有）。
@@ -571,47 +571,13 @@ describe.skipIf(!canRun)('PJSK Fever 覆盖层（真实 wasm + 截图读数）',
     const superBeamBlue = await beamBlueness((chanceSuper as any).onUrls[0])
     const normalBeamBlue = await beamBlueness((chanceFullAt1 as any).onUrls[0])
     console.log('[fever] beam (B-R): super=', superBeamBlue, 'normal=', normalBeamBlue)
-    const pointerRegions = await page.evaluate(
-      async ({ url }: any) => {
-        const bmp = await createImageBitmap(await (await fetch(url)).blob())
-        const cv = new OffscreenCanvas(bmp.width, bmp.height)
-        const ctx = cv.getContext('2d', { willReadFrequently: true })!
-        ctx.clearRect(0, 0, cv.width, cv.height)
-        ctx.drawImage(bmp, 0, 0)
-        const px = ctx.getImageData(0, 0, cv.width, cv.height).data
-        const sc = cv.width / 1920
-        const lum = (x: number, y: number) => {
-          const i = (y * cv.width + x) * 4
-          return (px[i] + px[i + 1] + px[i + 2]) / 3
-        }
-        const avg = (cx: number, cy: number, w: number, h: number) => {
-          let s = 0
-          let n = 0
-          for (let y = Math.max(0, Math.round((cy - h / 2) * sc)); y < Math.min(cv.height, Math.round((cy + h / 2) * sc)); y++) {
-            for (let x = Math.max(0, Math.round((cx - w / 2) * sc)); x < Math.min(cv.width, Math.round((cx + w / 2) * sc)); x++) {
-              s += lum(x, y)
-              n++
-            }
-          }
-          return n ? s / n : 0
-        }
-        return {
-          fever: avg(1303.2, 243.5, 174, 54),
-          super: avg(1206.2, 129.5, 306, 54),
-        }
-      },
-      { url: (pointerSettled as any).onUrls[0] },
-    )
-    expect(pointerRegions.fever, 'FEVER 指针区应有内容').toBeGreaterThan(5)
-    expect(pointerRegions.super, 'SUPER FEVER 指针区应有内容').toBeGreaterThan(5)
-    expect(pointerFade, '指针应随入场淡入（0.02s vs 0.35s 有差异）').toBeGreaterThan(200)
+    expect(chanceFade, '原包 Chance Sprite 与光束应随入场淡入').toBeGreaterThan(200)
 
     await browser.close()
 
     for (const [name, r] of Object.entries({
       chanceFull, chanceBelow, chanceJustCrossed, chanceSuper, chanceFullAt1,
       gaugeBelow, gaugeJustOver, gaugeHigh,
-      pointerEarly, pointerSettled,
     })) {
       const url = (r as any).onUrls[0] as string
       fs.writeFileSync(`${OUT}/${name}_on.png`, Buffer.from(url.split(',')[1], 'base64'))
