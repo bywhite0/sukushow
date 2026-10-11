@@ -441,10 +441,31 @@ function applySongTiming() {
   setDuration(player.getStateSnapshot().durationSec)
 }
 
-input('opt-mv').onchange = () => {
-  musicVideo.setEnabled(input('opt-mv').checked)
-  if (runtimeReady && currentChart) applySongTiming()
+input('opt-mv').onchange = async () => {
+  const enabled = input('opt-mv').checked
   persistSettings()
+  if (!runtimeReady || !currentChart || !enabled || !currentSongAssets.mvUrl) {
+    musicVideo.setEnabled(enabled)
+    if (runtimeReady && currentChart) applySongTiming()
+    return
+  }
+  const assets = currentSongAssets
+  const task = loading.begin('正在加载 MV', 1)
+  player.pause()
+  try {
+    const sizes = await measureResourceSizes([assets.mvUrl])
+    if (disposed || assets !== currentSongAssets || !input('opt-mv').checked) return
+    await musicVideo.setUrl(null)
+    musicVideo.setEnabled(true)
+    const loaded = await musicVideo.setUrl(assets.mvUrl, assets.mvStartSec, assets.mvDurationSec,
+      state => task.update(state.phase === 'ready' ? 1 : 0, '正在加载 MV…', state),
+      sizes.get(assets.mvUrl!))
+    if (disposed || assets !== currentSongAssets || !input('opt-mv').checked) return
+    applySongTiming()
+    message(loaded ? 'MV 已就绪。' : 'MV 加载失败；已回退默认背景。', !loaded)
+  } finally {
+    task.finish()
+  }
 }
 
 type LoadChartOptions = {
@@ -489,7 +510,7 @@ async function loadChart(
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
-  const downloadSizes = options.downloadSizes ? new Map(options.downloadSizes) : await measureResourceSizes([bgmUrl, coverUrl, EMPTY_COVER_URL])
+  const downloadSizes = options.downloadSizes ? new Map(options.downloadSizes) : await measureResourceSizes([bgmUrl, coverUrl, EMPTY_COVER_URL, input('opt-mv').checked ? assets.mvUrl : null])
   // 有曲绘时只会请求曲绘；占位图仅在目录明确没有曲绘时才会下载。
   if (coverUrl) downloadSizes.delete(EMPTY_COVER_URL)
   const downloadTotalBytes = options.downloadTotalBytes ?? totalResourceSize(downloadSizes)
@@ -544,13 +565,20 @@ async function loadChart(
     },
   })
   if (disposed) return
-  const sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
+  let sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
   resourceTask.update(step(2), '资源已注入，正在绘制首帧…', { downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes })
   currentChart = chart
   applySongTiming()
   const { mvUrl, mvStartSec, mvDurationSec } = currentSongAssets
   const mvLoaded = await musicVideo.setUrl(mvUrl, mvStartSec, mvDurationSec,
-    (state) => updateDownload('MV', state), downloadSizes.get(mvUrl ?? ''))
+    (state) => {
+      downloads.set('MV', state.downloadedBytes)
+      sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
+      resourceTask.setLabel('加载 MV')
+      resourceTask.update(step(2), state.phase === 'ready' ? 'MV 已就绪' : '正在加载 MV…', {
+        downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes,
+      })
+    }, downloadSizes.get(mvUrl ?? ''))
   if (disposed) return
   if (mvUrl && input('opt-mv').checked && !mvLoaded) resourceTask.fail('MV 加载失败；已回退默认背景。')
   const config = readRuntimeConfig()
