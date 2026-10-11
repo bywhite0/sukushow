@@ -21,7 +21,8 @@ def generate(clips, objects, namespace='fever'):
     renderers = {obj['data']['m_GameObject']['m_PathID']: obj for obj in objects if obj['type'] == 'SpriteRenderer'}
     modes = [('Fever', 'fx_fever_v2', 'clip_fever_v2_01', 'fever'),
              ('Chance', 'fx_fever_chance_v2', 'clip_feverchance_v2_01', 'chance'),
-             ('Super', 'fx_super_fever_v2', 'clip_superfever_v2_01', 'super')]
+             ('Super', 'fx_super_fever_v2', 'clip_superfever_v2_01', 'super'),
+             ('Flash', 'fx_fever_gauge_flash_v2', 'clip_FeverGauge_flash_v2_01', '')]
     lines = ['// 由 generate-fever-animation.py 生成；不要手动调整曲线。', '#pragma once', 'namespace ' + namespace + ' {']
     for mode, root_name, clip_name, texture_prefix in modes:
         clip = next(c for c in clips if c['name'] == clip_name)
@@ -29,14 +30,20 @@ def generate(clips, objects, namespace='fever'):
         for frame in clip['frames']:
             for key in frame['keys']:
                 curves.setdefault(key['index'], []).append((frame['time'], key['coefficients']))
+        for offset, value in enumerate(clip.get('constants', [])):
+            curves[clip['streamedCount'] + offset] = [(0, [0, 0, 0, value])]
         for index, keys in curves.items():
             values = ','.join('{' + number(t) + ',{' + ','.join(map(number, coeff)) + '}}' for t, coeff in keys)
             lines.append(f'inline constexpr Key {mode}Keys{index}[] = {{{values}}};')
         root_go = next(obj for obj in objects if obj['type'] == 'GameObject' and obj['data']['m_Name'] == root_name)
         root = transforms[root_go['id']]['data']
+        if mode == 'Flash' and not root['m_Children']:
+            lines.append(f'inline constexpr Clip FlashClip = {{{number(clip["stopTime"])}, nullptr, 0, nullptr, 0}};')
+            continue
         animator = by_id[root['m_Children'][0]['m_PathID']]['data']
-        text = next(by_id[c['m_PathID']]['data'] for c in animator['m_Children']
-                    if by_id[by_id[c['m_PathID']]['data']['m_GameObject']['m_PathID']]['data']['m_Name'] == 'Text')
+        text = next((by_id[c['m_PathID']]['data'] for c in animator['m_Children']
+                     if by_id[by_id[c['m_PathID']]['data']['m_GameObject']['m_PathID']]['data']['m_Name'] == 'Text'),
+                    {'m_LocalPosition': {'x': 0, 'y': 0}, 'm_LocalScale': {'x': 1, 'y': 1}, 'm_Children': []})
         parent_x = animator['m_LocalPosition']['x'] + text['m_LocalPosition']['x']
         parent_y = animator['m_LocalPosition']['y'] + text['m_LocalPosition']['y']
         sx, sy = text['m_LocalScale']['x'], text['m_LocalScale']['y']
@@ -56,6 +63,8 @@ def generate(clips, objects, namespace='fever'):
             values += [sprite['m_Rect'][key] for key in ('x', 'y', 'width', 'height')]
             atlas = {'fever': 'fever_text_atlas', 'chance': 'fever_chance_text_atlas', 'super': 'super_fever_text_atlas'}[texture_prefix]
             lines.append('    {"' + atlas + '",' + ','.join(map(number, values)) + ',' + ','.join(refs) + '},')
+        if not text['m_Children']:
+            lines.append('    {},')
         lines.append('};')
         beams = []
         for child in animator['m_Children']:
@@ -76,11 +85,15 @@ def generate(clips, objects, namespace='fever'):
                 for offset in offsets:
                     index = binding['start'] + offset
                     refs.append('{' + f'{mode}Keys{index}, std::size({mode}Keys{index})' + '}')
+            alpha = next((b for b in clip['bindings'] if b['path'] == name and b['type'] == 'SpriteRenderer' and b['attribute'] == 304273561), None)
+            if alpha:
+                values[-1] = curves[alpha['start']][0][1][3]
             beams.append('{' + ','.join(map(number, values)) + ',' + ','.join(refs) + '}')
         if beams:
             lines.append(f'inline constexpr Beam {mode}Beams[] = {{' + ','.join(beams) + '};')
         beam_ref = f'{mode}Beams, std::size({mode}Beams)' if beams else 'nullptr, 0'
-        lines.append(f'inline constexpr Clip {mode}Clip = {{{number(clip["stopTime"])}, {mode}Glyphs, std::size({mode}Glyphs), {beam_ref}}};')
+        glyph_count = f'std::size({mode}Glyphs)' if text['m_Children'] else '0'
+        lines.append(f'inline constexpr Clip {mode}Clip = {{{number(clip["stopTime"])}, {mode}Glyphs, {glyph_count}, {beam_ref}}};')
     lines.append('}')
     return '\n'.join(lines) + '\n'
 

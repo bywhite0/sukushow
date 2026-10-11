@@ -62,5 +62,11 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   const chance = await capture(3.25);
   await capture(5);
   expect(difference(chance, await capture(3.25))).toBe(0);
+  await page.locator('#effect-profile').selectOption('0');
+  const flash = await capture(3.25, true, true);
+  await capture(5, true, true);
+  expect(difference(flash, await capture(3.25, true, true))).toBe(0);
+  await page.locator('#effect-profile').selectOption('1');
+  expect(difference(flash, await capture(3.25, true, true))).toBeGreaterThan(1000);
   await page.evaluate(() => (window as any).__LLL_PJSK__.player.setExportMode(false));
 });

@@ -3750,47 +3750,40 @@ void main() {
     // 迁到 GL 欠幕层（原在 drawFeverOverlay 里走 drawBeamGlow），envelope/几何逐字照搬。
     void feverFlashToUnderlay(
         GlRenderer& renderer,
-        const std::function<float(float)>& px,
-        const std::function<float(float)>& py,
+        const std::unordered_map<std::string, Texture>& hudTextures,
         float chanceLocalSec,
         float overlayAlpha)
     {
-        const float ft = chanceLocalSec;
-        const float flashEnv = ft < FEVER_GAUGE_FLASH_DELAY_SEC
-            ? 0.0f
-            : (ft < FEVER_GAUGE_FLASH_PEAK_SEC
-                   ? (ft - FEVER_GAUGE_FLASH_DELAY_SEC) /
-                         (FEVER_GAUGE_FLASH_PEAK_SEC - FEVER_GAUGE_FLASH_DELAY_SEC)
-                   : clamp01(1.0f - (ft - FEVER_GAUGE_FLASH_PEAK_SEC) /
-                                        (FEVER_GAUGE_FLASH_DURATION_SEC - FEVER_GAUGE_FLASH_PEAK_SEC)));
-        if (ft >= FEVER_GAUGE_FLASH_DURATION_SEC || flashEnv <= 0.001f) {
-            return;
-        }
-        auto flashWidthAt = [&](float y) {
-            constexpr int kN = static_cast<int>(sizeof(FEVER_GAUGE_FLASH_WIDTH) / sizeof(FEVER_GAUGE_FLASH_WIDTH[0]));
-            if (y <= FEVER_GAUGE_FLASH_WIDTH[0][0]) return FEVER_GAUGE_FLASH_WIDTH[0][1];
-            if (y >= FEVER_GAUGE_FLASH_WIDTH[kN - 1][0]) return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
-            for (int i = 1; i < kN; ++i) {
-                if (y <= FEVER_GAUGE_FLASH_WIDTH[i][0]) {
-                    const float y0 = FEVER_GAUGE_FLASH_WIDTH[i - 1][0];
-                    const float y1 = FEVER_GAUGE_FLASH_WIDTH[i][0];
-                    const float k = (y - y0) / (y1 - y0);
-                    return FEVER_GAUGE_FLASH_WIDTH[i - 1][1] +
-                           (FEVER_GAUGE_FLASH_WIDTH[i][1] - FEVER_GAUGE_FLASH_WIDTH[i - 1][1]) * k;
-                }
+        const auto& animation = fever::clip(fever::ClipId::Flash, gPlayer.effectProfile);
+        if (!animation.beamCount && gPlayer.effectProfile != 0) return;
+        const auto rect = renderer.previewRectWindow();
+        const auto projection = fever::viewport(rect[2], rect[3]);
+        const float unit = projection.pixelsPerUnit;
+        const auto& texture = requireTexture(hudTextures, "fever_beam");
+        for (std::size_t i = 0; i < std::size(fever::FlashLayers); ++i) {
+            const auto state = fever::flashLayerPose(i, chanceLocalSec, gPlayer.effectProfile);
+            if (state.alpha <= 0.001f) continue;
+            const auto& layer = fever::FlashLayers[i];
+            const float c = std::cos(layer.rotation), s = std::sin(layer.rotation);
+            const float halfWidth = texture.width / 108.0f * 0.5f;
+            const float halfHeight = texture.height / 108.0f * 0.5f;
+            const std::array<Vec2, 4> local{
+                Vec2{state.x - halfWidth, state.y + halfHeight}, Vec2{state.x + halfWidth, state.y + halfHeight},
+                Vec2{state.x + halfWidth, state.y - halfHeight}, Vec2{state.x - halfWidth, state.y - halfHeight}};
+            std::array<Vec2, 4> positions, maskUvs;
+            const auto& mask = requireTexture(hudTextures, "fever_flash_mask");
+            for (std::size_t v = 0; v < local.size(); ++v) {
+                const float x = local[v].x * layer.scaleX, y = local[v].y * layer.scaleY;
+                positions[v] = Vec2{rect[0] + projection.width * 0.5f +
+                    (state.maskX + x * c - y * s) * layer.mirror * unit,
+                    rect[1] + projection.height * 0.5f - (layer.rootY + state.maskY + x * s + y * c) * unit};
+                maskUvs[v] = Vec2{0.5f + local[v].x * 108.0f / mask.width,
+                    0.5f - local[v].y * 108.0f / mask.height};
             }
-            return FEVER_GAUGE_FLASH_WIDTH[kN - 1][1];
-        };
-        auto flashColorAt = [&](float, float a) {
-            return IM_COL32(
-                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[0] * 255.0f)),
-                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[1] * 255.0f)),
-                static_cast<int>(std::lround(FEVER_GAUGE_FLASH_RGB[2] * 255.0f)),
-                static_cast<int>(std::lround(clamp01(a * overlayAlpha) * 255.0f)));
-        };
-        beamGlowToUnderlay(renderer, px, py, 960.5f,
-            CHANCE_GAUGE_APEX_HALF_SEP, CHANCE_GAUGE_SLOPE,
-            flashEnv, FEVER_GAUGE_FLASH_SEGMENTS, flashWidthAt, flashColorAt);
+            renderer.pushUnderlayQuad(texture.id, positions,
+                {Vec2{0, 0}, Vec2{1, 0}, Vec2{1, 1}, Vec2{0, 1}},
+                {1, 1, 1, clamp01(state.alpha * overlayAlpha)}, BlendMode::Additive, mask.id, &maskUvs);
+        }
     }
 
     // 计量条（fever_gauge_color/outline/light）沉到音符之下：在 GL renderFrame 的
@@ -3848,7 +3841,7 @@ void main() {
             : (gPlayer.feverChanceAnimStartSec >= 0.0
                 ? chartTimeSec - static_cast<float>(gPlayer.feverChanceAnimStartSec) : 0.0f);
         if (gPlayer.superFeverEnabled) {
-            feverFlashToUnderlay(renderer, px, py, chanceLocalSec, overlayAlpha);
+            feverFlashToUnderlay(renderer, hudTextures, chanceLocalSec, overlayAlpha);
         }
 
         const Texture* gaugeColorTex = findTexture(hudTextures, "fever_gauge_color");
@@ -3985,7 +3978,7 @@ void main() {
                     texture.width * unit / beam.pixelsPerUnit * state.scaleX,
                     texture.height * unit / beam.pixelsPerUnit * state.scaleY, beam.rotation,
                     IM_COL32(beam.r * 255, beam.g * 255, beam.b * 255,
-                        clamp01(beam.a * state.alpha * overlayAlpha) * 255));
+                        clamp01(state.alpha * overlayAlpha) * 255));
             }
             endAdditive(overlay);
             for (std::size_t i = 0; i < animation.count; ++i) {
@@ -4630,6 +4623,7 @@ void main() {
         addHudTexture("fever_flare", "overlay/fever-native/tex-fever-flare-01.png");
         addHudTexture("fever_beam", "overlay/fever-native/tex-fever-light.png");
         addHudTexture("fever_beam_mask", "overlay/fever-native/tex-fever-light-mask.png");
+        addHudTexture("fever_flash_mask", "overlay/fever-native/fever-flash-mask.png");
         addHudTexture("fever_beam_gradient", "overlay/fever-native/tex-fever-gradation-01.png");
         addHudTexture("fever_gauge_color", "overlay/fever-native/tex-fever-gauge-color-03.png");
         addHudTexture("fever_gauge_flash", "overlay/fever-native/tex-fever-gauge-flash.png");
