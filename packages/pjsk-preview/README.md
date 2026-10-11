@@ -38,4 +38,10 @@ Fever Bundle：0 包含 `over_L/R` 光束，1 不包含。充能动画起点取�
 尚未完整还原：Profile 0 粒子系统；闪光的排序范围及进度裁剪仍需逐项核验。
 当前入场曲线验证不代表以上部分已完成原包对齐。
 
+2D MV 复用 LLLL 的资源索引与静音视频走带，视频帧直接上传 WebGL 纹理，实时预览和逐帧导出共用渲染路径。
+MV 成功加载后，片段外及等待 seek 时保持黑底，不恢复原背景；完整等比显示，不叠加背景亮度层。
+关闭 MV 或初次加载失败时恢复曲绘背景。曲终 AP 取主数据 FinishTime 与实际 BGM 终点的较晚者，
+未知曲目不估算 AP；总时长包含谱面、MV 尾段及已知曲目的 AP 动画，并计入 PJSK 开场偏移。
+回归：`pnpm --filter @sukushow/web exec playwright test pjskMv.spec.ts pjskTiming.spec.ts`。
+
 本包依赖 `@sukushow/export` 与 `@sukushow/llll-preview`（均为 MIT）；MIT 包不依赖本包。

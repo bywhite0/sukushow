@@ -42,6 +42,7 @@ export type PreviewSettings = {
   bgmVolume: number
   /** 音效音量（百分比 0..100） */
   soundVolume: number
+  enableMusicVideo: boolean
   rate: number
 }
 
@@ -64,6 +65,7 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   superFever: false,
   bgmVolume: 100,
   soundVolume: 100,
+  enableMusicVideo: true,
   rate: 1,
 }
 
@@ -104,6 +106,7 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     superFever: bool('superFever', d.superFever),
     bgmVolume: clamp(num('bgmVolume', d.bgmVolume), 0, 100),
     soundVolume: clamp(num('soundVolume', d.soundVolume), 0, 100),
+    enableMusicVideo: bool('enableMusicVideo', d.enableMusicVideo),
     rate: [0.5, 0.75, 1, 1.25, 1.5, 2].includes(rateValue) ? rateValue : d.rate,
   }
 }

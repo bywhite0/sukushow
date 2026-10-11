@@ -12,6 +12,7 @@
  * 曲目列表（apps/web/public/song-list.json）的字段为准，不做拼接猜测。
  */
 
+import { songAssets as resolveSongAssets } from '@sukushow/llll-preview/songAssets'
 import { cachedJsonResource, readResponseBytes, type DownloadProgress } from '@sukushow/llll-preview/resourceDownload'
 
 /** apps/web/public/song-list.json 里的单首曲目。 */
@@ -55,17 +56,9 @@ export type SongList = {
   songs: SongEntry[]
 }
 
-export type SongAssets = {
-  /** BGM 的 URL；无对应资源时为 null。 */
-  bgmUrl: string | null
-  /** 曲绘的 URL；无对应资源时为 null。 */
-  coverUrl: string | null
-}
+export type SongAssets = ReturnType<typeof resolveSongAssets>
 
 export type BinaryLoadProgress = DownloadProgress
-
-const BGM_BASE = '/assets/audio'
-const JACKET_BASE = '/assets/jacket'
 
 /** 曲目列表在 public 下的落盘位置。 */
 export const SONG_LIST_URL = '/song-list.json'
@@ -157,11 +150,7 @@ export function loadSongList(onProgress?: (progress: SongListLoadProgress) => vo
 
 /** 由曲目条目推导 BGM / 曲绘 URL。 */
 export function songAssets(song: SongEntry): SongAssets {
-  return {
-    bgmUrl: song.soundId ? `${BGM_BASE}/bgm_${song.soundId}.ogg` : null,
-    // 曲绘用 PNG：wasm 侧走 stb_image，它不支持 WebP。
-    coverUrl: song.hasJacket ? `${JACKET_BASE}/${song.jacketId}.png` : null,
-  }
+  return resolveSongAssets(song)
 }
 
 /** 按曲目 Id 查找。 */

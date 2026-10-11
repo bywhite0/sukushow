@@ -34,6 +34,13 @@ afterEach(() => {
 })
 
 describe('songAssets', () => {
+  it('仅为有视频模式且有原包时序的歌曲提供 MV', () => {
+    expect(songAssets({ ...baseSong, isVideoMode: true })).toMatchObject({
+      mvUrl: '/assets/mv/103103.mp4', mvStartSec: 0, mvDurationSec: 83.06666666666666,
+    })
+    expect(songAssets(baseSong)).toMatchObject({ mvUrl: null, mvStartSec: 0, mvDurationSec: 0 })
+    expect(songAssets({ ...baseSong, id: 'unknown', isVideoMode: true }).mvUrl).toBeNull()
+  })
   it('由 soundId 推导 BGM 路径', () => {
     expect(songAssets(baseSong).bgmUrl).toBe('/assets/audio/bgm_10310301.ogg')
   })

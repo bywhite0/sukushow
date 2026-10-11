@@ -20,7 +20,9 @@ import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from '@sukushow/pjsk-preview/lib/url'
 import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '@sukushow/pjsk-preview/llll/songAssets'
-import { feverForSong, feverChanceForSong } from '@sukushow/chart/songTiming'
+import { feverForSong, feverChanceForSong, finishTimeForSong } from '@sukushow/chart/songTiming'
+import { MusicVideo } from '@sukushow/llll-preview/musicVideo'
+import type { SongAssets } from '@sukushow/pjsk-preview/llll/songAssets'
 import { chargeNotesInWindow } from '@sukushow/pjsk-preview/lib/feverCharge'
 import { installExportDialog, probeAllConfigs } from './exportDialog'
 import type { ExportFrameSource } from '@sukushow/export'
@@ -34,6 +36,7 @@ declare global {
   interface Window {
     __LLL_PJSK__?: {
       player: MmwWasmPlayer
+      musicVideo: MusicVideo
       loadChart: (...args: any[]) => Promise<void>
       demoChart: () => Chart
       renderLoop: () => void
@@ -98,6 +101,7 @@ export function mount({ root, toolbar, songSelection }: PjskMountOptions): PjskV
 <label class="setting" for="hold-alpha"><span>长条透明度<output id="hold-alpha-value">74</output></span><input id="hold-alpha" type="range" min="0" max="100" step="1" value="74"></label>
 <label class="setting" for="guide-alpha"><span>Guide 浓度<output id="guide-alpha-value">50</output></span><input id="guide-alpha" type="range" min="0" max="100" step="1" value="50"></label>
 <label class="setting" for="effect-opacity"><span>特效不透明度<output id="effect-opacity-value">100</output></span><input id="effect-opacity" type="range" min="0" max="100" step="1" value="100"></label>
+<label class="check"><input id="opt-mv" type="checkbox" checked>2D MV / MusicVideo</label>
 <label class="check"><input id="fever-display" type="checkbox" checked>Fever 特效</label>
 <label class="check"><input id="super-fever" type="checkbox">SuperFever 配色（充能满时切换）</label>
 <label class="setting" for="effect-profile"><span>特效配置</span><select id="effect-profile"><option value="0" selected>Profile 0</option><option value="1">Profile 1</option></select></label>
@@ -175,6 +179,8 @@ for (const [index, tab] of settingTabs.entries()) {
 
   const loading = createResourceLoading(el<HTMLDivElement>('stage'), root.querySelector<HTMLElement>('.transport')!)
   const player = new MmwWasmPlayer()
+  const musicVideo = new MusicVideo(() => {})
+  let currentFinishTime: number | null = null
   let disposed = false
   let unsubscribeSongSelection = () => {}
 let runtimeReady = false
@@ -224,6 +230,7 @@ function readSettings(): PreviewSettings {
     superFever: input('super-fever').checked,
     bgmVolume: Number(input('bgm-volume').value),
     soundVolume: Number(input('sound-volume').value),
+    enableMusicVideo: input('opt-mv').checked,
     rate: Number(select('rate').value),
   }
 }
@@ -256,6 +263,8 @@ function applySettingsToForm(settings: PreviewSettings) {
   input('super-fever').checked = settings.superFever ?? false
   setRange('bgm-volume', settings.bgmVolume ?? 100)
   setRange('sound-volume', settings.soundVolume ?? 100)
+  input('opt-mv').checked = settings.enableMusicVideo ?? true
+  musicVideo.setEnabled(input('opt-mv').checked)
   select('rate').value = String(settings.rate ?? 1)
 }
 applySettingsToForm(loadPreviewSettings())
@@ -417,12 +426,29 @@ async function preloadAll(
 }
 
 /** 当前曲目的 BGM / 曲绘 URL（供「添加音频」与曲目切换复用）。 */
-let currentSongAssets: { bgmUrl: string | null; coverUrl: string | null } = {
+let currentSongAssets: SongAssets = {
   bgmUrl: null,
   coverUrl: null,
+  mvUrl: null,
+  mvStartSec: 0,
+  mvDurationSec: 0,
+}
+
+function applySongTiming() {
+  const mvEnd = input('opt-mv').checked && currentSongAssets.mvUrl
+    ? currentSongAssets.mvStartSec + currentSongAssets.mvDurationSec : 0
+  player.setSongTiming(currentFinishTime, Math.max(currentChart?.duration ?? 0, mvEnd))
+  setDuration(player.getStateSnapshot().durationSec)
+}
+
+input('opt-mv').onchange = () => {
+  musicVideo.setEnabled(input('opt-mv').checked)
+  if (runtimeReady && currentChart) applySongTiming()
+  persistSettings()
 }
 
 type LoadChartOptions = {
+  finishTime?: number | null
   task?: ResourceLoadingTask
   stepOffset?: number
   downloadSizes?: ReadonlyMap<string, number>
@@ -438,7 +464,7 @@ async function loadChart(
   chart: Chart,
   label: string,
   sourceOffsetMs = 0,
-  assets: { bgmUrl?: string | null; coverUrl?: string | null } = {},
+  assets: Partial<SongAssets> = {},
   difficulty: string | null = null,
   credits: { lyricist: string | null; composer: string | null; arranger: string | null; vocal: string | null } | null = null,
   options: LoadChartOptions = {},
@@ -455,8 +481,11 @@ async function loadChart(
   currentChartForCharge = chart
 
   // BGM 与曲绘缺失不该阻断渲染：失败一律退回 null。
-  const bgmUrl = assets.bgmUrl ?? currentSongAssets.bgmUrl
-  const coverUrl = assets.coverUrl ?? currentSongAssets.coverUrl
+  player.pause()
+  player.setMusicVideoFrame(null)
+  await musicVideo.setUrl(null)
+  const bgmUrl = assets.bgmUrl ?? null
+  const coverUrl = assets.coverUrl ?? null
   if (bgmUrl || coverUrl) {
     message('正在加载曲目资源…')
   }
@@ -489,7 +518,8 @@ async function loadChart(
     totalBytes: downloadTotalBytes,
   })
   const coverBytes = loadedCoverBytes ?? await fetchBytes(EMPTY_COVER_URL, (state) => updateDownload('占位曲绘', state))
-  currentSongAssets = { bgmUrl, coverUrl }
+  currentSongAssets = { bgmUrl, coverUrl, mvUrl: assets.mvUrl ?? null, mvStartSec: assets.mvStartSec ?? 0, mvDurationSec: assets.mvDurationSec ?? 0 }
+  currentFinishTime = options.finishTime ?? null
 
   await player.loadSession({
     scoreText: JSON.stringify(score),
@@ -517,13 +547,20 @@ async function loadChart(
   const sessionDownloadedBytes = [...downloads.values()].reduce((sum, item) => sum + item, 0)
   resourceTask.update(step(2), '资源已注入，正在绘制首帧…', { downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes })
   currentChart = chart
+  applySongTiming()
+  const { mvUrl, mvStartSec, mvDurationSec } = currentSongAssets
+  const mvLoaded = await musicVideo.setUrl(mvUrl, mvStartSec, mvDurationSec,
+    (state) => updateDownload('MV', state), downloadSizes.get(mvUrl ?? ''))
+  if (disposed) return
+  if (mvUrl && input('opt-mv').checked && !mvLoaded) resourceTask.fail('MV 加载失败；已回退默认背景。')
   const config = readRuntimeConfig()
   player.setPreviewConfig(config)
   player.setAudioVolumes(config.bgmVolume, config.soundVolume)
   player.seek(0)
   player.renderFrame()
   const snapshot = player.getStateSnapshot()
-  setDuration(Math.max(chart.duration, snapshot.durationSec))
+  setDuration(snapshot.durationSec)
+  player.setPlaybackRate(Number(select('rate').value))
   // 页面 UI 保留难度信息（HUD 上的曲名不带难度，难度走独立徽章）。
   const uiLabel = difficulty ? `${label}　[${difficulty}]` : label
   el('chart-name').textContent = uiLabel
@@ -572,6 +609,7 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
       chartUrl,
       songAssetUrls.bgmUrl,
       songAssetUrls.coverUrl,
+      input('opt-mv').checked ? songAssetUrls.mvUrl : null,
       EMPTY_COVER_URL,
     ])
     // 有曲绘时只会请求曲绘；占位图仅在目录明确没有曲绘时才会下载。
@@ -622,6 +660,7 @@ async function loadSongById(songId: string, difficulty: string, sourceOffsetMs =
     }
     // 曲名不含难度：难度走独立的 metadata.difficulty，由 HUD 画成徽章。
     await loadChart(chart, song.title, sourceOffsetMs, songAssetUrls, difficulty, credits, {
+      finishTime: finishTimeForSong(songId),
       task: resourceTask,
       stepOffset: 2,
       downloadSizes,
@@ -665,11 +704,14 @@ let liveRenderingSuspended = false
 
 function renderLoop() {
   if (disposed || !runtimeReady || liveRenderingSuspended) return
-  player.renderFrame()
   const snapshot = player.getStateSnapshot()
+  const songTime = snapshot.currentTimeSec - snapshot.effectiveLeadInSec
+  musicVideo.sync(songTime, snapshot.transportState === 'playing', Number(select('rate').value))
+  player.setMusicVideoFrame(musicVideo.frame(songTime), musicVideo.useVideoBackground)
+  player.renderFrame()
   if (currentChart) {
     input('timeline').value = String(snapshot.currentTimeSec)
-    el('time').textContent = `${format(snapshot.currentTimeSec)} / ${format(snapshot.chartEndSec)}`
+    el('time').textContent = `${format(snapshot.currentTimeSec)} / ${format(snapshot.durationSec)}`
   }
   el('play').textContent = snapshot.transportState === 'playing' ? 'Ⅱ 暂停' : '▶ 播放'
   rafHandle = requestAnimationFrame(renderLoop)
@@ -906,6 +948,7 @@ input('audio-file').onchange = async () => {
         scoreCreator: null,
       },
     })
+    applySongTiming()
     const config = readRuntimeConfig()
     player.setPreviewConfig(config)
     player.setAudioVolumes(config.bgmVolume, config.soundVolume)
@@ -991,15 +1034,19 @@ function createExportSource(): ExportFrameSource {
       player.setPlaybackRate(1)
       canvas.classList.add('exporting')
       player.resize(width, height, 1)
+      musicVideo.beginExport()
       player.setExportMode(true)
     },
-    renderAt(outputTimeSec) {
+    async renderAt(outputTimeSec, signal) {
+      const lead = player.getStateSnapshot().effectiveLeadInSec
+      player.setMusicVideoFrame(await musicVideo.seekFrame(outputTimeSec - lead, signal), musicVideo.useVideoBackground)
       player.renderFrameAt(outputTimeSec, true)
     },
     collectAudio() {
       return { events: player.getCapturedSoundEvents(), ...player.getAudioSources() }
     },
     end() {
+      musicVideo.endExport()
       player.setExportMode(false)
       canvas.classList.remove('exporting')
       resizeCanvasToStage()
@@ -1029,6 +1076,7 @@ const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), 
 /** 调试钩子：便于自动化验证（例如 60 轨坐标探针）。 */
 window.__LLL_PJSK__ = {
   player,
+  musicVideo,
   loadChart,
   demoChart,
   renderLoop,
@@ -1054,6 +1102,7 @@ window.__LLL_PJSK__ = {
     window.removeEventListener('pagehide', onPagehide)
     exportDialog.dialog.close()
     exportDialog.dialog.remove()
+    musicVideo.dispose()
     player.dispose()
     if (window.__LLL_PJSK__?.player === player) delete window.__LLL_PJSK__
     root.replaceChildren()
