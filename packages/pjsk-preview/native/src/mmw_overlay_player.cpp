@@ -2004,7 +2004,6 @@ namespace
         Vec2 gaugeLanePoint(float worldX, float worldY) const
         {
             const auto projection = fever::viewport(mPixelWidth, mPixelHeight);
-            const float y = mPixelHeight * 0.5f - worldY * projection.pixelsPerUnit;
             // stage.png 左外边线在贴图 (942.5,47) 与 (273,850)；沿同一投影定位。
             const auto top = mWorldToClip.convert((942.5f - STAGE_TEX_WIDTH * .5f) / STAGE_LANE_WIDTH * STAGE_NUM_LANES,
                 WORLD_STAGE_TOP + 47.0f / STAGE_LANE_HEIGHT);
@@ -2012,9 +2011,11 @@ namespace
                 WORLD_STAGE_TOP + 850.0f / STAGE_LANE_HEIGHT);
             const float topY = (1 - top.y) * mPixelHeight * .5f;
             const float bottomY = (1 - bottom.y) * mPixelHeight * .5f;
+            const float meshT = (4.10f - worldY) / 9.86f;
+            // 底端贴画布底边，保留原包纵向长度；顶端可超过 SuperFever 指针。
+            const float y = mPixelHeight - (worldY + 5.76f) * projection.pixelsPerUnit;
             const float t = (y - topY) / (bottomY - topY);
             const float edge = -(top.x + (bottom.x - top.x) * t) * mPixelWidth * .5f;
-            const float meshT = (4.10f - worldY) / 9.86f;
             const float inner = 1.552f + (9.78f - 1.552f) * meshT;
             const float distance = edge + (std::abs(worldX) - inner) * projection.pixelsPerUnit;
             return {mPixelWidth * .5f + (worldX < 0 ? -distance : distance), y};
