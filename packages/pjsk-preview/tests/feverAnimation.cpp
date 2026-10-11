@@ -18,6 +18,15 @@ int main()
     assert(beamPose(ClipId::Fever, 0, 0.0f).alpha == 0);
     assert(beamPose(ClipId::Fever, 0, 0.25f).alpha > 0);
     assert(beamPose(ClipId::Fever, 0, 1.0f).alpha == 0);
+    assert(clip(ClipId::Flash, 0).beamCount == 2);
+    assert(clip(ClipId::Flash, 1).beamCount == 0);
+    assert(beamPose(ClipId::Flash, 0, 0).alpha == 0);
+    assert(std::abs(beamPose(ClipId::Flash, 0, .25f).alpha - .5019608f) < .00001f);
+    assert(beamPose(ClipId::Flash, 0, 1).alpha == 0);
+    assert(flashLayerPose(0, 0, 0).alpha == 0);
+    assert(flashLayerPose(0, .25f, 1).alpha == 0);
+    assert(flashLayerPose(0, .25f, 0).alpha > 0);
+    assert(flashLayerPose(0, 1, 0).alpha == 0);
     const auto projection = viewport(960, 540);
     assert(projection.pixelsPerUnit == 54);
     assert(projection.width == 960 && projection.height == 540);

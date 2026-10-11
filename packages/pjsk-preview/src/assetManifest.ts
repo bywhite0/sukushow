@@ -50,6 +50,7 @@ export const FEVER_TEXTURE_FILES = [
   'overlay/fever-native/text-line-fever.png',
   'overlay/fever-native/text-line-super-fever.png',
   'overlay/fever-native/tex-fever-light-mask.png',
+  'overlay/fever-native/fever-flash-mask.png',
 ] as const
 
 export const FEVER_SPRITE_FILES = [
