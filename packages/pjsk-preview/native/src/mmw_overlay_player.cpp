@@ -1923,11 +1923,18 @@ namespace
             mUnderlayBatches.clear();
         }
 
+        void setMovieTexture(GLuint id, int width, int height, bool background = false)
+        {
+            mMovie = Texture{id, width, height};
+            mMovieBackground = background;
+        }
+
         void renderFrame(const float* packedQuads, int quadCount, bool drawStaticScene, float playfieldVisibility = 1.0f)
         {
             const auto viewport = previewViewportRect();
             glViewport(0, 0, viewport.fullWidth, viewport.fullHeight);
-            glClearColor(0.03f, 0.03f, 0.05f, 1.0f);
+            if (mMovieBackground) glClearColor(0, 0, 0, 1);
+            else glClearColor(0.03f, 0.03f, 0.05f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
             glViewport(viewport.x, viewport.y, viewport.width, viewport.height);
 
@@ -1940,7 +1947,24 @@ namespace
                     backgroundVertices[i + 1] *= brightness;
                     backgroundVertices[i + 2] *= brightness;
                 }
-                drawVertices(mBackground, backgroundVertices, false, BlendMode::Normal);
+                if (mMovie.id != 0) {
+                    // 与 LLLL 一致：完整显示 MV、黑边补齐，不叠加原背景或调暗层。
+                    const float aspect = static_cast<float>(viewport.width) / viewport.height;
+                    const float movieAspect = static_cast<float>(mMovie.width) / mMovie.height;
+                    const float x = std::min(1.0f, movieAspect / aspect);
+                    const float y = std::min(1.0f, aspect / movieAspect);
+                    const Color color{1, 1, 1, 1};
+                    std::vector<float> vertices;
+                    pushVertex(vertices, Vec2{-x, y}, Vec2{0, 0}, color, 1);
+                    pushVertex(vertices, Vec2{x, y}, Vec2{1, 0}, color, 1);
+                    pushVertex(vertices, Vec2{x, -y}, Vec2{1, 1}, color, 1);
+                    pushVertex(vertices, Vec2{-x, y}, Vec2{0, 0}, color, 1);
+                    pushVertex(vertices, Vec2{x, -y}, Vec2{1, 1}, color, 1);
+                    pushVertex(vertices, Vec2{-x, -y}, Vec2{0, 1}, color, 1);
+                    drawVertices(mMovie, vertices, false, BlendMode::Normal);
+                } else if (!mMovieBackground) {
+                    drawVertices(mBackground, backgroundVertices, false, BlendMode::Normal);
+                }
                 if (visibility > 0.001f && mStageOpacity > 0.001f) {
                     std::vector<float> stageVertices = mStaticStageVertices;
                     const float stageAlpha = visibility * mStageOpacity;
@@ -2025,6 +2049,8 @@ namespace
         GLuint mUnderlayVbo = 0;
 
         Texture mBackground;
+        bool mMovieBackground = false;
+        Texture mMovie; // 纹理由 JS 持有，renderer 不释放。
         Texture mStage;
         Texture mNotes;
         Texture mLongNoteLine;
@@ -5256,6 +5282,62 @@ extern "C"
             gPlayer.sessionLoaded = false;
             return 0;
         }
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerSongTiming(double finishSec, double contentEndSec)
+    {
+        const double audioEnd = EM_ASM_DOUBLE({
+            const audio = Module.__mmwAudio;
+            return audio && audio.audioBuffer ? audio.audioStartOffsetSec + audio.audioBuffer.duration : 0;
+        });
+        const bool knownFinish = std::isfinite(finishSec) && finishSec >= 0;
+        gPlayer.apStartSec = knownFinish
+            ? std::max(gPlayer.effectiveLeadInSec + finishSec, audioEnd)
+            : std::numeric_limits<double>::infinity();
+        gPlayer.durationSec = std::max({1.0, audioEnd,
+            gPlayer.effectiveLeadInSec + std::max(contentEndSec, gPlayer.chartEndSec),
+            knownFinish ? gPlayer.apStartSec + AP_EFFECT_DURATION_SEC : 0.0});
+        jsAudioSetDuration(gPlayer.durationSec);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void setPlayerMovieFrame(int background)
+    {
+        const int texture = EM_ASM_INT({
+            const video = Module.__musicVideoFrame;
+            if (!video) return 0;
+            if (!Module.__movieTexture) {
+                const id = GL.getNewId(GL.textures);
+                const texture = GLctx.createTexture();
+                texture.name = id;
+                GL.textures[id] = texture;
+                Module.__movieTexture = id;
+            }
+            GLctx.activeTexture(GLctx.TEXTURE0);
+            GLctx.bindTexture(GLctx.TEXTURE_2D, GL.textures[Module.__movieTexture]);
+            GLctx.texParameteri(GLctx.TEXTURE_2D, GLctx.TEXTURE_MIN_FILTER, GLctx.LINEAR);
+            GLctx.texParameteri(GLctx.TEXTURE_2D, GLctx.TEXTURE_MAG_FILTER, GLctx.LINEAR);
+            GLctx.texParameteri(GLctx.TEXTURE_2D, GLctx.TEXTURE_WRAP_S, GLctx.CLAMP_TO_EDGE);
+            GLctx.texParameteri(GLctx.TEXTURE_2D, GLctx.TEXTURE_WRAP_T, GLctx.CLAMP_TO_EDGE);
+            GLctx.texImage2D(GLctx.TEXTURE_2D, 0, GLctx.RGBA, GLctx.RGBA, GLctx.UNSIGNED_BYTE, video);
+            return Module.__movieTexture;
+        });
+        const int width = EM_ASM_INT({ return Module.__musicVideoFrame ? Module.__musicVideoFrame.videoWidth : 0; });
+        const int height = EM_ASM_INT({ return Module.__musicVideoFrame ? Module.__musicVideoFrame.videoHeight : 0; });
+        if (gPlayer.renderer) gPlayer.renderer->setMovieTexture(texture, width, height, background != 0);
+    }
+
+    EMSCRIPTEN_KEEPALIVE void releasePlayerMovie()
+    {
+        EM_ASM({
+            Module.__musicVideoFrame = null;
+            const id = Module.__movieTexture;
+            if (id) {
+                GLctx.deleteTexture(GL.textures[id]);
+                GL.textures[id] = null;
+                Module.__movieTexture = 0;
+            }
+        });
+        if (gPlayer.renderer) gPlayer.renderer->setMovieTexture(0, 0, 0);
     }
 
     EMSCRIPTEN_KEEPALIVE int playPlayer()

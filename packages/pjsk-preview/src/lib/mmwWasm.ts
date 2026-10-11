@@ -20,6 +20,7 @@ type EmscriptenModule = {
   _free: (ptr: number) => void
   /** wasm 侧的 JS 音频引擎（mmw_overlay_player.cpp 的 jsAudioEnsureEngine）。 */
   __mmwAudio?: MmwAudioEngine
+  __musicVideoFrame?: HTMLVideoElement | null
 }
 
 /** 导出需要读取的音频引擎字段（只读用途）。 */
@@ -337,6 +338,16 @@ export class MmwWasmPlayer {
     this.assertReady().ccall('setPlayerFeverFlashStart', null, ['number', 'number'], [0, 0])
   }
 
+  setSongTiming(finishSec: number | null, contentEndSec: number) {
+    this.assertReady().ccall('setPlayerSongTiming', null, ['number', 'number'], [finishSec ?? -1, contentEndSec])
+  }
+
+  setMusicVideoFrame(video: HTMLVideoElement | null, videoBackground = video !== null) {
+    const module = this.assertReady()
+    module.__musicVideoFrame = video
+    module.ccall('setPlayerMovieFrame', null, ['number'], [videoBackground ? 1 : 0])
+  }
+
   renderFrame() {
     if (this.feverChargeTimes.length) {
       const snapshot = this.getStateSnapshot()
@@ -415,6 +426,7 @@ export class MmwWasmPlayer {
     if (!this.module) {
       return
     }
+    this.module.ccall('releasePlayerMovie', null, [], [])
     this.module.ccall('disposePlayer', null, [], [])
   }
 
