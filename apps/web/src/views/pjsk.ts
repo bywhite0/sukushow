@@ -20,7 +20,8 @@ import { chartToMusicScore } from '@sukushow/pjsk-preview/llll/toMusicScore'
 import { loadPreviewSettings, savePreviewSettings, type PreviewSettings } from './pjsk/settingsPersist'
 import { parseUrlPreviewParams } from '@sukushow/pjsk-preview/lib/url'
 import { findSong, songAssets, fetchBytes, findSongCredits, creditsToMetadata, SONG_LIST_URL, SONG_CREDITS_URL } from '@sukushow/pjsk-preview/llll/songAssets'
-import { feverForSong } from '@sukushow/chart/songTiming'
+import { feverForSong, feverChanceForSong } from '@sukushow/chart/songTiming'
+import { chargeNotesInWindow } from '@sukushow/pjsk-preview/lib/feverCharge'
 import { installExportDialog, probeAllConfigs } from './exportDialog'
 import type { ExportFrameSource } from '@sukushow/export'
 import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
@@ -306,47 +307,37 @@ function applyFeverWindow(songId: string | null) {
   } else {
     player.setFeverWindow(-1, -1)
   }
-  // FeverChance 不再用时间窗，改走充能（见 applyFeverCharge / tickFeverCharge）。
+  // Chance 窗口决定开始时刻；只有窗口内的音符参与充能。
   const status = root.querySelector<HTMLElement>('#fever-status')
   if (status) {
-    const n = currentChartForCharge && window
-      ? currentChartForCharge.notes.filter((note) => note.time < window!.start).length
-      : 0
+    const chance = feverChanceForSong(songId)
+    const n = chargeNotesInWindow(currentChartForCharge?.notes.map(note => note.time) ?? [], chance).length
     status.innerHTML = window
       ? `<small>Fever：${window.start.toFixed(3)} – ${window.end.toFixed(3)} 秒` +
-        (n
-          ? `；FeverChance 充能：需 ${Math.ceil(n * 0.7)} / ${n} 个音符</small>`
-          : '；FeverChance 充能：本曲无前置音符</small>')
+        (chance
+          ? `；FeverChance（前一段代理）：${chance.start.toFixed(3)} – ${chance.end.toFixed(3)} 秒，区间内 ${n} 个音符</small>`
+          : '；无 FeverChance 窗口</small>')
       : '<small>Fever：本曲无数据（不估算）。</small>'
   }
 }
 
 /**
- * FeverChance 充能：分母 = Fever 段起点之前的可判定音符数（静态），
- * 分子 = 其中已经过去的那些（每帧推进）。口径照 PJSK 的
- * `progress = feverCount / totalFeverCount`。
- *
- * 音符时刻用谱面自身的 `time`（秒）——与时间索引同域（都相对音频起点），
- * 不需要再减 lead-in。窗口判定用「Fever 起点」而不是总时长：总时长含收尾静音，
- * 拿它当分母会让进度永远充不满。
+ * FeverChance 分母只包含代理窗口 [chance.start, chance.end) 内的音符。
+ * 分子由窗口内已到达的音符数计算，再进行平滑；窗口之前的音符不参与。
+ * 时间均为歌曲秒，动画从窗口起点开始，不等第一个音符或达到 70%。
  */
 /** loadChart 刚加载的谱面；applyFeverWindow 用它算充能分母。 */
 let currentChartForCharge: Chart | null = null
 
 function applyFeverCharge(chart: Chart | null, songId: string | null) {
-  const window = feverForSong(songId)
+  const window = feverChanceForSong(songId)
   if (!chart || !window) {
     player.setFeverChargeTimes([])
     player.setFeverCharge(0, 0)
     return
   }
-  // 分母 = Fever 段起点之前的音符时刻（升序）；分子由 renderFrame 每帧按时刻重算。
-  player.setFeverChargeTimes(
-    chart.notes
-      .map((note) => note.time)
-      .filter((t) => t < window.start)
-      .sort((a, b) => a - b),
-  )
+  // LLLL 没有 PJSK FeverBeginEvent，使用索引中明确标注的前一段代理窗口。
+  player.setFeverChargeTimes(chargeNotesInWindow(chart.notes.map(note => note.time), window), window.start)
 }
 
 // ---- 资源预载 ----

@@ -248,4 +248,5 @@ inline constexpr Glyph FlashGlyphs[] = {
 };
 inline constexpr Beam FlashBeams[] = {{0.0f,-2.91f,-0.872664545f,108.0f,1.0f,1.0f,1.0f,0.5019608f,{FlashKeys15, std::size(FlashKeys15)},{FlashKeys16, std::size(FlashKeys16)},{FlashKeys21, std::size(FlashKeys21)},{FlashKeys22, std::size(FlashKeys22)},{FlashKeys33, std::size(FlashKeys33)}},{0.0f,-2.91f,0.872664545f,108.0f,1.0f,1.0f,1.0f,0.5019608f,{FlashKeys18, std::size(FlashKeys18)},{FlashKeys19, std::size(FlashKeys19)},{FlashKeys24, std::size(FlashKeys24)},{FlashKeys25, std::size(FlashKeys25)},{FlashKeys34, std::size(FlashKeys34)}}};
 inline constexpr Clip FlashClip = {0.8333333f, FlashGlyphs, 0, FlashBeams, std::size(FlashBeams)};
+inline constexpr Key GaugeFlowKeys0[] = {{0.0f,{0.59259266f,-1.3333335f,0.0f,-0.14f}},{1.5f,{0.0f,0.0f,0.0f,-1.14f}}};
 }

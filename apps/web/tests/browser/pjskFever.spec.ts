@@ -59,6 +59,24 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   const pointers = await capture(3.5, true, false, 'pointers');
   const noPointers = await capture(3.5, false, false, 'pointers');
   expect(difference(pointers, noPointers)).toBeGreaterThan(1000);
+  // 十个独立时间点让 >=70% 与 >70% 分别发生在 7、8 秒。
+  await page.evaluate(() => {
+    const p = (window as any).__LLL_PJSK__.player;
+    p.setFeverWindow(20, 25);
+    p.setFeverChargeTimes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+  await page.locator('#effect-profile').selectOption('0');
+  const thresholdNormal = await capture(7.25, true, false, 'pointers');
+  const thresholdSuper = await capture(7.25, true, true, 'pointers');
+  expect(difference(thresholdNormal, thresholdSuper)).toBe(0);
+  const aboveThreshold = await capture(8.25, true, true, 'pointers');
+  expect(difference(thresholdSuper, aboveThreshold)).toBeGreaterThan(1000);
+  await page.evaluate(() => {
+    const p = (window as any).__LLL_PJSK__.player;
+    p.setFeverWindow(10, 20);
+    p.setFeverChargeTimes([1, 2, 3]);
+  });
+  await page.locator('#effect-profile').selectOption('1');
   const chance = await capture(3.25);
   await capture(5);
   expect(difference(chance, await capture(3.25))).toBe(0);

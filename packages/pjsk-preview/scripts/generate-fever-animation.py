@@ -94,6 +94,13 @@ def generate(clips, objects, namespace='fever'):
         beam_ref = f'{mode}Beams, std::size({mode}Beams)' if beams else 'nullptr, 0'
         glyph_count = f'std::size({mode}Glyphs)' if text['m_Children'] else '0'
         lines.append(f'inline constexpr Clip {mode}Clip = {{{number(clip["stopTime"])}, {mode}Glyphs, {glyph_count}, {beam_ref}}};')
+    if namespace.endswith('standard'):
+        flow = next(c for c in clips if c['name'] == 'clip_FeverGauge_SuperFever')
+        values = []
+        for frame in flow['frames']:
+            key = next(key for key in frame['keys'] if key['index'] == 0)
+            values.append('{' + number(frame['time']) + ',{' + ','.join(map(number, key['coefficients'])) + '}}')
+        lines.append('inline constexpr Key GaugeFlowKeys0[] = {' + ','.join(values) + '};')
     lines.append('}')
     return '\n'.join(lines) + '\n'
 

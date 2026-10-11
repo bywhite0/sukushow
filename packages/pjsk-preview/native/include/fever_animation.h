@@ -52,6 +52,17 @@ inline float sample(Curve curve, float time, float fallback)
 #include "../generated/fever_animation_data.h"
 #include "../generated/fever_animation_standard.h"
 #include "../generated/fever_flash_data.h"
+#include "fever_gauge.h"
+
+namespace fever::gauge {
+// 原包 clip_FeverGauge_SuperFever：MaterialST.offsetY，1.5 秒一轮。
+inline float colorOffsetY(float localSec)
+{
+    if (!std::isfinite(localSec) || localSec < 0.0f) return -0.14f;
+    return sample({standard::GaugeFlowKeys0, std::size(standard::GaugeFlowKeys0)},
+        std::fmod(localSec, 1.5f), -0.14f);
+}
+}
 
 namespace fever {
 inline FlashPose flashLayerPose(std::size_t index, float time, int profile)
