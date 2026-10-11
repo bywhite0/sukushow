@@ -26,7 +26,9 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
       const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(bitmap, 0, 0);
-      const roi = region === 'pointers' ? [.57, .04, .2, .23] : [.2, .4, .6, .2];
+      const roi = region === 'bottom' ? [0, .98, 1, .02]
+        : region === 'top' ? [0, .02, 1, .03]
+        : region === 'pointers' ? [.57, .04, .2, .23] : [.2, .4, .6, .2];
       const pixels = ctx.getImageData(Math.floor(bitmap.width * roi[0]), Math.floor(bitmap.height * roi[1]),
         Math.floor(bitmap.width * roi[2]), Math.floor(bitmap.height * roi[3])).data;
       return Array.from(pixels);
@@ -86,5 +88,17 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   expect(difference(flash, await capture(3.25, true, true))).toBe(0);
   await page.locator('#effect-profile').selectOption('1');
   expect(difference(flash, await capture(3.25, true, true))).toBeGreaterThan(1000);
+  // 少量充能应从画布底边出现，满充能可延伸到 SuperFever 指针上方。
+  await page.evaluate(() => {
+    const p = (window as any).__LLL_PJSK__.player;
+    p.setFeverWindow(200, 210);
+    p.setFeverChargeTimes(Array.from({ length: 100 }, (_, i) => i + 1));
+  });
+  const lowCharge = await capture(1.5, true, false, 'bottom');
+  const noCharge = await capture(1.5, false, false, 'bottom');
+  expect(difference(lowCharge, noCharge)).toBeGreaterThan(100);
+  const fullCharge = await capture(100.5, true, false, 'top');
+  const noFullCharge = await capture(100.5, false, false, 'top');
+  expect(difference(fullCharge, noFullCharge)).toBeGreaterThan(100);
   await page.evaluate(() => (window as any).__LLL_PJSK__.player.setExportMode(false));
 });
