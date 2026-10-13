@@ -14,7 +14,7 @@ async function openMv(page: import('@playwright/test').Page, request: import('@p
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__?.musicVideo?.frame(0)?.readyState ?? 0), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 }
 
-test('MV 关/开、拖动、暂停、倍率、切换演示谱，画面与走带保持一致', async ({ page, request }) => {
+test('MV 关/开、拖动、暂停、倍率和清除，画面与走带保持一致', async ({ page, request }) => {
   test.setTimeout(90_000);
   await openMv(page, request);
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
@@ -31,11 +31,12 @@ test('MV 关/开、拖动、暂停、倍率、切换演示谱，画面与走带�
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame((window as any).__LPW__.player.transport.time)?.playbackRate ?? 0)).toBe(1.5);
   await page.locator('#play').click();
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__.musicVideo.frame((window as any).__LPW__.player.transport.time)?.paused ?? false)).toBe(true);
-  await page.locator('#demo').click();
+  await page.getByRole('button', { name: '媒体', exact: true }).click();
+  await page.locator('[data-media-kind="mv"] [data-media-clear]').click();
   await expect(page.locator('#stage-canvas')).not.toHaveAttribute('data-mv', SONG);
 });
 
-test('切歌谱面下载失败时保留原曲和原 MV', async ({ page, request }) => {
+test('切歌谱面下载失败时不把原曲和原 MV 显示成新歌', async ({ page, request }) => {
   test.setTimeout(90_000);
   await openMv(page, request);
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
@@ -46,8 +47,9 @@ test('切歌谱面下载失败时保留原曲和原 MV', async ({ page, request 
   await page.locator('#song-search').fill('203102');
   await page.locator('.song-option').first().click();
   await expect(page.locator('#message')).toContainText('曲目加载失败');
-  await expect(page.locator('#chart-name')).toContainText('フォーチュンムービー');
-  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-mv', SONG);
+  await expect(page.locator('#chart-name')).not.toContainText('フォーチュンムービー');
+  await expect(page.locator('#stage-canvas')).not.toHaveAttribute('data-mv', SONG);
+  await expect(page.locator('#play')).toBeDisabled();
 });
 
 test('原包电影轨道非零起点：开始前保持普通背景，之后按片段起点定位', async ({ page, request }) => {

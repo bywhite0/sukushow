@@ -1,8 +1,15 @@
 import './style.css'
 import { loadSongList } from '@sukushow/llll-preview/songAssets'
-import { createSongPicker, DIFFICULTY_ORDER, type SongPickerHandle } from './songPicker'
-import { SongSelectionStore, type SongSelection } from './songSelection'
-import { formatResourceSize } from './resourceLoading'
+import { cachedJsonResource, readResponseBytes, type DownloadProgress } from '@sukushow/llll-preview/resourceDownload'
+import { createSongPicker, type SongPickerHandle } from './songPicker'
+import { SongSelectionStore } from './songSelection'
+import { formatResourceSize, measureResourceSizes } from './resourceLoading'
+import { createSourceFiles } from './sourceFiles'
+import { createSourceControls } from './sourceControls'
+import { createSourceResolver, type SourceProgress } from './sourceResolver'
+import { decodeChart } from '@sukushow/chart/chart'
+import { readInitialSource, withCatalogChoice } from './sourceUrl'
+import { resolveCatalogChoice, type CatalogChoice } from './songVersions'
 
 type ViewId = 'llll' | 'pjsk'
 
@@ -15,6 +22,8 @@ type ViewContext = {
   root: HTMLElement
   toolbar: HTMLElement
   songSelection: SongSelectionStore
+  sourceFiles: ReturnType<typeof createSourceFiles>
+  resolveSource: (state: Parameters<typeof resolveSource>[0], onProgress?: (progress: SourceProgress) => void) => ReturnType<typeof resolveSource>
 }
 
 type ViewHandle =
@@ -29,16 +38,14 @@ type ViewModule = {
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('缺少统一前端容器。')
 
-function selectionFromUrl(): SongSelection | null {
-  const params = new URLSearchParams(window.location.search)
-  const songId = params.get('song')
-  if (!songId) return null
-  const rawDifficulty = params.get('difficulty')?.toUpperCase()
-  const difficulty = DIFFICULTY_ORDER.find((name) => name === rawDifficulty) ?? 'MASTER'
-  return { songId, difficulty }
+function initialSongBinding(): { songId: string } | null {
+  try {
+    const source = readInitialSource(new URL(window.location.href))
+    return source.kind === 'catalog' ? { songId: source.songId } : null
+  } catch { return null }
 }
 
-const songSelection = new SongSelectionStore(selectionFromUrl())
+const songSelection = new SongSelectionStore(initialSongBinding())
 
 app.innerHTML = `
   <div class="workspace" data-view="llll">
@@ -66,9 +73,23 @@ app.innerHTML = `
         <div class="file-toolbar" aria-label="打开谱面与音频">
           <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
           <input class="sr-only" id="chart-file" type="file" accept=".json,.bytes,application/json" aria-label="选择谱面文件">
-          <button id="open-audio" class="quiet" type="button">添加音频</button>
-          <input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="添加本地音频">
-          <button id="demo" class="text-button" type="button" aria-label="重新打开演示谱">演示谱</button>
+          <div class="media-controls">
+            <button id="media-toggle" class="quiet" type="button" aria-expanded="false" aria-controls="media-panel">媒体</button>
+            <div id="media-panel" hidden aria-label="媒体资源">
+              ${([['audio', '音频', 'audio/*'], ['cover', '曲绘', 'image/*'], ['mv', 'MV', 'video/*']] as const).map(([kind, label, accept]) => `
+                <div class="media-row" data-media-kind="${kind}">
+                  <strong>${label}</strong><span data-media-status></span>
+                  <div class="media-actions">
+                    <button id="open-${kind}" class="quiet" type="button">添加${label}</button>
+                    <button class="quiet" type="button" data-media-clear>清除</button>
+                    <button class="quiet" type="button" data-media-inherit>恢复歌曲资源</button>
+                  </div>
+                  <input class="sr-only" id="${kind}-file" type="file" accept="${accept}" aria-label="添加本地${label}">
+                </div>`).join('')}
+            </div>
+          </div>
+          <button id="edit-metadata" class="quiet" type="button">编辑元数据</button>
+          <span id="source-status" role="status"></span>
         </div>
       </div>
       <span class="local-badge">本地运行 · 文件不上传</span>
@@ -85,6 +106,59 @@ const workspace = app.querySelector<HTMLElement>('.workspace')!
 const viewRoot = app.querySelector<HTMLElement>('#view-root')!
 const toolbar = app.querySelector<HTMLElement>('#view-toolbar')!
 const modeTabs = [...app.querySelectorAll<HTMLButtonElement>('.mode-tab')]
+const sourceFiles = createSourceFiles(songSelection)
+type SongCredit = {
+  id: string; lyricist: string | null; composer: string | null
+  arranger: string | null; stringsArranger?: string | null; vocal: string[]
+}
+const loadCredits = cachedJsonResource<{ songs: SongCredit[] }>('/song-credits.json', '曲目详情')
+const sourceDependencies = {
+  measure: measureResourceSizes,
+  includeMv: () => viewRoot.querySelector<HTMLInputElement>('#opt-mv')?.checked ?? true,
+  loadList: () => loadSongList(),
+  loadChart: async (filename: string, onProgress?: (progress: DownloadProgress) => void) => {
+    const response = await fetch(`/assets/chart/${filename}`)
+    if (!response.ok) throw new Error(`谱面下载失败（${response.status}）：${filename}`)
+    return decodeChart(await readResponseBytes(response, onProgress))
+  },
+  loadCredits: async (songId: string, onProgress?: (progress: DownloadProgress) => void) => {
+    const song = (await loadCredits(onProgress)).songs.find(item => item.id === songId)
+    if (!song) return {}
+    return { lyricist: song.lyricist, composer: song.composer,
+      arranger: song.arranger ?? song.stringsArranger ?? null,
+      vocal: song.vocal.length ? song.vocal.join('、') : null }
+  },
+}
+const resolveSource = createSourceResolver(sourceDependencies)
+const sourceControls = createSourceControls({
+  root: toolbar, store: songSelection, files: sourceFiles,
+  effectiveMetadata: async () => (await resolveSource(songSelection.getSource())).metadata,
+  chartOpened: () => {
+    const state = songSelection.getSource()
+    const url = withCatalogChoice(new URL(location.href), { songId: state.songId ?? '', difficulty: null })
+    if (!state.songId) url.searchParams.delete('song')
+    for (const key of ['title', 'songTitle', 'musicTitle', 'scoreTitle', 'chartTitle', 'offset']) url.searchParams.delete(key)
+    history.replaceState(null, '', url)
+    previousSourceUrl = sourceUrlKey(url)
+    historySourceToken++
+  },
+})
+const sourceStatus = toolbar.querySelector<HTMLElement>('#source-status')!
+let failedSourceRevision = -1
+const refreshSourceStatus = async () => {
+  const state = songSelection.getSource()
+  const revision = state.revision
+  try {
+    const source = await resolveSource(state)
+    if (revision !== songSelection.getSource().revision || revision === failedSourceRevision) return
+    sourceStatus.textContent = source.chart
+      ? `${source.metadata.title}${source.metadata.difficulty ? ` [${source.metadata.difficulty}]` : ''}`
+      : state.songId ? `${source.metadata.title} · 暂无官方谱面，请打开自制谱` : '未加载谱面'
+  } catch (error) {
+    if (revision === songSelection.getSource().revision) sourceStatus.textContent = `来源加载失败：${String(error)}`
+  }
+}
+songSelection.subscribeSource(() => void refreshSourceStatus(), true)
 
 const modules: Record<ViewId, () => Promise<ViewModule>> = {
   llll: () => import('./views/llll') as Promise<ViewModule>,
@@ -113,21 +187,21 @@ function updateModeChrome(view: ViewId) {
   }
 }
 
-function updateSongUrl(selection: SongSelection | null) {
-  const url = new URL(window.location.href)
+function updateSongUrl(selection: CatalogChoice | null) {
+  let url = new URL(window.location.href)
   if (selection) {
-    url.searchParams.set('song', selection.songId)
-    url.searchParams.set('difficulty', selection.difficulty)
-    url.searchParams.delete('chart')
+    url = withCatalogChoice(url, selection)
   } else {
     url.searchParams.delete('song')
     url.searchParams.delete('difficulty')
   }
   history.replaceState(null, '', url)
+  previousSourceUrl = sourceUrlKey(url)
 }
 
 async function initSharedSongPicker() {
   const mount = app!.querySelector<HTMLElement>('#song-picker-mount')!
+  const initialIdentity = songSelection.getSource().identity
   try {
     const detail = mount.querySelector<HTMLElement>('[data-picker-loading-detail]')
     const progress = mount.querySelector<HTMLProgressElement>('[data-picker-loading-progress]')
@@ -151,13 +225,36 @@ async function initSharedSongPicker() {
       list,
       onChange: (songId, difficulty) => {
         const selection = { songId, difficulty }
-        songSelection.set(selection)
+        songSelection.selectCatalog(selection, list)
         updateSongUrl(selection)
+      },
+      onVersionChange: (songId, difficulty) => {
+        const selection = { songId, difficulty }
+        songSelection.selectVersion(selection, list)
+        updateSongUrl({ songId, difficulty: songSelection.getSource().chart.kind === 'custom' ? null : difficulty })
       },
     })
     mount.replaceChildren(picker.root)
-    const initial = songSelection.get()
-    if (initial) picker.select(initial.songId, initial.difficulty, false)
+    songSelection.subscribeSource(state => {
+      const difficulty = state.chart.kind === 'official' ? state.chart.difficulty : null
+      if (state.songId && (picker.currentSongId() !== state.songId
+        || (state.chart.kind === 'official' && picker.currentDifficulty() !== difficulty))) {
+        picker.select(state.songId, difficulty, false)
+      }
+      picker.setCustom(state.chart.kind === 'custom')
+    }, true)
+    if (songSelection.getSource().identity === initialIdentity) {
+      try {
+        const source = readInitialSource(new URL(window.location.href))
+        if (source.kind === 'catalog') {
+          const choice = resolveCatalogChoice(list, source.songId, source.difficulty, true)
+          songSelection.selectCatalog(choice, list)
+          if (source.offsetMs !== 0) songSelection.updateMetadata({ offsetMs: source.offsetMs })
+        }
+      } catch (error) {
+        sourceStatus.textContent = `来源加载失败：${String(error)}`
+      }
+    }
   } catch (error) {
     mount.innerHTML = '<span class="picker-status" role="status">song-list.json 加载失败，曲目库暂不可用</span>'
     console.warn('[sukushow] 曲目列表加载失败：', error)
@@ -167,11 +264,16 @@ async function initSharedSongPicker() {
 let activeDispose: (() => void | Promise<void>) | undefined
 let transition = 0
 
-async function disposeActive() {
+let activeDisposal: Promise<void> | undefined
+function disposeActive(): Promise<void> {
+  if (activeDisposal) return activeDisposal
   const dispose = activeDispose
   activeDispose = undefined
-  if (dispose) await dispose()
-  viewRoot.replaceChildren()
+  activeDisposal = (async () => {
+    if (dispose) await dispose()
+    viewRoot.replaceChildren()
+  })().finally(() => { activeDisposal = undefined })
+  return activeDisposal
 }
 
 function resolveDispose(handle: ViewHandle): (() => void | Promise<void>) | undefined {
@@ -198,7 +300,7 @@ async function showView(view: ViewId, push = false) {
       loadingProgress.value = 1
     }
     if (loadingPercent) loadingPercent.textContent = '启动中…'
-    const handle = await module.mount({ root: viewRoot, toolbar, songSelection })
+    const handle = await module.mount({ root: viewRoot, toolbar, songSelection, sourceFiles, resolveSource: (state, onProgress) => resolveSource(state, onProgress) })
     if (token !== transition) {
       resolveDispose(handle)?.()
       return
@@ -206,7 +308,8 @@ async function showView(view: ViewId, push = false) {
     activeDispose = resolveDispose(handle)
   } catch (error) {
     if (token !== transition) return
-    viewRoot.innerHTML = `<main class="load-error" role="alert"><h1>预览模式加载失败</h1><p>${String(error)}</p><button class="quiet" type="button" data-retry>返回 LLLL 模式</button></main>`
+    viewRoot.innerHTML = '<main class="load-error" role="alert"><h1>预览模式加载失败</h1><p></p><button class="quiet" type="button" data-retry>返回 LLLL 模式</button></main>'
+    viewRoot.querySelector<HTMLParagraphElement>('.load-error p')!.textContent = String(error)
     viewRoot.querySelector<HTMLButtonElement>('[data-retry]')!.onclick = () => void showView('llll', true)
     console.error(error)
   }
@@ -219,8 +322,89 @@ for (const tab of modeTabs) {
   }
 }
 
-window.addEventListener('popstate', () => void showView(viewFromUrl()))
+function sourceUrlKey(url: URL): string {
+  const next = new URL(url)
+  next.searchParams.delete('view')
+  next.searchParams.sort()
+  return next.href
+}
+let previousSourceUrl = sourceUrlKey(new URL(window.location.href))
+let historySourceToken = 0
+window.addEventListener('popstate', () => {
+  void showView(viewFromUrl())
+  const token = ++historySourceToken
+  const identity = songSelection.getSource().identity
+  const url = new URL(window.location.href)
+  const nextSourceUrl = sourceUrlKey(url)
+  const unchanged = nextSourceUrl === previousSourceUrl
+  previousSourceUrl = nextSourceUrl
+  if (unchanged) return
+  void (async () => {
+    try {
+      const source = readInitialSource(url)
+      if (source.kind === 'url') { await initializeUrlSource(url, () => token === historySourceToken); return }
+      const state = songSelection.getSource()
+      if (state.songId === source.songId && state.chart.kind === 'custom') return
+      const list = await loadSongList()
+      if (token !== historySourceToken || identity !== songSelection.getSource().identity) return
+      const choice = resolveCatalogChoice(list, source.songId, source.difficulty, true)
+      songSelection.selectCatalog(choice, list)
+      if (source.offsetMs !== 0) songSelection.updateMetadata({ offsetMs: source.offsetMs })
+    } catch (error) {
+      if (token === historySourceToken) sourceStatus.textContent = `来源加载失败：${String(error)}`
+    }
+  })()
+})
+async function initializeUrlSource(url = new URL(window.location.href), current = () => true) {
+  const identity = songSelection.getSource().identity
+  try {
+    const source = readInitialSource(url)
+    if (source.kind !== 'url') return
+    const response = await fetch(source.url)
+    if (!response.ok) throw new Error(`谱面下载失败（${response.status}）`)
+    const limit = 16 * 1024 * 1024
+    if (Number(response.headers.get('content-length')) > limit) {
+      await response.body?.cancel()
+      throw new Error('谱面文件超过 16 MiB')
+    }
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('谱面响应为空')
+    const chunks: Uint8Array<ArrayBuffer>[] = []
+    let size = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        size += value.byteLength
+        if (size > limit) { await reader.cancel(); throw new Error('谱面文件超过 16 MiB') }
+        chunks.push(new Uint8Array(value))
+      }
+    } finally { reader.releaseLock() }
+    if (!current() || songSelection.getSource().identity !== identity) return
+    const name = new URL(source.url, location.href).pathname.split('/').pop() || 'URL 谱面'
+    if (!await sourceFiles.openChart(new File(chunks, name), current)) return
+    songSelection.updateMetadata({ ...(source.title ? { title: source.title } : {}), offsetMs: source.offsetMs })
+  } catch (error) {
+    if (current() && songSelection.getSource().identity === identity) {
+      songSelection.clearSource()
+      failedSourceRevision = songSelection.getSource().revision
+      sourceStatus.textContent = `来源加载失败：${String(error)}`
+    }
+  }
+}
+
+let leaving: Promise<void> | undefined
+window.addEventListener('pagehide', event => {
+  if (event.persisted || leaving) return
+  transition++
+  historySourceToken++
+  sourceControls.dispose()
+  leaving = disposeActive().finally(() => sourceFiles.dispose())
+})
+
 const initialView = viewFromUrl()
+const initialSourceToken = historySourceToken
+void initializeUrlSource(new URL(window.location.href), () => initialSourceToken === historySourceToken)
 updateUrl(initialView, false)
 void initSharedSongPicker()
 void showView(initialView)

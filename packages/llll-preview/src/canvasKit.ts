@@ -17,7 +17,7 @@ export function hudFont(weight: number, size: number): string {
 }
 
 // ── 贴图缓存 ─────────────────────────────────────────────────────
-type ImageEntry = { img: HTMLImageElement; state: 'loading' | 'ok' | 'error'; done: Promise<void> };
+type ImageEntry = { img: HTMLImageElement; state: 'loading' | 'ok' | 'error'; done: Promise<void>; cancel: () => void };
 const images = new Map<string, ImageEntry>();
 let imageRevision = 0;
 export const loadedImageRevision = () => imageRevision;
@@ -40,11 +40,12 @@ function entry(url: string): ImageEntry {
   img.decoding = 'async';
   let resolveDone!: () => void;
   const done = new Promise<void>((r) => { resolveDone = r; });
-  e = { img, state: 'loading', done };
+  e = { img, state: 'loading', done, cancel: resolveDone };
   const rec = e;
   notifyImage(url, 'download');
   img.onload = () => {
     void img.decode().catch(() => undefined).then(() => {
+      if (images.get(url) !== rec) return;
       rec.state = img.naturalWidth > 0 ? 'ok' : 'error';
       imageRevision++;
       notifyImage(url, 'ready');
@@ -67,6 +68,21 @@ export function image(url: string): HTMLImageElement | null {
 /** 贴图是否加载失败（404 等）。 */
 export function imageFailed(url: string): boolean {
   return images.get(url)?.state === 'error';
+}
+
+/** 释放不再由来源或视图持有的曲绘。 */
+export function releaseImages(urls: readonly string[]): void {
+  for (const url of urls) {
+    const cached = images.get(url);
+    if (!cached) continue;
+    images.delete(url);
+    imageListeners.delete(url);
+    cached.img.onload = null;
+    cached.img.onerror = null;
+    cached.img.removeAttribute('src');
+    cached.cancel();
+    imageRevision++;
+  }
 }
 
 export function preloadImages(urls: readonly string[], onProgress?: ImageProgressListener): Promise<void> {

@@ -21,19 +21,22 @@ test('曲终时序覆盖主数据、无 BGM、未知曲目与 MV 尾段', async 
   expect(cases.result.durationSec).toBeCloseTo(119.3, 5);
 });
 
-test('MV 缺失不阻断预览，切换演示谱不沿用上一首音视频', async ({ page }) => {
+test('MV 缺失不阻断预览，清除媒体后不沿用上一首音视频', async ({ page }) => {
   test.setTimeout(120_000);
   await page.route('**/assets/mv/*.mp4', route => route.fulfill({ status: 404, body: '' }));
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
   await expect(page.locator('#message')).toContainText('フォーチュン', { timeout: 90_000 });
   expect(await page.evaluate(() => (window as any).__LLL_PJSK__.musicVideo.useVideoBackground)).toBe(false);
-  await page.locator('#demo').click();
-  await expect(page.locator('#chart-name')).toHaveText('演示谱面');
+  await page.getByRole('button', { name: '媒体', exact: true }).click();
+  await page.locator('[data-media-kind="audio"] [data-media-clear]').click();
+  await page.locator('[data-media-kind="mv"] [data-media-clear]').click();
+  await expect(page.locator('[data-resource-loading]')).toBeHidden();
+  await expect(page.locator('#chart-name')).toContainText('フォーチュン');
   const state = await page.evaluate(() => {
     const { player, musicVideo } = (window as any).__LLL_PJSK__;
     return { ...player.getStateSnapshot(), video: musicVideo.useVideoBackground };
   });
   expect(state.hasAudio).toBe(false);
   expect(state.video).toBe(false);
-  expect(state.apStartSec).toBe(Infinity);
+  expect(state.apStartSec).toBeCloseTo(87.545, 3);
 });

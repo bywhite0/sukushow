@@ -1,3 +1,4 @@
+import { openChartFixture } from './chartFixture';
 import { test, expect } from '@playwright/test';
 
 for (const width of [1440, 900, 390]) {
@@ -43,19 +44,18 @@ test('全屏保留画布和播放控制，退出后恢复工作台', async ({ pa
   await expect(page.getByRole('tablist', { name: '设置分类' })).toBeVisible();
 });
 
-test('顶部文件名随成功导入更新，坏文件保留原名，演示可恢复', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('#chart-name')).toHaveText('演示谱面');
+test('顶部文件名随独立谱导入更新，坏文件保留原名，重选仍生效', async ({ page }) => {
+  await openChartFixture(page);
   await page.locator('#chart-file').setInputFiles({
     name: '布局验证.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ Notes: [{ Uid: 1, just: '1', Flags: 80, holds: [] }], Bpms: [{ Bpm: 120, Time: 0 }] })),
   });
   await expect(page.locator('#chart-name')).toHaveText('布局验证.json');
   await page.locator('#chart-file').setInputFiles({ name: '错误.json', mimeType: 'application/json', buffer: Buffer.from('{bad') });
-  await expect(page.locator('#message')).toContainText('原谱面已保留');
+  await expect(page.locator('#source-status')).toContainText('文件读取失败');
   await expect(page.locator('#chart-name')).toHaveText('布局验证.json');
-  await page.getByRole('button', { name: '重新打开演示谱', exact: true }).click();
-  await expect(page.locator('#chart-name')).toHaveText('演示谱面');
+  await openChartFixture(page);
+  await expect(page.locator('#chart-name')).toHaveText('custom-chart.json');
 });
 
 test('顶栏比例按钮锁定舞台宽高比，刷新后保留', async ({ page }) => {

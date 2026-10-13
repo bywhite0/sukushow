@@ -1,40 +1,99 @@
 import type { DifficultyName } from './songPicker'
+import type { Chart } from '@sukushow/chart/chart'
+import type { SongList } from '@sukushow/llll-preview/songAssets'
+import { chartSongFor, resolveCatalogChoice, vocalVersions, type CatalogChoice } from './songVersions'
 
-export type SongSelection = {
-  songId: string
-  difficulty: DifficultyName
+export type MediaKind = 'audio' | 'cover' | 'mv'
+export type MediaOverride =
+  | { kind: 'inherit' }
+  | { kind: 'none' }
+  | { kind: 'file'; url: string; name: string; durationSec: number | null }
+export type ChartSource =
+  | { kind: 'none' }
+  | { kind: 'official'; songId: string; difficulty: DifficultyName }
+  | { kind: 'custom'; chart: Chart; filename: string }
+export type SourceMetadata = {
+  title: string; difficulty: string | null; scoreCreator: string | null
+  lyricist: string | null; composer: string | null; arranger: string | null
+  vocal: string | null; offsetMs: number
+  fever: { start: number; end: number } | null; finishTime: number | null
+}
+export type SourceState = {
+  revision: number; identity: number; songId: string | null
+  chart: ChartSource; metadata: Partial<SourceMetadata>
+  media: Record<MediaKind, MediaOverride>
+}
+export type ResolvedSource = {
+  revision: number; identity: number; songId: string | null
+  chart: Chart | null; chartSongId: string | null; custom: boolean
+  metadata: SourceMetadata
+  download?: { downloadedBytes: number; totalBytes: number | undefined; sizes?: Record<string, number> }
+  assets: { bgmUrl: string | null; coverUrl: string | null; mvUrl: string | null
+    mvStartSec: number; mvDurationSec: number }
 }
 
-export type SongSelectionListener = (selection: SongSelection | null) => void
+const inheritedMedia = (): SourceState['media'] => ({
+  audio: { kind: 'inherit' }, cover: { kind: 'inherit' }, mv: { kind: 'inherit' },
+})
 
-/**
- * The persistent shell owns the selected song. View modules subscribe to it
- * and only decide how to render the selected source.
- */
+/** 共享壳层持有来源，视图只负责应用和渲染。 */
 export class SongSelectionStore {
-  private value: SongSelection | null
-  private readonly listeners = new Set<SongSelectionListener>()
+  private source: SourceState = {
+    revision: 0, identity: 0, songId: null, chart: { kind: 'none' }, metadata: {}, media: inheritedMedia(),
+  }
+  private readonly sourceListeners = new Set<(state: SourceState) => void>()
 
-  constructor(initial: SongSelection | null = null) {
-    this.value = initial
+  getSource(): SourceState { return this.source }
+
+  subscribeSource(listener: (state: SourceState) => void, emitCurrent = false): () => void {
+    this.sourceListeners.add(listener)
+    if (emitCurrent) listener(this.source)
+    return () => { this.sourceListeners.delete(listener) }
   }
 
-  get(): SongSelection | null {
-    return this.value
+  private publish(patch: Partial<SourceState>, newIdentity = false): void {
+    this.source = { ...this.source, ...patch, revision: this.source.revision + 1,
+      identity: this.source.identity + Number(newIdentity) }
+    for (const listener of this.sourceListeners) listener(this.source)
   }
 
-  set(selection: SongSelection | null, notify = true): void {
-    if (this.value?.songId === selection?.songId && this.value?.difficulty === selection?.difficulty) {
+  selectCatalog(choice: CatalogChoice, list: SongList): void {
+    const selected = resolveCatalogChoice(list, choice.songId, choice.difficulty, true)
+    const chartSong = chartSongFor(list, selected.songId)
+    const chart: ChartSource = chartSong && selected.difficulty
+      ? { kind: 'official', songId: chartSong.id, difficulty: selected.difficulty } : { kind: 'none' }
+    this.publish({ songId: selected.songId, chart, metadata: {}, media: inheritedMedia() }, true)
+  }
+
+  selectVersion(choice: CatalogChoice, list: SongList): void {
+    if (!this.source.songId || this.source.chart.kind === 'none'
+      || !vocalVersions(list, this.source.songId).some(song => song.id === choice.songId)) {
+      throw new Error('该歌曲不支持所选 Another Vocal 版本')
+    }
+    if (this.source.chart.kind === 'custom') {
+      this.publish({ songId: choice.songId }, true)
       return
     }
-    this.value = selection
-    if (!notify) return
-    for (const listener of this.listeners) listener(selection)
+    this.selectCatalog({ ...choice, difficulty: this.source.chart.difficulty }, list)
   }
 
-  subscribe(listener: SongSelectionListener, emitCurrent = false): () => void {
-    this.listeners.add(listener)
-    if (emitCurrent) listener(this.value)
-    return () => this.listeners.delete(listener)
+  openCustom(chart: Chart, filename: string): void {
+    this.publish({ chart: { kind: 'custom', chart: structuredClone(chart), filename }, metadata: {} }, true)
+  }
+
+  clearSource(): void {
+    this.publish({ songId: null, chart: { kind: 'none' }, metadata: {}, media: inheritedMedia() }, true)
+  }
+
+  updateMetadata(patch: Partial<SourceMetadata>): void {
+    this.publish({ metadata: { ...this.source.metadata, ...structuredClone(patch) } })
+  }
+
+  updateMedia(kind: MediaKind, value: MediaOverride): void {
+    this.publish({ media: { ...this.source.media, [kind]: { ...value } } })
+  }
+
+  constructor(initial: { songId: string } | null = null) {
+    if (initial) this.source = { ...this.source, songId: initial.songId }
   }
 }

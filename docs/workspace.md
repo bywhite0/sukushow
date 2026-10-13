@@ -35,6 +35,15 @@ pnpm render:svg          # SVG CLI
 
 `pnpm verify:shared-assets` 比较 `apps/web` 与 `packages/chart-svg` 的 7 张 2D 贴图及元数据哈希。
 
+## 来源状态与资源所有权
+
+`apps/web` 的共享壳层持有歌曲版本、谱面来源、元数据和媒体覆盖。`songId` 表示媒体版本，官方谱面来源可指向另一个明确兼容的歌曲 ID；`identity` 表示文件关联边界，`revision` 表示可见状态修订。
+
+- `sourceFiles` 在验证成功后才提交文件，管理 object URL 与视图租约；替换、清除或页面离开时，最后一个在用租约归还后才撤销 URL。验证成功、失败和超时都释放临时媒体元素。
+- `sourceResolver` 共享同一来源快照的谱面与资料读取，并为各消费者提供独立解析结果；当前 MV 开关决定媒体测量集合。未知资源大小不冒充完整总量。
+- `sourceBinding` 串行应用来源，暂停旧播放、屏蔽过期结果并持有资源租约。LLLL/PJSK 视图只负责渲染与各自导出，不自行打开本地文件或撤销共享 URL。
+- 模式切换等待在途卸载完成，再启动新视图，旧视图不能清空新容器。`pagehide` 的 `persisted=true` 保留来源和资源并暂停播放；真正离开页面先卸载视图，再释放共享文件资源。
+
 ## 许可
 
 根目录的 `LICENSE-MIT` 与 `LICENSE-AGPL` 是两种许可的全文，各目录另附自己的 LICENSE。`packages/pjsk-preview` 基于 AGPL-3.0-only 的 sekai-mmw-preview-web 改造，上游来源的代码与素材都位于该包内，按 AGPL-3.0-only 发布。根目录、`apps/web` 与其余包的自有代码按 MIT 发布。`apps/web` 的构建产物打包了 `packages/pjsk-preview`，整体按 AGPL-3.0-only 发布，页面页脚提供源码链接。第三方来源见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

@@ -1,13 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { CHART_FIXTURE_PATH, openChartFixture } from './chartFixture';
 
 const CANVAS_KIT_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/canvasKit.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
-const DEMO_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/demo.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
+const CHART_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/chart/src/chart.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
 
 type Counts = { render: number; hud: number; compose: number };
 
 async function watch(page: Page) {
-  await page.goto('/?view=llll');
+  await openChartFixture(page);
+  await expect(page.locator('#message')).toContainText('已加载 custom-chart.json');
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
   await page.evaluate(() => {
@@ -134,8 +137,9 @@ test('暂停时跳过的帧与显式重画同一时刻画面一致', async ({ pa
     el.value = '2.2'; el.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await expectOneRefresh(page);
-  const result = await page.evaluate(async (url) => {
-    const { demoChart } = await import(url);
+  const result = await page.evaluate(async ({ url, raw }) => {
+    const { parseChart } = await import(url);
+    const chart = parseChart(raw);
     const { hud, renderer, compositor, startAnim, comboResult, player } = (window as any).__LPW__;
     const stage = document.querySelector<HTMLCanvasElement>('#stage-canvas')!;
     const gl = document.querySelector<HTMLCanvasElement>('#chart-canvas')!;
@@ -143,7 +147,6 @@ test('暂停时跳过的帧与显式重画同一时刻画面一致', async ({ pa
     const image = async () => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', stage.getContext('2d')!.getImageData(0, 0, stage.width, stage.height).data)));
     const before = await image();
     const t = player.transport.time;
-    const chart = demoChart();
     hud.sync(chart, t, false);
     renderer.setPlaying(false);
     renderer.setFeverState(hud.feverVisible, hud.feverWindowStart);
@@ -152,14 +155,16 @@ test('暂停时跳过的帧与显式重画同一时刻画面一致', async ({ pa
     startAnim.show(null);
     compositor.draw(view, { gl, hud, startAnim, comboResult });
     return { before, after: await image() };
-  }, DEMO_URL);
+  }, { url: CHART_URL, raw: JSON.parse(readFileSync(CHART_FIXTURE_PATH, 'utf8')) });
   expect(result.after).toEqual(result.before);
 });
 
 test('暂停时贴图就绪后刷新画面', async ({ page }) => {
   await watch(page);
   await page.evaluate(async (url) => {
-    const { preloadImages } = await import(url);
+    const loadedUrl = performance.getEntriesByType('resource').map(entry => entry.name)
+      .find(name => new URL(name).pathname.endsWith('/canvasKit.ts')) ?? url;
+    const { preloadImages } = await import(loadedUrl);
     await preloadImages(['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/T9sAAAAASUVORK5CYII=']);
   }, CANVAS_KIT_URL);
   await expectOneRefresh(page);
