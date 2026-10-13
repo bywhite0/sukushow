@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
@@ -11,7 +12,9 @@ test('背景缓存保持旧背景的预览与导出尺寸像素', async ({ page 
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
   const differences = await page.evaluate(async (url) => {
     const { StageCompositor, LIVE_BG_URL, LIVE_BG_DOT_URL } = await import(url);
-    const { image } = await import(url.replace('stageCompositor.ts', 'canvasKit.ts'));
+    const imageUrl = performance.getEntriesByType('resource').map(entry => entry.name)
+      .find(name => new URL(name).pathname.endsWith('/canvasKit.ts')) ?? url.replace('stageCompositor.ts', 'canvasKit.ts');
+    const { image } = await import(imageUrl);
     const a = new StageCompositor(document.createElement('canvas'));
     const b = new StageCompositor(document.createElement('canvas'));
     const emptyLayers = { gl: null, hud: null, startAnim: null, comboResult: null };
@@ -48,13 +51,15 @@ test('背景缓存与逐帧背景在完整预览及导出画面中一致', async
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
-  const differences = await page.evaluate(async (url) => {
+  const differences = await page.evaluate(async ({ url, raw }) => {
     const { StageCompositor, LIVE_BG_URL, LIVE_BG_DOT_URL } = await import(url);
-    const { image } = await import(url.replace('stageCompositor.ts', 'canvasKit.ts'));
-    const { demoChart } = await import(url.replace('stageCompositor.ts', 'demo.ts'));
+    const imageUrl = performance.getEntriesByType('resource').map(entry => entry.name)
+      .find(name => new URL(name).pathname.endsWith('/canvasKit.ts')) ?? url.replace('stageCompositor.ts', 'canvasKit.ts');
+    const { image } = await import(imageUrl);
+    const { parseChart } = await import(url.replace('llll-preview/src/stageCompositor.ts', 'chart/src/chart.ts'));
     const { renderer, hud, startAnim, comboResult } = (window as any).__LPW__;
     const gl = document.querySelector<HTMLCanvasElement>('#chart-canvas')!;
-    const chart = demoChart();
+    const chart = parseChart(raw);
     const cached = new StageCompositor(document.createElement('canvas'));
     const reference = new StageCompositor(document.createElement('canvas'));
     const results: { size: string; changed: number; maxDelta: number }[] = [];
@@ -89,7 +94,7 @@ test('背景缓存与逐帧背景在完整预览及导出画面中一致', async
     }
     renderer.setFixedSize(null);
     return results;
-  }, COMPOSITOR_URL);
+  }, { url: COMPOSITOR_URL, raw: JSON.parse(readFileSync(new URL('./fixtures/custom-chart.json', import.meta.url), 'utf8')) });
   for (const row of differences) {
     expect(row.changed, row.size).toBe(0);
     expect(row.maxDelta, row.size).toBe(0);

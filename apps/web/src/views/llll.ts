@@ -1,6 +1,5 @@
 import './llll.css';
-import { decodeChart } from '@sukushow/chart/chart';
-import { demoChart } from '@sukushow/llll-preview/demo';
+import type { Chart } from '@sukushow/chart/chart';
 import { parseFeverWindow, type FeverWindow } from '@sukushow/chart/fever';
 import { parseChartName } from '@sukushow/chart/masterdata';
 import { feverForSong, finishTimeForSong } from '@sukushow/chart/songTiming';
@@ -9,7 +8,7 @@ import { MusicVideo } from '@sukushow/llll-preview/musicVideo';
 import { CapturingSeOutput, createWebAudioSeOutput, SeResolver } from '@sukushow/llll-preview/se';
 import { PreviewRenderer } from '@sukushow/llll-preview/renderer';
 import { LiveHud } from '@sukushow/llll-preview/hud';
-import { imagesSettled, loadHudFonts, loadedImageRevision, preloadImages } from '@sukushow/llll-preview/canvasKit';
+import { imageFailed, imagesSettled, loadHudFonts, loadedImageRevision, preloadImages } from '@sukushow/llll-preview/canvasKit';
 import type { ExportFrameSource } from '@sukushow/export';
 import { installExportDialog, probeAllConfigs } from './exportDialog';
 import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '@sukushow/llll-preview/stageCompositor';
@@ -18,9 +17,12 @@ import { ComboResult, BANNER_TEX_BASE, COMBO_RESULT_CLIP_DURATION, type ComboRes
 import { RG_RESOURCE_URLS, type RgLoadProgress } from '@sukushow/llll-preview/rgAssets';
 import { SE_RESOURCE_URLS, type SeLoadProgress } from '@sukushow/llll-preview/se';
 import { COMBO_RESULT_TEXTURES } from '@sukushow/llll-preview/comboResultClip';
-import { fetchBytes, findSong, findSongByChartFile, loadSongList, songAssets, SONG_LIST_URL, type SongList } from '@sukushow/llll-preview/songAssets';
+import { fetchBytes } from '@sukushow/llll-preview/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
-import type { SongSelectionStore } from '../songSelection';
+import type { SongSelectionStore, ResolvedSource } from '../songSelection';
+import { createSourceBinding, waitForSource } from '../sourceBinding';
+import type { createSourceFiles } from '../sourceFiles';
+import type { resolveSource as resolveSharedSource } from '../sourceResolver';
 import {
   loadPreviewSettings,
   savePreviewSettings,
@@ -28,14 +30,15 @@ import {
 } from './llll/settingsPersist';
 import { createResourceLoading, formatResourceSize, measureResourceSizes, totalResourceSize } from '../resourceLoading';
 import { resultStartTime } from '../finishTime';
-export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore };
+import type { SourceProgress } from '../sourceResolver'
+export type LlllMountContext = { root: HTMLElement; toolbar: HTMLElement; songSelection: SongSelectionStore; sourceFiles: ReturnType<typeof createSourceFiles>; resolveSource: (state: Parameters<typeof resolveSharedSource>[0], onProgress?: (progress: SourceProgress) => void) => Promise<ResolvedSource> };
 
-export function mount({ root, toolbar, songSelection }: LlllMountContext) {
+export function mount({ root, toolbar, songSelection, sourceFiles, resolveSource }: LlllMountContext) {
 const app=root;
 app.innerHTML=`
 <main>
 <section class="viewer" aria-label="谱面预览">
- <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">演示谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
+ <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">未加载谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
  <div class="stage-shell"><div class="stage" id="stage" data-stage-mode="3d">
   <canvas id="chart-canvas" aria-hidden="true"></canvas>
   <canvas id="stage-canvas" aria-label="LLLL 舞台谱面预览画面" aria-hidden="false"></canvas>
@@ -53,7 +56,7 @@ app.innerHTML=`
    </div>
   </div>
  </div></div>
- <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。选择本地谱面，或播放演示。</div>
+ <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。请选择歌曲或打开本地谱面。</div>
  <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="export-video" class="quiet" type="button">导出视频</button><button id="fullscreen" class="quiet">全屏预览</button></div></div>
 </section>
 <aside aria-label="预览设置">
@@ -117,8 +120,6 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>{
 };
 const input=(id:string)=>el<HTMLInputElement>(id);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
-el('open-chart').onclick=()=>input('chart-file').click();
-el('open-audio').onclick=()=>input('audio-file').click();
 el('panel-display').querySelector('h2')!.after(el('opt-hit-effect').closest('label')!);
 el('panel-score').querySelector('h2')!.after(el('tech-score').closest('label')!);
 const settingTabs=Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
@@ -222,7 +223,7 @@ const aspectPicker=createAspectPicker({value:aspectId,onChange:(id)=>{aspectId=i
 el('aspect-mount').replaceChildren(aspectPicker.root);
 applyAspect(aspectId);
 
-let chart=demoChart(),generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
+let chart:Chart|null=null,generation=0,speed=Number(input('speed').value),mirror=input('mirror').checked,lines=input('lines').checked;
 /** 视频导出进行中：实时循环已暂停，走带 / 键盘操作无效。 */
 let exporting=false;
 let visualRevision=0;
@@ -270,9 +271,24 @@ const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((
  return sizes;
 });
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
-try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);player.transport.setDuration(chart.duration);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
+try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
-function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart.duration);}metadata();
+function setChart(next:Chart){chart=next;input('timeline').disabled=false;el<HTMLButtonElement>('restart').disabled=false;el<HTMLButtonElement>('play').disabled=false;el<HTMLButtonElement>('export-video').disabled=false;}
+function clearChart(){
+ chart=null;player?.clear();
+ input('timeline').disabled=true;input('timeline').value='0';input('timeline').max='0';
+ el<HTMLButtonElement>('restart').disabled=true;
+ el<HTMLButtonElement>('play').disabled=true;el<HTMLButtonElement>('export-video').disabled=true;
+ el('chart-name').textContent='未加载谱面';el('audio-name').textContent='未加载音频 · 可以无声预览';
+ el('time').textContent='00:00.000 / 00:00.000';
+ const canvas=el<HTMLCanvasElement>('stage-canvas');
+ canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
+ delete canvas.dataset.mv;delete canvas.dataset.intro;delete canvas.dataset.result;
+ lastLiveFrame=null;
+}
+
+function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart?.duration??0);}
+
 const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
@@ -293,7 +309,7 @@ for(const button of stageModeButtons){
 }
 setStageMode('3d');
 comboResult.setKind(readSettings().comboResult);
-let startInfo={title:'演示谱面',difficulty:null as string|null,jacketUrl:null as string|null};
+let startInfo={title:'未加载谱面',difficulty:null as string|null,jacketUrl:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
 /**
@@ -314,12 +330,12 @@ function kickStartSe(){
  if(tr.start<0?tr.time<0:off<=0.05)se.playStart(Math.max(0,off));
 }
 function seekTo(t:number){
- if(!player||exporting)return;
+ if(!player||!chart||exporting)return;
  player.seek(t);se?.clear();se?.stopAll();
  if(player.transport.playing)kickStartSe();
 }
 async function toggle(){
- if(!player||exporting)return;
+ if(!player||!chart||exporting)return;
  try{
   if(player.transport.playing){
    // 过场中按键 = 跳过开场，直接到 0 秒开播（开场 SE 不打断）。
@@ -337,32 +353,7 @@ el<HTMLSelectElement>('rate').onchange=()=>{player?.setRate(Number(el<HTMLSelect
 input('speed').oninput=()=>{speed=Number(input('speed').value);el('speed-value').textContent=speed.toFixed(1);persistSettings();};
 input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();};input('lines').onchange=()=>{lines=input('lines').checked;persistSettings();};
 input('volume').oninput=()=>{player?.setVolume(Number(input('volume').value));persistSettings();};
-input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}player?.setOffset(Number(input('offset').value)/1000);persistSettings();};
-input('chart-file').onchange=async()=>{
- const file=input('chart-file').files?.[0];if(!file)return;const id=++generation;const task=loading.begin(`正在读取 ${file.name}`,3);
- try{task.update(1,'读取谱面文件…',{downloadedBytes:0,totalBytes:file.size});if(file.size>16*1024*1024)throw new Error('文件超过 16 MiB');const next=decodeChart(new Uint8Array(await file.arrayBuffer()));if(id!==generation)return;
- const matched=songList?findSongByChartFile(songList,file.name)?.song:null;
- const {mvUrl,mvStartSec,mvDurationSec}=matched?songAssets(matched):{mvUrl:null,mvStartSec:0,mvDurationSec:0};
- const selectedMvUrl=input('opt-mv').checked?mvUrl:null;
- const mvSizes=await measureResourceSizes([selectedMvUrl]);
- const mvTotalBytes=mvSizes.get(selectedMvUrl??'');
- const downloads=new Map<string,number>([[file.name,file.size]]);
- const downloadedBytes=()=>[...downloads.values()].reduce((sum,value)=>sum+value,0);
- const totalBytes=file.size+(mvTotalBytes??0);
- const mvReady=musicVideo.setUrl(selectedMvUrl,mvStartSec,mvDurationSec,(state)=>{
-  if(selectedMvUrl&&state.downloadedBytes!==undefined)downloads.set(selectedMvUrl,state.downloadedBytes);
-  task.update(2,state.phase==='download'?'正在加载 MV…':'MV 已就绪',{downloadedBytes:downloadedBytes(),totalBytes});
- },mvTotalBytes);
- const mvEnd=selectedMvUrl?mvStartSec+mvDurationSec:0;
- if(mvEnd>0)chart.duration=Math.max(chart.duration,mvEnd);
- currentMvId=selectedMvUrl?matched!.id:'';
- task.update(2,`应用谱面（${formatResourceSize(file.size)}）…`,{downloadedBytes:downloadedBytes(),totalBytes});chart=next;finishTime=finishTimeForSong(parseChartName(file.name)?.musicId);comboResult.hide();setChartFever(file.name);el('chart-name').textContent=file.name;setStartInfo(startInfoForFile(file.name));player?.reset();player?.transport.setDuration(chart.duration);metadata();const mvLoaded=await mvReady;
-  if(selectedMvUrl&&!mvLoaded)task.fail('MV 加载失败；已回退默认背景。');
-  else task.update(3,'预览已更新',{downloadedBytes:downloadedBytes(),totalBytes});
-  message(`已加载 ${file.name}${selectedMvUrl?`（MV ${mvLoaded?'✓':'—'}）`:''}。`);}catch(e){if(id===generation)message(`谱面读取失败：${String(e)}。原谱面已保留。`,true);}finally{task.finish();input('chart-file').value='';}
-};
-input('audio-file').onchange=async()=>{const file=input('audio-file').files?.[0];if(!file||!player)return;const task=loading.begin(`正在读取 ${file.name}`,2);try{task.update(1,'读取音频文件…',{downloadedBytes:0,totalBytes:file.size});if(await player.load(file)){task.update(2,`完成音频解码（${formatResourceSize(file.size)}）…`,{downloadedBytes:file.size,totalBytes:file.size});el('audio-name').textContent=file.name;message('音频已加载，点击播放。');}}catch(e){message(`音频解码失败：${String(e)}。请选择浏览器支持的 WAV、MP3 或 OGG 文件。`,true);}finally{task.finish();input('audio-file').value='';}};
-el('demo').onclick=()=>{generation++;musicVideo.setUrl(null);currentMvId='';chart=demoChart();finishTime=null;comboResult.hide();setChartFever('');el('chart-name').textContent='演示谱面';setStartInfo({title:'演示谱面',difficulty:null,jacketUrl:null});player?.clear();player?.transport.setDuration(chart.duration);el('audio-name').textContent='未加载音频 · 可以无声预览';metadata();message('已恢复演示谱。');};
+input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}songSelection.updateMetadata({offsetMs:Number(input('offset').value)});persistSettings();};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
 document.addEventListener('keydown',onKeydown);
@@ -394,11 +385,11 @@ void (async()=>{
 })();
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
-let baseDuration = chart.duration;
+let baseDuration = 0;
 /** 曲终时刻：主数据 PlayTime 与已解码 BGM 实际时长取较晚者。 */
 let finishTime: number | null = null;
 let resultBaseFinishTime: number | null = null;
-function applyFever(win: FeverWindow | null, source: string) {
+function applyFever(chart:Chart,win: FeverWindow | null, source: string) {
  visualRevision++;
  hud.setFeverWindow(win);
  chart.duration = Math.max(baseDuration, win?.end ?? 0, finishTime === null ? 0 : finishTime + COMBO_RESULT_CLIP_DURATION);
@@ -408,32 +399,33 @@ function applyFever(win: FeverWindow | null, source: string) {
 }
 function applyResultFinishTime(){
  finishTime=resultStartTime(resultBaseFinishTime,player?.audioDuration??null);
- applyFever(automaticFever,'歌曲元数据');
+ if(chart)applyFever(chart,automaticFever,'歌曲元数据');
 }
 function restoreFever() {
  input('opt-fever-start').value = automaticFever ? String(automaticFever.start) : '';
  input('opt-fever-end').value = automaticFever ? String(automaticFever.end) : '';
  input('opt-fever-start').removeAttribute('aria-invalid');
  input('opt-fever-end').removeAttribute('aria-invalid');
- applyFever(automaticFever, '歌曲元数据');
+ if(chart)applyFever(chart,automaticFever, '歌曲元数据');
 }
 function setChartFever(filename: string) {
- baseDuration = chart.duration;
+ baseDuration = chart?.duration??0;
  automaticFever = feverForSong(parseChartName(filename)?.musicId);
  resultBaseFinishTime=finishTimeForSong(parseChartName(filename)?.musicId);
  finishTime=resultStartTime(resultBaseFinishTime,player?.audioDuration??null);
  restoreFever();
 }
 function editFever() {
+ if(!chart)return;
  try {
   const win = parseFeverWindow(input('opt-fever-start').value, input('opt-fever-end').value);
   input('opt-fever-start').removeAttribute('aria-invalid');
   input('opt-fever-end').removeAttribute('aria-invalid');
-  applyFever(win, '手动指定');
+ applyFever(chart,win, '手动指定');
  } catch (error) {
   input('opt-fever-start').setAttribute('aria-invalid', 'true');
   input('opt-fever-end').setAttribute('aria-invalid', 'true');
-  applyFever(null, '');
+  applyFever(chart,null, '');
   el('fever-status').textContent = `${String(error)} 当前 Fever 已停用。`;
  }
 }
@@ -521,7 +513,8 @@ applyScoreCfg();
 
 let frame=0;
 let comboLastT=0;
-let lastLiveFrame: { time: number; chart: typeof chart; playing: boolean; revision: number; image: number; hudTexture: number; resultTexture: boolean; width: number; height: number; dpr: number; mode: string } | null = null;
+let lastLiveFrame: { time: number; chart: Chart | null; playing: boolean; revision: number; image: number; hudTexture: number; resultTexture: boolean; width: number; height: number; dpr: number; mode: string } | null = null;
+clearChart();
 const invalidatePreview=()=>{visualRevision++;};
 const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-grid','opt-lane-dark','opt-bg-dark',
  'opt-judge-y','opt-fs-y','opt-perfect-plus','opt-judgement-output','opt-fast-slow','opt-fever',
@@ -554,32 +547,17 @@ function syncComboResult(t:number,playing:boolean){
  comboResult.render(t-finishTime);
  comboLastT=t;
 }
+function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;start:number},view:StageView){
+ const next={time:t,chart,playing,revision:visualRevision,image:loadedImageRevision(),hudTexture:hud.textureRevision,resultTexture:comboResult.texturesReady,width:view.cssW,height:view.cssH,dpr:view.dpr,mode:renderer!.getCameraMode()};
+ const previous=lastLiveFrame;
+ const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||previous.dpr!==next.dpr||previous.mode!==next.mode;
+ if(!playing&&!changed)return;
+ musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
+}
 function animate(){
- if(player&&renderer){
-  const tr=player.transport,was=tr.playing,t=tr.time;
-  if(was&&!tr.playing){player.pause();se?.pause();}
-  const playing=tr.playing;
-  const view=liveView();
-  const next={time:t,chart,playing,revision:visualRevision,image:loadedImageRevision(),
-   hudTexture:hud.textureRevision,resultTexture:comboResult.texturesReady,
-   width:view.cssW,height:view.cssH,dpr:view.dpr,mode:renderer.getCameraMode()};
-  const previous=lastLiveFrame;
-  const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||
-   previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||
-   previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||
-   previous.dpr!==next.dpr||previous.mode!==next.mode;
-  if(playing||changed){
-   musicVideo.sync(t,playing,tr.rate);
-   hud.sync(chart,t,playing);syncComboResult(t,was&&playing);
-   renderer.setPlaying(playing);renderer.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer.render(chart,t,speed,mirror,lines);
-   input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;
-   startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);
-   composeStage(view,t);
-   const skip=playing&&t<0;
-   el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');
-   lastLiveFrame=next;
-  }
- }
+ const current=chart;
+ if(!current){frame=requestAnimationFrame(animate);return;}
+ if(player&&renderer){const tr=player.transport,was=tr.playing,t=tr.time;if(was&&!tr.playing){player.pause();se?.pause();}renderLiveChart(current,t,tr.playing,tr,liveView());}
  frame=requestAnimationFrame(animate);
 }animate();
 
@@ -588,7 +566,7 @@ function animate(){
 const EXPORT_LOGIC_HZ=60;
 /** 起点前预滚（秒）：让起点时刻已在飞的击中特效、hold 光效与 HUD 动画在第一帧就存在（时长为推断值）。 */
 const EXPORT_PREROLL_SEC=1;
-function createExportSource(opts:{intro:boolean}):ExportFrameSource{
+function createExportSource(opts:{intro:boolean},chart:Chart):ExportFrameSource{
  const canvas=el<HTMLCanvasElement>('stage-canvas');
  const gl=el<HTMLCanvasElement>('chart-canvas');
  let view:StageView={cssW:1920,cssH:1080,dpr:1};
@@ -682,9 +660,9 @@ const exportDialog=installExportDialog(el<HTMLButtonElement>('export-video'),{
  opening:EXPORT_OPENING,
  openingLabel:'包含开场过场（负时刻；关闭时最早从 0 秒起）',
  fileNamePrefix:'llll-preview',
- createSource:createExportSource,
+ createSource:opts=>{if(!chart)throw new Error('当前没有可导出的谱面');return createExportSource(opts,chart);},
  // 走带终点已含曲终横幅（chart.duration ≥ FinishTime + 横幅时长）。
- durationSec:()=>player?.transport.duration??chart.duration,
+ durationSec:()=>player?.transport.duration??chart?.duration??0,
  openingDefault:()=>input('opt-start-anim').checked,
  lockTargets:()=>[document.querySelector<HTMLElement>('.workspace-header')!,document.querySelector<HTMLElement>('aside')!,document.querySelector<HTMLElement>('.transport')!],
  title:()=>el('chart-name').textContent??'',
@@ -700,100 +678,87 @@ if(!player)el<HTMLButtonElement>('export-video').disabled=true;
 };
 let disposed=false;
 let unsubscribeSongSelection=()=>{};
-const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();el('open-chart').onclick=null;el('open-audio').onclick=null;el('demo').onclick=null;el('chart-file').onchange=null;el('audio-file').onchange=null;el('fullscreen').onclick=null;cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();el('fullscreen').onclick=null;cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
 window.addEventListener('pagehide',dispose,{once:true});
 
-/* ── 选曲：统一壳层持有选择器，舞台只负责加载与渲染 ── */
-let songList:SongList|null=null;
-/** 本地打开的谱面若是 rhythmgame_chart_<id>_<n>.bytes，就按曲目列表补上曲名 / 难度 / 封面。 */
-function startInfoForFile(name:string){
- const hit=songList?findSongByChartFile(songList,name):null;
- return hit?{title:hit.song.title,difficulty:hit.difficulty,jacketUrl:songAssets(hit.song).coverUrl}:{title:name,difficulty:null,jacketUrl:null};
-}
-/** 按曲目 Id 打开：谱面 + BGM；封面 / 曲名 / 难度色交给开场过场。 */
-async function loadSongById(songId:string,difficulty:string){
- const task=loading.begin(`正在加载曲目 ${songId} [${difficulty}]`,input('opt-mv').checked?5:4);
- const downloads=new Map<string,number>();
- const downloadedBytes=()=>[...downloads.values()].reduce((sum,value)=>sum+value,0);
- let downloadTotalBytes: number|undefined;
- const updateDownload=(url:string,name:string,state:{phase:'download'|'ready';downloadedBytes?:number})=>{
-  if(state.downloadedBytes!==undefined)downloads.set(url,state.downloadedBytes);
-  if(state.phase==='ready'&&!downloads.has(url))downloads.set(url,0);
-  task.setLabel(`加载 ${name}`);
-  task.update(0,state.phase==='download'?`正在下载 ${name}…`:`${name} 已下载`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
- };
- try{
-  task.update(0,'查找曲目资源…');
-  const song=await findSong(songId,(state)=>updateDownload(SONG_LIST_URL,'曲目库',state));
-  if(!song)throw new Error(`曲目列表里没有 Id ${songId}`);
-  const chartFile=song.charts[difficulty];
-  if(!chartFile)throw new Error(`曲目 ${songId} 没有难度 ${difficulty} 的谱面`);
-  const chartUrl=`/assets/chart/${chartFile}`;
-  const {bgmUrl,coverUrl,mvUrl,mvStartSec,mvDurationSec}=songAssets(song);
-  const activeMvUrl=input('opt-mv').checked?mvUrl:null;
-  task.update(0,'正在统计曲目资源大小…');
-  const downloadSizes=await measureResourceSizes([SONG_LIST_URL,chartUrl,bgmUrl,coverUrl,activeMvUrl]);
-  downloadTotalBytes=totalResourceSize(downloadSizes);
-  task.setLabel(`正在加载 ${song.title} [${difficulty}]`);
-  task.update(0,'正在查找谱面…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  const id=++generation;
-  message(`正在加载 ${song.title} [${difficulty}]…`);
-  task.update(1,'正在下载谱面…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  const chartBytes=await fetchBytes(chartUrl,(state)=>updateDownload(chartUrl,'谱面',state));
-  if(!chartBytes)throw new Error(`谱面下载失败：${chartFile}。请先运行 python scripts/link-assets.py`);
-  const next=decodeChart(chartBytes);
-  task.update(2,`谱面已下载（${formatResourceSize(chartBytes.byteLength)}），正在下载 BGM…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  const bgm=await fetchBytes(bgmUrl,(state)=>{
-   if(state.downloadedBytes!==undefined&&bgmUrl)downloads.set(bgmUrl,state.downloadedBytes);
-   task.update(2,state.phase==='download'?'正在下载 BGM…':'BGM 已下载',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  });
-  if(id!==generation)return;
-  chart=next;player?.clear();
-  const selectedMvUrl=input('opt-mv').checked?mvUrl:null;
-  const mvReady=musicVideo.setUrl(selectedMvUrl,mvStartSec,mvDurationSec,(state)=>{
-   if(selectedMvUrl&&state.downloadedBytes!==undefined)downloads.set(selectedMvUrl,state.downloadedBytes);
-   task.update(4,state.phase==='download'?'正在加载 MV…':'MV 已就绪',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  },downloadSizes.get(selectedMvUrl ?? ''));
-  const mvEnd=selectedMvUrl?mvStartSec+mvDurationSec:0;
-  if(mvEnd>0)chart.duration=Math.max(chart.duration,mvEnd);
-  currentMvId=selectedMvUrl?song.id:'';comboResult.hide();setChartFever(chartFile);
-  el('chart-name').textContent=`${song.title} [${difficulty}]`;
-  setStartInfo({title:song.title,difficulty,jacketUrl:coverUrl});
-  player?.transport.setDuration(chart.duration);metadata();
-  task.update(3,`正在解码 BGM${bgm?`（${formatResourceSize(bgm.byteLength)}）`:''}…`,{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  let hasBgm=false;
-  if(bgm&&player){try{hasBgm=await player.loadBuffer(bgm.buffer as ArrayBuffer);if(hasBgm){finishTime=resultStartTime(resultBaseFinishTime,player.audioDuration);applyFever(automaticFever,'歌曲元数据');}}catch(e){console.warn('[llll-preview] BGM 解码失败：',e);}}
-  if(id!==generation)return;
-  task.update(3,'正在加载曲绘…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  if(coverUrl)await preloadImages([coverUrl],(state)=>updateDownload(coverUrl,'曲绘',state));
-  if(id!==generation)return;
-  if(coverUrl&&downloadSizes.has(coverUrl))downloads.set(coverUrl,downloadSizes.get(coverUrl)!);
-  task.update(4,'正在等待 MV 就绪…',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  const mvLoaded=await mvReady;
-  if(id!==generation)return;
-  const mvTotal=selectedMvUrl?5:4;
-  if(selectedMvUrl&&!mvLoaded)task.fail('MV 加载失败；已回退默认背景。');
-  else task.update(mvTotal,selectedMvUrl?'MV 已就绪':'预览已更新',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  el('audio-name').textContent=hasBgm?`bgm_${song.soundId}.ogg`:'未找到 BGM · 可以无声预览';
-  task.update(mvTotal,'预览已更新',{downloadedBytes:downloadedBytes(),totalBytes:downloadTotalBytes});
-  message(`已加载 ${song.title} [${difficulty}]（BGM ${hasBgm?'✓':'—'}${selectedMvUrl?`，MV ${mvLoaded?'✓':'—'}`:''}），点击播放。`);
- }finally{task.finish();}
-}
-void loadSongList().then((list)=>{if(!disposed)songList=list}).catch((error)=>{
- console.warn('[llll-preview] 曲目列表加载失败：',error);
+const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0],ResolvedSource>({
+ resolve:async(state,signal)=>{
+  const task=loading.begin('正在读取谱面来源',1);
+  try{return await waitForSource(resolveSource(state,progress=>{
+   if(!signal.aborted&&!disposed&&state.revision===songSelection.getSource().revision)
+    task.update(progress.phase==='ready'?1:0,progress.resource==='credits'?'正在读取曲目资料…':'正在下载谱面…',progress.cumulative??progress);
+  }),signal);}finally{task.finish();}
+ },
+ retain:state=>sourceFiles.retain(Object.values(state.media).flatMap(media=>media.kind==='file'?[media.url]:[])),
+ pause:()=>{generation++;player?.pause();se?.stopAll();void musicVideo.setUrl(null);clearChart();},
+ empty:state=>{clearChart();void resolveSource(state).then(source=>{
+  if(!disposed&&state.revision===songSelection.getSource().revision)el('chart-name').textContent=source.metadata.title;
+ }).catch(()=>{});},
+ error:error=>{loading.cancel();clearChart();message(`曲目加载失败：${String(error)}`,true);},
+ apply:async(source:ResolvedSource,current,signal)=>{
+  const next=source.chart;
+  if(!next||!current())return;
+  const task=loading.begin(`正在加载 ${source.metadata.title}`,3);
+  try{
+   const assets=source.assets;
+   const sizes=source.download?.sizes?new Map(Object.entries(source.download.sizes))
+    :await waitForSource(measureResourceSizes([assets.bgmUrl,assets.coverUrl,input('opt-mv').checked?assets.mvUrl:null]),signal);
+   if(!current())return;
+   const initialBytes=source.download?.downloadedBytes??0;
+   const totalBytes=source.download?.sizes?source.download.totalBytes
+    :(totalResourceSize(sizes)??0)+(source.download?.totalBytes??0)||undefined;
+   const downloads=new Map<string,number>();
+   const report=(url:string|null,step:number,detail:string,bytes=0)=>{
+    if(!current())return;
+    if(url)downloads.set(url,Math.min(sizes.get(url)??bytes,bytes));
+    task.update(step,detail,{downloadedBytes:initialBytes+[...downloads.values()].reduce((sum,value)=>sum+value,0),totalBytes});
+   };
+   report(null,0,'正在加载音频…');
+   const bytes=await waitForSource(fetchBytes(assets.bgmUrl,state=>report(assets.bgmUrl,0,'正在下载音频…',state.downloadedBytes)),signal);
+   if(!current())return;
+   player?.clear();
+   let hasBgm=false;
+   if(bytes&&player){try{hasBgm=await player.loadBuffer(bytes.buffer as ArrayBuffer);}catch(error){console.warn('[llll-preview] BGM 解码失败：',error);}}
+   if(!current())return;
+   report(null,1,'正在加载曲绘…');
+   if(assets.coverUrl)await waitForSource(preloadImages([assets.coverUrl]),signal);
+   if(!current())return;
+   report(assets.coverUrl,2,'正在加载 MV…',assets.coverUrl&&!imageFailed(assets.coverUrl)?sizes.get(assets.coverUrl)??0:0);
+   const mvLoaded=await musicVideo.setUrl(assets.mvUrl,assets.mvStartSec,assets.mvDurationSec,
+    state=>report(assets.mvUrl,2,state.phase==='ready'?'MV 已就绪':'正在加载 MV…',state.downloadedBytes),sizes.get(assets.mvUrl??''));
+   if(!current())return;
+   currentMvId=assets.mvUrl?(source.songId??'local'):'';
+   setChart(next);
+   baseDuration=Math.max(next.duration,assets.mvUrl?assets.mvStartSec+assets.mvDurationSec:0);
+   automaticFever=source.metadata.fever;
+   resultBaseFinishTime=source.metadata.finishTime;
+   finishTime=resultStartTime(resultBaseFinishTime,player?.audioDuration??null);
+   restoreFever();comboResult.hide();
+   player?.setOffset(source.metadata.offsetMs/1000);
+   input('offset').value=String(source.metadata.offsetMs);
+   el('chart-name').textContent=source.metadata.difficulty
+    ? `${source.metadata.title} [${source.metadata.difficulty}]` : source.metadata.title;
+   el('audio-name').textContent=hasBgm?'BGM 已加载':'未加载音频 · 可以无声预览';
+   setStartInfo({title:source.metadata.title,difficulty:source.metadata.difficulty,jacketUrl:assets.coverUrl});
+   player?.reset();metadata();
+   message(`已加载 ${el('chart-name').textContent}（BGM ${hasBgm?'✓':'—'}${assets.mvUrl?`，MV ${mvLoaded?'✓':'—'}`:''}）。`);
+   task.update(3,'预览已更新');
+  }finally{task.finish();}
+ },
 });
-const openSong=async(songId:string,difficulty:string)=>{
- try{await loadSongById(songId,difficulty);}
- catch(e){if(!disposed)message(`曲目加载失败：${String(e)}`,true);}
+const unsubscribeShared=songSelection.subscribeSource(state=>sharedBinding.update(state),true);
+const oldDispose=dispose;
+let disposing:Promise<void>|undefined;
+const disposeShared=()=>{
+ if(disposing)return disposing;
+ unsubscribeShared();
+ player?.pause();se?.stopAll();cancelAnimationFrame(frame);
+ musicVideo.dispose();
+ disposing=(async()=>{await sharedBinding.dispose();oldDispose();})();
+ return disposing;
 };
-unsubscribeSongSelection=songSelection.subscribe((selection)=>{
- if(selection)void openSong(selection.songId,selection.difficulty);
-},false);
-const initialSelection=songSelection.get();
-if(initialSelection){
- const offset=new URLSearchParams(location.search).get('offset');
- if(offset!==null&&offset!==''&&Number.isFinite(Number(offset))){input('offset').value=offset;player?.setOffset(Number(offset)/1000);}
- void openSong(initialSelection.songId,initialSelection.difficulty);
-}
-return {dispose};
+window.removeEventListener('pagehide',dispose);
+const onPagehide=(event:PageTransitionEvent)=>{if(!event.persisted)void disposeShared();else{player?.pause();se?.stopAll();}};
+window.addEventListener('pagehide',onPagehide);
+return {dispose:()=>{window.removeEventListener('pagehide',onPagehide);return disposeShared();}};
 }

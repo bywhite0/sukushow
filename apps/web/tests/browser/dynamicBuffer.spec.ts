@@ -1,3 +1,4 @@
+import { openChartFixture } from './chartFixture';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -14,7 +15,7 @@ async function preparePage(page: Page, oldUpload = false): Promise<number> {
     replaced++;
     return route.fulfill({ status: 200, contentType: 'application/javascript', body: OLD_UPLOAD });
   });
-  await page.goto('/?view=llll');
+  await openChartFixture(page);
   await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(25);
   await page.evaluate(async () => {
     await (window as any).__LPW__.renderer.whenReady();
@@ -131,7 +132,7 @@ test('空画面不提交动态缓冲，密集谱仅提交活跃顶点', async ({
       } as typeof original;
     }
   });
-  await page.goto('/');
+  await openChartFixture(page);
   await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(25);
   await page.evaluate(() => (window as any).__LPW__.renderer.whenReady());
   await expect(page.locator('#chart-canvas')).toHaveAttribute('data-visible-notes', '0');

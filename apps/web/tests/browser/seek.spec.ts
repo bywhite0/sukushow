@@ -8,7 +8,8 @@ const comboDigits = async (page: import('@playwright/test').Page) => (await hudI
 
 test('暂停中拖动进度条：HUD 按目标时刻重算，不清零；回拖同样一致', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/'); await expect(page.locator('#message')).toContainText('就绪');
+  await page.goto('/'); await expect(page.locator('#play')).toBeEnabled();
+  await expect(page.locator('[data-resource-loading]')).toBeHidden();
   await setTime(page, 20);
   await expect(page.locator('#chart-canvas')).toHaveAttribute('data-time', '20.0000');
   await expect.poll(() => comboDigits(page)).toBeGreaterThan(0);
@@ -25,7 +26,8 @@ test('暂停中拖动进度条：HUD 按目标时刻重算，不清零；回拖�
 });
 
 test('开场过场计入进度条：起点为负，拖到过场中显示对应帧，暂停时冻结', async ({ page }) => {
-  await page.goto('/'); await expect(page.locator('#message')).toContainText('就绪');
+  await page.goto('/'); await expect(page.locator('#play')).toBeEnabled();
+  await expect(page.locator('[data-resource-loading]')).toBeHidden();
   const min = Number(await page.locator('#timeline').getAttribute('min'));
   expect(min).toBeCloseTo(-3.667, 2);
   await expect(page.locator('#time')).toContainText('-00:03.66');

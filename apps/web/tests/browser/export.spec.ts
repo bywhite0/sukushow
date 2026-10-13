@@ -1,3 +1,4 @@
+import { openChartFixture } from './chartFixture';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
 
@@ -9,8 +10,7 @@ const SE_MODULE_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-p
 const COMPOSITOR_MODULE_URL = `/@fs/${fileURLToPath(new URL('../../../../packages/llll-preview/src/stageCompositor.ts', import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
 
 async function prepare(page: Page) {
-  await page.goto('/');
-  await expect(page.locator('#message')).toContainText('就绪');
+  await openChartFixture(page);
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
     node.value = '5'; node.dispatchEvent(new Event('input'));
   });
@@ -105,7 +105,7 @@ test('密集谱拖尾导出时编码帧与舞台逐像素一致', async ({ page 
     })),
     Bpms: [{ Time: 0, Bpm: 120 }],
   };
-  await page.goto('/');
+  await openChartFixture(page);
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
   await page.locator('#chart-file').setInputFiles({ name: 'dense-trails.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(chart)) });
@@ -197,8 +197,7 @@ test('空区间拒绝导出且不锁住预览', async ({ page }) => {
 });
 
 test('包含开场时起点停在开场开头，取消勾选回到 0，再勾选拉回开场开头', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('#message')).toContainText('就绪');
+  await openChartFixture(page);
   await page.locator('#export-video').click();
   const opening = page.locator('[name="opening"]');
   const start = page.locator('[name="start"]');

@@ -10,6 +10,7 @@
  * 列表按分类分组、组内保持曲目列表原有的 orderId 顺序。
  */
 import type { SongEntry, SongList } from '@sukushow/llll-preview/songAssets'
+import { vocalVersions, chartSongFor } from './songVersions'
 
 export const DIFFICULTY_ORDER = ['NORMAL', 'HARD', 'EXPERT', 'MASTER'] as const
 export type DifficultyName = (typeof DIFFICULTY_ORDER)[number]
@@ -67,10 +68,11 @@ export function availableDifficulties(song: SongEntry | null): DifficultyName[] 
 
 export type SongPickerOptions = {
   list: SongList
-  /** 选中曲目或切换难度时回调。 */
-  onChange: (songId: string, difficulty: DifficultyName) => void
+  /** 选中歌曲或切换难度时回调；无谱歌曲的 difficulty 为 null。 */
+  onChange: (songId: string, difficulty: DifficultyName | null) => void
+  /** 切换 Another Vocal 版本。 */
+  onVersionChange?: (songId: string, difficulty: DifficultyName | null) => void
 }
-
 export type SongPickerHandle = {
   root: HTMLElement
   /** 当前曲目 Id；未选中为空串。 */
@@ -80,6 +82,7 @@ export type SongPickerHandle = {
   /** 由外部（URL 参数）指定曲目：同步控件状态并按需联动难度。 */
   select: (songId: string, difficulty?: string | null, notify?: boolean) => void
   /** 曲目列表就绪前禁用。 */
+  setCustom: (active: boolean) => void
   setDisabled: (disabled: boolean) => void
   dispose: () => void
 }
@@ -111,6 +114,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         <ul id="song-listbox" class="picker-list" role="listbox" aria-label="曲目"></ul>
       </div>
     </div>
+    <div id="song-versions" class="version-group" role="group" aria-label="歌曲版本"></div>
     <div id="song-difficulty" class="difficulty-group" role="radiogroup" aria-label="难度"></div>
   `
 
@@ -121,7 +125,9 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   const count = root.querySelector<HTMLSpanElement>('#song-count')!
   const includeNoChart = root.querySelector<HTMLInputElement>('#song-include-no-chart')!
   const difficultyGroup = root.querySelector<HTMLDivElement>('#song-difficulty')!
+  const versionGroup = root.querySelector<HTMLDivElement>('#song-versions')!
 
+  let custom = false
   let selectedSongId = ''
   let selectedDifficulty: DifficultyName | null = null
   /**
@@ -138,38 +144,67 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
 
   const findSong = (id: string) => songs.find((song) => song.id === id) ?? null
 
+  function renderVersions() {
+    const versions = vocalVersions(list, selectedSongId)
+    versionGroup.replaceChildren()
+    versionGroup.hidden = versions.length < 2
+    if (versions.length < 2) return
+    const label = document.createElement('span')
+    label.textContent = '版本'
+    versionGroup.append(label)
+    for (const version of versions) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'version-chip'
+      button.textContent = version.title
+      button.dataset.songId = version.id
+      button.setAttribute('aria-pressed', String(version.id === selectedSongId))
+      button.onclick = () => {
+        selectedSongId = version.id
+        const source = chartSongFor(list, version.id)
+        const available = availableDifficulties(source)
+        selectedDifficulty = available.includes(selectedDifficulty as DifficultyName)
+          ? selectedDifficulty : available[available.length - 1] ?? null
+        showSelectedTitle()
+        renderDifficulty()
+        renderVersions()
+        options.onVersionChange?.(version.id, selectedDifficulty)
+      }
+      versionGroup.append(button)
+    }
+  }
+
   function renderDifficulty() {
-    const song = findSong(selectedSongId)
-    const available = availableDifficulties(song)
+    const selected = chartSongFor(list, selectedSongId)
+    const available = availableDifficulties(selected)
     difficultyGroup.replaceChildren()
-    if (available.length === 0) {
+    if (custom || available.length === 0) {
       difficultyGroup.hidden = true
       return
     }
     difficultyGroup.hidden = false
     for (const name of available) {
-      const level = song?.levels?.[name]
+      const level = selected?.levels?.[name]
       const button = document.createElement('button')
       button.type = 'button'
       button.className = 'difficulty-chip'
       button.setAttribute('role', 'radio')
       button.setAttribute('aria-checked', String(name === selectedDifficulty))
       button.dataset.difficulty = name
-      // 只显示数字：难度靠顺序（N/H/E/M）与配色区分，
-      // 完整名字放 aria-label 与 title，给读屏和悬停用。
       button.setAttribute('aria-label', `${name}${level ? ` Lv.${level}` : ''}`)
       button.title = `${name}${level ? ` Lv.${level}` : ''}`
-      // 等级取自 MusicScores.yaml，与游戏内显示一致。
       button.textContent = String(level || '-')
       if (name === selectedDifficulty) button.classList.add('is-active')
       button.onclick = () => {
         selectedDifficulty = name
         renderDifficulty()
+        renderVersions()
         if (selectedSongId) onChange(selectedSongId, name)
       }
       difficultyGroup.append(button)
     }
   }
+
 
   function levelBadges(song: SongEntry): string {
     if (!song.hasChart) return '<span class="song-option-badge is-none">无谱面</span>'
@@ -288,7 +323,6 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   function openPanel() {
     if (!panel.hidden) return
     query = ''
-    includeNoChart.checked = false
     showPanel()
     renderList(Math.max(0, visible.findIndex((song) => song.id === selectedSongId)))
   }
@@ -306,20 +340,17 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     const song = findSong(songId)
     if (!song) return
     selectedSongId = songId
-    const available = availableDifficulties(song)
-    // 默认落到最高难度，与原来的行为一致。
-    if (available.length > 0 && !available.includes(selectedDifficulty as DifficultyName)) {
-      selectedDifficulty = available[available.length - 1]!
-    }
+    const available = availableDifficulties(chartSongFor(list, songId))
+    selectedDifficulty = available.includes(selectedDifficulty as DifficultyName)
+      ? selectedDifficulty : available[available.length - 1] ?? null
     query = ''
     closePanel()
     // 重渲染一次，让列表里的 is-selected 标记跟上新选择
     // （不重渲染的话，再次打开面板会看到上一首仍带勾）。
     renderList(visible.findIndex((item) => item.id === songId))
     renderDifficulty()
-    if (selectedDifficulty && song.hasChart) {
-      onChange(songId, selectedDifficulty)
-    }
+    renderVersions()
+    onChange(songId, selectedDifficulty)
   }
 
   field.oninput = () => {
@@ -385,6 +416,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
 
   renderList()
   renderDifficulty()
+  renderVersions()
 
   return {
     root,
@@ -394,7 +426,8 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       const song = findSong(songId)
       if (!song) return
       selectedSongId = songId
-      const available = availableDifficulties(song)
+      const selected = chartSongFor(list, songId)
+      const available = availableDifficulties(selected)
       const wanted = available.find(
         (name) => name === (difficulty ?? '').toUpperCase(),
       )
@@ -402,9 +435,10 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       query = ''
       showSelectedTitle()
       renderDifficulty()
-      renderList(visible.findIndex((item) => item.id === songId))
-      if (notify && selectedDifficulty) onChange(songId, selectedDifficulty)
+      renderVersions()
+      if (notify) onChange(songId, selectedDifficulty)
     },
+    setCustom: active => { custom = active; renderDifficulty() },
     setDisabled: (disabled) => {
       field.disabled = disabled
       root.classList.toggle('is-disabled', disabled)

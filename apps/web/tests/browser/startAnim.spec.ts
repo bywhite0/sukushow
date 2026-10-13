@@ -1,15 +1,16 @@
+import { openChartFixture } from './chartFixture';
 import { test, expect } from '@playwright/test';
 import { introInfo } from './lpwHook';
 test('从头播放先放开场过场，约 3.7 s 后开播；再按跳过直接开播',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
+ await openChartFixture(page);
  await expect(page.locator('#opt-start-anim')).toBeChecked();
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','idle');
  await expect(page.locator('#stage-canvas')).not.toHaveAttribute('data-intro','');
- expect((await introInfo(page)).title).toBe('演示谱面');
+ expect((await introInfo(page)).title).toBe('custom-chart.json');
  await page.getByRole('button',{name:'播放',exact:true}).click();
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','playing');
- expect((await introInfo(page)).title).toBe('演示谱面');
+ expect((await introInfo(page)).title).toBe('custom-chart.json');
  await expect(page.getByRole('button',{name:'跳过开场',exact:true})).toBeVisible();
  expect(Number(await page.locator('#chart-canvas').getAttribute('data-time'))).toBeLessThan(.05);
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','',{timeout:8_000});
@@ -28,7 +29,7 @@ test('从头播放先放开场过场，约 3.7 s 后开播；再按跳过直接�
  expect(errors).toEqual([]);
 });
 test('关闭开场过场后直接开播',async({page})=>{
- await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
+ await openChartFixture(page);
  await page.locator('#opt-start-anim').evaluate((e:HTMLInputElement)=>{e.checked=false;e.dispatchEvent(new Event('change'));});
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','');
  await page.getByRole('button',{name:'播放',exact:true}).click();
@@ -36,7 +37,7 @@ test('关闭开场过场后直接开播',async({page})=>{
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','');
 });
 test('拖离 0 秒隐藏待机画面，回到 0 秒重新显示',async({page})=>{
- await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
+ await openChartFixture(page);
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','idle');
  await page.locator('#timeline').evaluate((e:HTMLInputElement)=>{e.value='5';e.dispatchEvent(new Event('input'));});
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','');

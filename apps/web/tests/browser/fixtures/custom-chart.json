@@ -1,0 +1,11 @@
+{
+  "Notes": [
+    { "Uid": 1, "just": "2", "Flags": 192, "holds": [] },
+    { "Uid": 2, "just": "2", "Flags": 3081072, "holds": [] },
+    { "Uid": 3, "just": "3", "Flags": 10401, "holds": ["4"] },
+    { "Uid": 4, "just": "4", "Flags": 10401, "holds": ["5"] },
+    { "Uid": 5, "just": "6", "Flags": 162, "holds": [] },
+    { "Uid": 6, "just": "7", "Flags": 163, "holds": [] }
+  ],
+  "Bpms": [{ "Time": 0, "Bpm": 120 }]
+}
