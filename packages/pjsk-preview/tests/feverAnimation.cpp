@@ -48,12 +48,22 @@ int main()
     assert(pose(ClipId::Fever, 0, -1.0f).alpha == 0);
 
     using namespace fever::gauge;
-    assert(std::abs(fill(0.35f) - 0.441f) < 0.00001f);
-    assert(std::abs(fill(0.70f) - 0.882f) < 0.00001f);
-    assert(std::abs(fill(0.85f) - 0.941f) < 0.00001f);
-    assert(fill(0.0f) == 0.0f && fill(1.0f) == 1.0f);
-    assert(fill(-1.0f) == 0.0f && fill(2.0f) == 1.0f);
-    assert(fill(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+    for (const auto view : {viewport(960, 540), viewport(960, 600), viewport(1920, 1080)}) {
+        const auto fillY = [&](float progress) {
+            return view.height - fill(progress, view.height, view.pixelsPerUnit) * 9.86f * view.pixelsPerUnit;
+        };
+        assert(std::abs(fillY(0.70f) - (view.height * .5f - 2.965f * view.pixelsPerUnit)) < .001f);
+        assert(std::abs(fillY(1.0f) - (view.height * .5f - 4.105f * view.pixelsPerUnit)) < .001f);
+        assert(fill(0, view.height, view.pixelsPerUnit) == 0);
+        assert(fill(-1, view.height, view.pixelsPerUnit) == 0);
+        assert(fill(std::numeric_limits<float>::quiet_NaN(), view.height, view.pixelsPerUnit) == 0);
+        assert(fill(std::numeric_limits<float>::infinity(), view.height, view.pixelsPerUnit) == 0);
+        assert(fill(.35f, view.height, view.pixelsPerUnit) < fill(.70f, view.height, view.pixelsPerUnit));
+        assert(fill(.85f, view.height, view.pixelsPerUnit) < fill(1, view.height, view.pixelsPerUnit));
+        assert(fill(2, view.height, view.pixelsPerUnit) == 1);
+    }
+    assert(fill(1, 540, 54) < fill(1.1f, 540, 54));
+    assert(fill(1, 0, 0) == 0);
     assert(visible(0.01f, -1.0f) && !visible(0.0f, -1.0f));
     assert(visible(0.70f, -1.0f) && !visible(0.70f, 0.0f));
     const auto& top = rightMesh[0];

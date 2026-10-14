@@ -3742,7 +3742,7 @@ void main() {
         const float unit = projection.pixelsPerUnit;
         auto px = [&](float x) { return previewRectWindow[0] + projection.width * 0.5f + x * unit; };
         auto py = [&](float y) { return previewRectWindow[1] + projection.height * 0.5f - y * unit; };
-        const float fillValue = fever::gauge::fill(feverProgress);
+        const float fillValue = fever::gauge::fill(feverProgress, projection.height, unit);
         const float flashLocalSec = gPlayer.hasFeverFlashStart
             ? chartTimeSec - static_cast<float>(gPlayer.feverFlashStartSec) : -1.0f;
         if (fever::gauge::flashVisible(feverProgress, gPlayer.superFeverEnabled, flashLocalSec, gPlayer.effectProfile)) {

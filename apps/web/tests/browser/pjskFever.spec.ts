@@ -88,7 +88,7 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   expect(difference(flash, await capture(3.25, true, true))).toBe(0);
   await page.locator('#effect-profile').selectOption('1');
   expect(difference(flash, await capture(3.25, true, true))).toBeGreaterThan(1000);
-  // 少量充能应从画布底边出现，满充能可延伸到 SuperFever 指针上方。
+  // 少量充能从画布底边出现；100% 对齐 SuperFever，不再铺满加高后的条。
   await page.evaluate(() => {
     const p = (window as any).__LLL_PJSK__.player;
     p.setFeverWindow(200, 210);
@@ -99,6 +99,6 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   expect(difference(lowCharge, noCharge)).toBeGreaterThan(100);
   const fullCharge = await capture(100.5, true, false, 'top');
   const noFullCharge = await capture(100.5, false, false, 'top');
-  expect(difference(fullCharge, noFullCharge)).toBeGreaterThan(100);
+  expect(difference(fullCharge, noFullCharge)).toBe(0);
   await page.evaluate(() => (window as any).__LLL_PJSK__.player.setExportMode(false));
 });

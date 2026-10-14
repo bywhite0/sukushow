@@ -29,12 +29,18 @@ inline float alignedDistance(float x, float y, float topUnit, float baseDistance
     const float inner = 1.552f + (9.78f - 1.552f) * t;
     const float widthUnit = topUnit + (108.0f - topUnit) * t;
     return baseDistance + (std::abs(x) - inner) * widthUnit;
-}inline float fill(float progress)
+}
+inline float fill(float progress, float viewportHeight, float pixelsPerUnit)
 {
-    const float p = finite01(progress);
-    const float fever = std::clamp(p / feverThreshold, 0.0f, 1.0f);
-    const float super = std::clamp((p - feverThreshold) / (1.0f - feverThreshold), 0.0f, 1.0f);
-    return fever * feverRate + super * (superRate - feverRate);
+    if (!std::isfinite(progress) || !(viewportHeight > 0) || !(pixelsPerUnit > 0)) return 0;
+    const float height = 9.86f * pixelsPerUnit;
+    const float fever = (viewportHeight * .5f + 2.965f * pixelsPerUnit) / height;
+    const float super = (viewportHeight * .5f + 4.105f * pixelsPerUnit) / height;
+    // 底端锚定画布后按标签校准两段量程；100% 以上继续延伸到网格顶端。
+    const float p = std::max(0.0f, progress);
+    const float value = p <= feverThreshold ? p / feverThreshold * fever
+        : fever + (p - feverThreshold) / (1.0f - feverThreshold) * (super - fever);
+    return std::clamp(value, 0.0f, 1.0f);
 }
 
 inline bool visible(float progress, float feverLocalSec)
