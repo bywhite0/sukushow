@@ -23,7 +23,7 @@ export interface LocalPaths {
   /**
    * 已解包的曲绘目录（`<曲目Id>.png`）。
    *
-   * 曲绘源包是 `cache/plain/image_music_thumbnail_<id>.assetbundle`，需解包才可用；
+   * 曲绘源包是 `cache/plain/image_sticker_40<id>.assetbundle`，需解包才可用；
    * 统一前端的曲绘资源位于 `apps/web/public/assets/jacket/`。
    */
   jacketDir?: string;
