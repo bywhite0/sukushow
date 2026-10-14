@@ -114,7 +114,13 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         <ul id="song-listbox" class="picker-list" role="listbox" aria-label="曲目"></ul>
       </div>
     </div>
-    <div id="song-versions" class="version-group" role="group" aria-label="歌曲版本"></div>
+    <div id="song-versions" class="version-group" hidden>
+      <button id="song-version-toggle" class="version-toggle" type="button"
+              aria-label="演唱版本" aria-haspopup="menu" aria-expanded="false" aria-controls="song-version-panel">
+        <span class="version-caption">演唱版本</span><span data-version-current></span><span aria-hidden="true">⌄</span>
+      </button>
+      <div id="song-version-panel" class="version-panel" role="menu" aria-label="演唱版本" hidden></div>
+    </div>
     <div id="song-difficulty" class="difficulty-group" role="radiogroup" aria-label="难度"></div>
   `
 
@@ -126,6 +132,9 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   const includeNoChart = root.querySelector<HTMLInputElement>('#song-include-no-chart')!
   const difficultyGroup = root.querySelector<HTMLDivElement>('#song-difficulty')!
   const versionGroup = root.querySelector<HTMLDivElement>('#song-versions')!
+  const versionToggle = root.querySelector<HTMLButtonElement>('#song-version-toggle')!
+  const versionPanel = root.querySelector<HTMLDivElement>('#song-version-panel')!
+  const versionCurrent = root.querySelector<HTMLSpanElement>('[data-version-current]')!
 
   let custom = false
   let selectedSongId = ''
@@ -144,22 +153,44 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
 
   const findSong = (id: string) => songs.find((song) => song.id === id) ?? null
 
+  function closeVersions(focus = false) {
+    versionPanel.hidden = true
+    versionToggle.setAttribute('aria-expanded', 'false')
+    if (focus) versionToggle.focus()
+  }
+
+  function openVersions() {
+    if (versionToggle.disabled || versionGroup.hidden) return
+    closePanel()
+    versionPanel.hidden = false
+    versionToggle.setAttribute('aria-expanded', 'true')
+    versionPanel.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
+  }
+
   function renderVersions() {
     const versions = vocalVersions(list, selectedSongId)
-    versionGroup.replaceChildren()
+    closeVersions()
+    versionPanel.replaceChildren()
     versionGroup.hidden = versions.length < 2
     if (versions.length < 2) return
-    const label = document.createElement('span')
-    label.textContent = '版本'
-    versionGroup.append(label)
+    const selected = findSong(selectedSongId)!
+    versionCurrent.textContent = selected.title.match(/[（(](.+?)[）)]/)?.[1] ?? `${selected.generationsId}期`
+    versionToggle.title = selected.title
     for (const version of versions) {
       const button = document.createElement('button')
       button.type = 'button'
-      button.className = 'version-chip'
-      button.textContent = version.title
+      button.className = 'version-option'
+      button.tabIndex = -1
       button.dataset.songId = version.id
-      button.setAttribute('aria-pressed', String(version.id === selectedSongId))
+      button.setAttribute('role', 'menuitemradio')
+      button.setAttribute('aria-checked', String(version.id === selectedSongId))
+      const title = document.createElement('span')
+      title.textContent = version.title
+      const detail = document.createElement('small')
+      detail.textContent = `${version.generationsId}期 · ${version.unitName}`
+      button.append(title, detail)
       button.onclick = () => {
+        if (selectedSongId === version.id) { closeVersions(true); return }
         selectedSongId = version.id
         const source = chartSongFor(list, version.id)
         const available = availableDifficulties(source)
@@ -168,11 +199,37 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         showSelectedTitle()
         renderDifficulty()
         renderVersions()
+        closeVersions(true)
         options.onVersionChange?.(version.id, selectedDifficulty)
       }
-      versionGroup.append(button)
+      versionPanel.append(button)
     }
   }
+
+  versionToggle.onclick = () => versionPanel.hidden ? openVersions() : closeVersions(true)
+  versionToggle.onkeydown = event => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    openVersions()
+  }
+  versionPanel.onkeydown = event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeVersions(true); return }
+    if (event.key === 'Tab') { closeVersions(true); return }
+    const buttons = [...versionPanel.querySelectorAll<HTMLButtonElement>('button')]
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    const targets: Record<string, number> = {
+      ArrowDown: (index + 1) % buttons.length,
+      ArrowUp: (index - 1 + buttons.length) % buttons.length,
+      Home: 0, End: buttons.length - 1,
+    }
+    if (!(event.key in targets)) return
+    event.preventDefault()
+    buttons[targets[event.key]]?.focus()
+  }
+  const onVersionFocusOut = (event: FocusEvent) => {
+    if (!versionGroup.contains(event.relatedTarget as Node | null)) closeVersions()
+  }
+  versionGroup.addEventListener('focusout', onVersionFocusOut)
 
   function renderDifficulty() {
     const selected = chartSongFor(list, selectedSongId)
@@ -309,6 +366,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   /** 只负责把面板露出来，不动查询词。 */
   function showPanel() {
     if (!panel.hidden) return
+    closeVersions()
     panel.hidden = false
     field.setAttribute('aria-expanded', 'true')
     root.classList.add('is-open')
@@ -411,6 +469,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   // 点到控件之外就收面板。
   const onDocumentPointerDown = (event: PointerEvent) => {
     if (!root.contains(event.target as Node)) closePanel()
+    if (!versionGroup.contains(event.target as Node)) closeVersions()
   }
   document.addEventListener('pointerdown', onDocumentPointerDown)
 
@@ -441,11 +500,13 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     setCustom: active => { custom = active; renderDifficulty() },
     setDisabled: (disabled) => {
       field.disabled = disabled
+      versionToggle.disabled = disabled
       root.classList.toggle('is-disabled', disabled)
-      if (disabled) closePanel()
+      if (disabled) { closePanel(); closeVersions() }
     },
     dispose: () => {
       document.removeEventListener('pointerdown', onDocumentPointerDown)
+      versionGroup.removeEventListener('focusout', onVersionFocusOut)
       root.remove()
     },
   }
