@@ -738,7 +738,7 @@ function startSharedBinding() {
       await loadChart(source.chart, source.metadata.title, source.metadata.offsetMs,
         source.assets, source.metadata.difficulty, source.metadata, { finishTime: source.metadata.finishTime, source, current, signal })
       if (!current()) { if (!disposed) empty(); return }
-      applyFeverCharge(source.chart, source.chartSongId)
+      applyFeverCharge(source.chart, source.chartSongId ?? source.songId)
       player.setFeverWindow(source.metadata.fever?.start ?? -1, source.metadata.fever?.end ?? -1)
       const feverStatus = root.querySelector<HTMLElement>('#fever-status')
       if (feverStatus) feverStatus.textContent = source.metadata.fever
