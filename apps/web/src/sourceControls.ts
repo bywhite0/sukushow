@@ -30,20 +30,29 @@ export function createSourceControls(options: {
   if (!dialog) {
     dialog = document.createElement('dialog')
     dialog.id = 'metadata-dialog'
-    dialog.innerHTML = `<form method="dialog" data-metadata-form>
-      <h2>编辑自制谱元数据</h2>
-      <label>曲名<input name="title" required></label>
-      <label>难度<input name="difficulty"></label>
-      <label>谱师<input name="scoreCreator"></label>
-      <label>作词<input name="lyricist"></label><label>作曲<input name="composer"></label>
-      <label>编曲<input name="arranger"></label><label>演唱<input name="vocal"></label>
-      <label>音频偏移（毫秒）<input name="offsetMs" type="number" step="any"></label>
-      <label>Fever 开始（秒）<input name="feverStart" type="number" step="any"></label>
-      <label>Fever 结束（秒）<input name="feverEnd" type="number" step="any"></label>
-      <label>曲终时间（秒）<input name="finishTime" type="number" min="0" step="any"></label>
-      <p data-metadata-error role="alert"></p>
-      <button type="button" data-metadata-cancel>取消</button>
-      <button type="submit">保存</button>
+    dialog.className = 'metadata-dialog'
+    dialog.setAttribute('aria-labelledby', 'metadata-heading')
+    dialog.innerHTML = `<form method="dialog" class="metadata-form" data-metadata-form>
+      <header class="metadata-head"><h2 id="metadata-heading">编辑自制谱元数据</h2>
+        <p>仅用于当前预览，不修改原谱面文件。</p></header>
+      <fieldset class="metadata-grid"><legend>曲目信息</legend>
+        <label class="metadata-wide">曲名<input name="title" required></label>
+        <label>难度<input name="difficulty"></label>
+        <label>谱师<input name="scoreCreator"></label>
+        <label>作词<input name="lyricist"></label><label>作曲<input name="composer"></label>
+        <label>编曲<input name="arranger"></label><label>演唱<input name="vocal"></label>
+      </fieldset>
+      <fieldset class="metadata-grid"><legend>时间设置</legend>
+        <label>音频偏移（毫秒）<input name="offsetMs" type="number" step="any"></label>
+        <label>曲终时间（秒）<input name="finishTime" type="number" min="0" step="any"></label>
+        <label>Fever 开始（秒）<input name="feverStart" type="number" step="any"></label>
+        <label>Fever 结束（秒）<input name="feverEnd" type="number" step="any"></label>
+      </fieldset>
+      <p class="metadata-error" data-metadata-error role="alert"></p>
+      <footer class="metadata-actions">
+        <button class="quiet" type="button" data-metadata-cancel>取消</button>
+        <button class="primary" type="submit">保存</button>
+      </footer>
     </form>`
     root.append(dialog)
   }
