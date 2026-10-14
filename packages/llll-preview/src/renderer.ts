@@ -186,7 +186,8 @@ export class PreviewRenderer {
         this.notes.add(this.feverLayers.group);
       }
     }
-    for (const batch of [this.track, this.holds, this.lines, this.oldNotes]) batch.mesh.visible = false;
+    // 同时押线已移入正式音符场景，不能随旧绘制对象一起隐藏。
+    for (const batch of [this.track, this.holds, this.oldNotes]) batch.mesh.visible = false;
   }
   private plane() {
     const y = 3.96, near = 7.6, far = -82.4;
