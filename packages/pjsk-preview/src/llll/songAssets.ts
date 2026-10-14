@@ -4,7 +4,7 @@
  * 资源位于统一前端的 `apps/web/public/assets/`。
  *
  * 命名对应关系（均来自 4L masterdata）：
- *   曲绘  apps/web/public/assets/jacket/<JacketId>.webp          288x288 RGBA
+ *   曲绘  apps/web/public/assets/jacket/<JacketId>.png           原始分辨率 RGBA
  *   BGM   apps/web/public/assets/audio/bgm_<SoundId>.ogg
  *
  * 注意 JacketId 与 SoundId 都**不一定**等于曲目 Id：

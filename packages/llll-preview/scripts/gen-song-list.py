@@ -111,8 +111,8 @@ def main():
         if match:
             charts_by_song[match.group(1)].add(match.group(2))
 
-    # 曲绘本图：image_music_thumbnail_<JacketId>
-    jackets = {name.rsplit('_', 1)[-1] for name in catalog if name.startswith('image_music_thumbnail_')}
+    # 曲绘本图：image_sticker_40<JacketId>
+    jackets = {name.removeprefix('image_sticker_40') for name in catalog if name.startswith('image_sticker_40')}
 
     songs = []
     for music in musics:
@@ -146,7 +146,7 @@ def main():
             'unitName': clean_text(units.get(music.get('UnitId', ''), '')),
             'generationsId': music.get('GenerationsId', ''),
             'jacketId': jacket_id,
-            'jacketAsset': f'image_music_thumbnail_{jacket_id}',
+            'jacketAsset': f'image_sticker_40{jacket_id}',
             'jacketPath': f'/assets/jacket/{jacket_id}.png',
             'hasJacket': jacket_id in jackets,
             'charts': {DIFFICULTIES[d]: f'rhythmgame_chart_{music_id}_{d}.bytes' for d in difficulties},

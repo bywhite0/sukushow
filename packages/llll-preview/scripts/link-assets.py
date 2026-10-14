@@ -7,7 +7,7 @@ MV 使用 ffmpeg 将本地 USM 内的视频流无损重封装为 MP4，仅显式
 只在本地链接进来；换机器时重跑本脚本即可。
 
 来源（本机路径不进版本库）：
-  曲绘  <4L>/exports/images/music/thumbnail/image_music_thumbnail_<JacketId>.png  288x288 RGBA
+  曲绘  <4L>/exports/images/sticker/image_sticker_40<JacketId>.png  原始分辨率 RGBA
   BGM   <livestage-spine-web>/public/audio/bgm_<SoundId>.ogg
   谱面  <4L>/cache/plain/rhythmgame_chart_<Id>_<n>.bytes
   MV    <4L>/cache/plain/music_lyric_video_<Id>.usm → <assets>/mv/<Id>.mp4
@@ -30,12 +30,12 @@ DEST_ROOT = os.path.abspath(os.path.join(PROJECT, '..', '..', 'apps', 'web', 'pu
 
 SOURCES = {
     'jacket': {
-        # 用 4L 的原始 PNG（288x288 RGBA），而非 livestage 的有损 WebP。
+        # 用 image_sticker_40<JacketId> 的原始 PNG（原始分辨率 RGBA）。
         'env': 'LLLL_JACKET_DIR',
         'dest': os.path.join(DEST_ROOT, 'jacket'),
         'ext': '.png',
-        'prefix': 'image_music_thumbnail_',
-        'strip_prefix': 'image_music_thumbnail_',
+        'prefix': 'image_sticker_40',
+        'strip_prefix': 'image_sticker_40',
     },
     'audio': {
         'env': 'LLLL_AUDIO_DIR',

@@ -135,7 +135,7 @@ export interface MetaPanel {
   /**
    * 封面图（data URI 或链接）。
    *
-   * 曲绘源包是 `image_music_thumbnail_<id>.assetbundle`，需解包后取 PNG。
+   * 曲绘源包是 `image_sticker_40<id>.assetbundle`，需解包后取 PNG。
    */
   jacket?: string;
   /** 封面边长（像素），默认 192（同参考仓库的 `meta_size`）。 */
