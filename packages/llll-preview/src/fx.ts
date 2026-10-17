@@ -274,7 +274,8 @@ export class HitFx {
     const key = JSON.stringify([mat.tex, shader, order]);
     if (!this.batches.has(key)) {
       const material = fxMaterial(this.tex[mat.tex], shader.includes('9Slice') ? 0.495 : 0, 256, shader.includes('Num Combo'));
-      const batch = new FxBatch(16000, material, 40 + order);
+      // 与音符 sprite（Default 层 20/21/25）同层比较，直接用原包 m_SortingOrder。
+      const batch = new FxBatch(16000, material, order);
       this.batches.set(key, batch);
       this.group.add(batch.mesh);
     }

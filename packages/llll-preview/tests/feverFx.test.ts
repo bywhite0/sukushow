@@ -411,7 +411,7 @@ it('原始核心入场 prefab 以 Rate over Distance 沿路径持续发射，并
       const drawn = fx.group.children.filter(c => (c as THREE.Mesh).geometry.drawRange.count > 0) as THREE.Mesh[];
       // 两个发射器贴图不同（#607 用 light03、#562 用 ParticleA001）⇒ 分属两个批次。
       expect(drawn.length).toBeGreaterThanOrEqual(2);
-      for (const mesh of drawn) expect(mesh.renderOrder).toBe(640);
+      for (const mesh of drawn) expect(mesh.renderOrder).toBe(600);
       // 彗星本体批次 = 顶点数最多的那个。
       const main = drawn.reduce((a, b) =>
         a.geometry.drawRange.count >= b.geometry.drawRange.count ? a : b);
@@ -693,7 +693,8 @@ it('Fever 共用贴图的节点保留各自 sortingOrder', () => {
     fx.draw();
     const orders = fx.group.children.filter(child => (child as THREE.Mesh).geometry.drawRange.count > 0)
       .map(child => child.renderOrder).sort((a, b) => a - b);
-    expect(orders).toEqual([59, 60]);
+    // 原包 Particle_Height_Left=20 / _02=19。
+    expect(orders).toEqual([19, 20]);
   } finally { fx.dispose(); texture.dispose(); }
 });
 

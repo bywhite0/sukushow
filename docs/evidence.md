@@ -89,7 +89,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 
 - **拖尾颜色继承与寿命采样**：原始 #544 `TrailModule.inheritParticleColor=true`。拖尾使用粒子当前寿命相位的颜色（含 TwoGradients 混合与 alpha）再乘拖尾寿命颜色，关闭继承时仍保留拖尾寿命颜色。已用现有 `_rg_dis.py` 与原 APK 的 ELF/Capstone 链路交叉核验，UnityPy 导出仅用于字段值与对象引用定位，不作为运行时语义的唯一证据：`libunity.so 0x1066208–0x1066238` 将 TrailModule +0x58 绑定为 colorOverLifetime（粒子系统数据 +0x1118）；`0x12AB318–0x12AB388` 从粒子剩余/初始寿命计算归一化年龄，并由同一粒子 seed 加 `0x591BC05C` 派生独立颜色因子；`0x12AB38C–0x12AB468` 按模式采样渐变，`0x12AB46C–0x12AB4D0` 乘继承颜色。预览已修复将 colorOverLifetime 错按历史顶点年龄采样的问题，TwoGradients 使用固定 seed 因子混合；宽度与拖尾寿命颜色共用本地粒子 seed。原生随后在 `0x12A81CC–0x12A82CC` 独立采样 colorOverTrail，预览现已按逐端点参数独立采样 colorOverTrail 并乘寿命颜色；支持单渐变及归一化为单键渐变的常量。原始 Fever 节点均为常量模式，根节点 alpha=1，Height/HeightCloss=0.3843137324、Start=0.2549019754、Star/Closs=0.5607843399；旧导出遗漏的常量由 `src/feverTrailColors.json` 补足，仅作用于 feverLeft/Right，并允许新导出显式字段覆盖。数值来自原场景，与 `0x1066298–0x10662D0` 的独立 colorOverTrail 绑定和 `0x12A82D0–0x12A8330` 的乘色路径交叉核验。沿长度 TwoGradients 与原生 Color32 量化乘色尚未逐指令复现。
 
-- **粒子排序**：共用贴图和 shader 不代表共用排序层。Fever 的 Particle_Height / Particle_Height_02 分别为 20/19；Particle_Start / Particle_Closs 分别为 23/20。HitFx 批次键包含 `sortingOrder`，避免后创建节点继承第一个节点的排序。预览仍保留统一的 +40 渲染层偏移。
+- **粒子排序**：共用贴图和 shader 不代表共用排序层。Fever 的 Particle_Height / Particle_Height_02 分别为 20/19；Particle_Start / Particle_Closs 分别为 23/20。HitFx 批次键包含 `sortingOrder`，避免后创建节点继承第一个节点的排序。批次直接用原包 `ParticleSystemRenderer.m_SortingOrder`：音符 sprite 20/21/25、击中特效 0/29/30、彗星 600。
 
 - **双色渐变**：原始 #544 的 ColorModule 为 `minMaxState=3`（TwoGradients）。按 Unity `MinMaxGradient.Evaluate(time, lerpFactor)`，先在同一寿命相位采样两条渐变，再连续混合 RGBA；不能随机二选一。预览每个粒子出生时固定混合比例，随寿命推进采样，两条曲线的 alpha 同样参与插值。该修复适用于共用 HitFx 渲染器的所有 TwoGradients 节点。
 
