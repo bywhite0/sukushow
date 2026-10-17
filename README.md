@@ -4,10 +4,10 @@ LLLL 谱面预览工作区。统一前端提供 LLLL 舞台（3D/2D 相机切换
 
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
-| `apps/web` | 唯一浏览器前端 | 源码 MIT；构建产物 AGPL-3.0-only |
+| `apps/web` | 唯一浏览器前端 | 自有代码 MIT；与 `pjsk-preview` 组合后整体 AGPL-3.0-only |
 | `packages/chart` | LLLL 原格式谱面解析；曲目的 Fever 时段与曲终时刻 | MIT |
 | `packages/llll-preview` | LLLL WebGL 渲染、HUD 与音频 | MIT |
-| `packages/pjsk-preview` | PJSK WASM 渲染与谱面适配 | AGPL-3.0-only |
+| `packages/pjsk-preview` | PJSK WASM 渲染、LLLL 谱面适配与 PJSK 素材 | AGPL-3.0-only |
 | `packages/export` | 视频导出核心：逐帧编码、离线混音与封装 | MIT |
 | `packages/chart-svg` | 静态 SVG 图片导出：平面布局、音符几何与 SVG 生成 | MIT |
 
@@ -34,4 +34,4 @@ python packages/llll-preview/scripts/link-assets.py --only mv
 - 文件验证失败保留此前有效来源；连续打开谱面以最后选择为准。谱面上限为 16 MiB，本地音频上限为 128 MiB，超限文件在读取前拒绝。媒体验证 30 秒无响应会提示重试；下载大小未知时不显示不完整的总量。
 - 历史切换到加载失败的谱面 URL 时停止旧谱预览，不沿用此前可播放来源。预览控件与元数据编辑器共用音频偏移，媒体更新和模式往返保留调整。失效来源的网络等待不阻塞新来源或模式切换；播放器应用仍串行完成。
 
-许可按目录区分，见上表：MIT 部分的全文为 [LICENSE-MIT](LICENSE-MIT)，AGPL 部分的全文为 [LICENSE-AGPL](LICENSE-AGPL)，各目录另附自己的 LICENSE。依赖与许可边界见 [工作区说明](docs/workspace.md)，第三方来源与附带素材见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+许可按目录区分，见上表：MIT 部分的全文为 [LICENSE-MIT](LICENSE-MIT)，AGPL 部分的全文为 [LICENSE-AGPL](LICENSE-AGPL)，各目录另附自己的 LICENSE。`apps/web` 静态引用 `packages/pjsk-preview`，组合后的源码与构建产物整体按 AGPL-3.0-only 分发；MIT 只适用于各目录自有代码。`apps/web/public/` 与 `packages/pjsk-preview/public/` 内附带的游戏素材不随上述代码许可授权，权利与使用限制见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。依赖与许可边界见 [工作区说明](docs/workspace.md)。

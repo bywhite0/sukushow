@@ -2,6 +2,7 @@
   "name": "sukushow",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN README.md",
   "packageManager": "pnpm@10.26.2",
   "type": "module",
   "scripts": {

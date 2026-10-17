@@ -35,10 +35,6 @@
 - 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类，标签支持方向键及 Home / End；击中特效位于「显示与特效」，技术分位于「计分」。
 - `settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能开关保留配置入口，尚未接入对应语音或技能演出。MV 开关已接入节奏游戏画面：原包 `RhythmGameMainSceneParam.ShouldMusicVideo` 要求 `IsVideoMode == 1` 且 `EnableMusicVideo` 开启（4.12.0 `libil2cpp.so` RVA 0x4AEB2E0）；`MusicLyricVideoResolver.Process` 使用当前时刻减去电影片段起点（RVA 0x4997D80）。58 首曲目的 MV 起点与电影自身时长提取自对应 `Cri Mana Track` / `CriManaClip`（`m_Start` / `m_clipDuration`）；MV 不按 BGM `PlayTime` 或 `Cri Mana Track.m_Duration` 提前停止。见 `packages/llll-preview/src/mv-timing.json`；15 首起点非零。电影无音轨，使用 `link-assets.py --only mv` 和 ffmpeg stream copy 重封装至不入库的 `apps/web/public/assets/mv/`；MV 已成功加载后，舞台始终处于 MV 背景模式，视频当前帧暂不可用时使用黑色 fallback，不再绘制默认背景；资源加载失败时才回退默认背景。曲目加载进度包含 MV 的 HEAD 大小与 `loadeddata` 就绪状态。
 
-## 参考
-
-[sekai-mmw-preview-web](https://github.com/watagashi-uni/sekai-mmw-preview-web) 提供文件导入和播放交互参考；未移植其源码、WASM 或资产。
-
 ## 兼容边界
 
 允许零时长 Hold、负时间 BPM 段和多个前段共享后继；拒绝倒序端点、非有限数、越界轨道和重复 UID。UID 严格递增约束防止串链环路。

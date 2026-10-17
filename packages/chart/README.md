@@ -36,4 +36,4 @@ pnpm metadata:timing <masterdata 目录> <cache/plain 目录>   # 重新生成 s
 
 ## 许可
 
-MIT。
+MIT，见 [LICENSE](LICENSE)。
