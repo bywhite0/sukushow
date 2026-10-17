@@ -14,9 +14,13 @@
  * 输出 = tex × 顶点色），而加色与顺序无关，所以 2、3 两层各用一张 canvas 就是精确结果。
  *
  * 粒子按「距播放开始的时间」解析求解（位置、尺寸、颜色都是时间的纯函数），拖动进度也能复现同一帧。
+ *
+ * 着色 = startColor × ColorOverLifetime 渐变。渐变有两种模式：单条（mode 1）直接按寿命采样；
+ * TwoGradients（mode 3）每颗粒子在出生时定死一个混合比例，同一寿命相位采样 min/max 两条渐变后
+ * 按比例混合——因此同一发射器里会同时出现两套配色（原包的「变色」就是这条随机轴）。
  */
 import { hudScale } from './hud';
-import { fnv1a, lcg } from './rng';
+import { fnv1a, lcg, mixSeed } from './rng';
 import { sampleCurve } from './startAnim';
 import {
   COMBO_RESULT_BANNERS,
@@ -83,6 +87,20 @@ export function evalGradient(grad: NonNullable<BannerEmitter['grad']>, x: number
   const [r, g, b] = lerpKeys(cols, x, (k) => [k[1], k[2], k[3]]);
   const [a] = lerpKeys(alps, x, (k) => [k[1]]);
   return [r!, g!, b!, a!];
+}
+
+type Gradient = NonNullable<BannerEmitter['grad']>;
+
+/**
+ * TwoGradients（mode 3）：每颗粒子按自己的随机数 r 在两条渐变之间取一条，再按寿命采样。
+ * 口径同 HitFx（`docs/evidence.md`「双色渐变」，已按 `MinMaxGradient.Evaluate(time, lerpFactor)`
+ * 的原生采样顺序核对）：先在**同一寿命相位**分别采样两条渐变，再按 r 连续混合 RGBA，
+ * 不是随机二选一，也不是先把两条渐变的键插值再求值。混合比例在出生时定死（见 BannerParticle.gr）。
+ */
+export function evalGradientPair(a: Gradient, b: Gradient, r: number, x: number): [number, number, number, number] {
+  const pa = evalGradient(a, x);
+  const pb = evalGradient(b, x);
+  return [lerp(pa[0], pb[0], r), lerp(pa[1], pb[1], r), lerp(pa[2], pb[2], r), lerp(pa[3], pb[3], r)];
 }
 
 /**
@@ -155,11 +173,15 @@ export type BannerParticle = {
   /** 出生位置（unit，y 向上）与平面内运动方向（单位向量；Box 发射沿视线，平面内为 0）。 */
   ox: number; oy: number; dx: number; dy: number;
   size: number; sizeY: number; rotSpeed: number; limit: number;
+  /** TwoGradients 的随机轴：出生时定死，决定这颗粒子在 min/max 两条渐变之间的位置。 */
+  gr: number;
 };
 
 /**
  * 一次 Play 的全部粒子。随机数顺序：系统 startDelay → 每粒子 life、speed、angle、radius、
  * size、sizeY、rotation、limit。burst 共 cycles 轮，每轮间隔 repeatInterval，每轮发 count 个。
+ * TwoGradients 的随机轴单独用 (发射器路径, 轮次, 序号) 的哈希取，不占主序列——
+ * 主序列是自造 LCG（Unity 的序列本就复现不了），另开一条可避免新增随机数把已有粒子的位置全部挪位。
  * Circle 形状（radius · radiusThickness）：厚度 0 恰在边上；厚度 > 0 时在环带内按面积均匀取半径（分布为推断）。
  * 方向沿半径向外（Circle 发射方向）。绕 X 转 180° 只是镜像，均匀角分布下不影响。
  * Box 形状（boxThickness 0 = 整个体积）：在 scale.x × scale.y 矩形内均匀取点；发射方向沿形状局部 ±Z，
@@ -193,7 +215,8 @@ export function spawnEmitter(e: BannerEmitter, index: number, playStart: number)
       const sizeY = e.sizeY ? range(e.sizeY, rnd()) : size;
       const rotSpeed = e.rotSpeed ? range(e.rotSpeed, rnd()) : 0;
       const limit = e.limit ? range(e.limit, rnd()) : Infinity;
-      out.push({ emitter: index, spawn, life, speed, ox, oy, dx, dy, size, sizeY, rotSpeed, limit });
+      const gr = mixSeed(fnv1a(e.path), c, i) / 4294967296;
+      out.push({ emitter: index, spawn, life, speed, ox, oy, dx, dy, size, sizeY, rotSpeed, limit, gr });
     }
   }
   return out;
@@ -212,7 +235,9 @@ export function particleAt(p: BannerParticle, e: BannerEmitter, t: number): Part
   const dist = Number.isFinite(p.limit) ? dampedDistance(p.speed, p.limit, e.dampen, age) : p.speed * age;
   const k = e.sizeKeys ? evalHermite(e.sizeKeys, x) : 1;
   const cap = e.maxSize * DESIGN_H;
-  const g = e.grad ? evalGradient(e.grad, x) : [1, 1, 1, 1];
+  const g = !e.grad ? [1, 1, 1, 1]
+    : e.grad2 ? evalGradientPair(e.grad, e.grad2, p.gr, x)
+    : evalGradient(e.grad, x);
   return {
     x: (p.ox + p.dx * dist) * BANNER_UNIT,
     y: (p.oy + p.dy * dist) * BANNER_UNIT,
