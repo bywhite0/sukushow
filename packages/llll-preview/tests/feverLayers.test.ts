@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { expect, it } from 'vitest';
-import { FeverLayers } from '../src/feverLayers';
+import { FeverLayers, FEVER_ORDER } from '../src/feverLayers';
 import { FEVER_EDGE_ROTATION, FEVER_MASK_ANCHOR, mirrorRotationToThree } from '../src/feverMask';
 import { PITCH } from '../src/slice';
 
@@ -154,5 +154,27 @@ it('轨道宽度变化时 Fever 边线层的位置随轨道边缩放', () => {
     for (const mesh of layers.group.children) {
       expect(mesh.getWorldPosition(new THREE.Vector3()).x).toBeCloseTo(defaultX.get(mesh.name)! * 1.2, 6);
     }
+  } finally { layers.dispose(); texture.dispose(); }
+});
+
+it('边线三层按原包 SpriteMask 范围排序：遮罩先写 stencil，条带随后读回', () => {
+  const texture = new THREE.Texture();
+  const layers = new FeverLayers(texture, texture, texture);
+  try {
+    layers.update(true, 0.4);
+    const order = (name: string) => (layers.group.getObjectByName(name) as THREE.Mesh).renderOrder;
+    // 原包 LineMask_L/R 的 m_BackSortingOrder=1000 / m_FrontSortingOrder=1001，
+    // LineBase/LineMove 的 m_SortingOrder=1000。
+    expect(order('mask-left')).toBe(FEVER_ORDER.mask);
+    expect(order('mask-right')).toBe(FEVER_ORDER.mask);
+    expect(order('base-left')).toBe(FEVER_ORDER.base);
+    expect(order('base-right')).toBe(FEVER_ORDER.base);
+    expect(order('move-left')).toBe(FEVER_ORDER.move);
+    expect(order('move-right')).toBe(FEVER_ORDER.move);
+    // 遮罩必须先于条带，否则 stencil 尚未写入，NotEqual 判定无意义。
+    expect(FEVER_ORDER.mask).toBeLessThan(FEVER_ORDER.base);
+    expect(FEVER_ORDER.base).toBeLessThan(FEVER_ORDER.move);
+    // 三层都高于音符 sprite（20/21/25），与原包一致。
+    expect(FEVER_ORDER.mask).toBeGreaterThan(25);
   } finally { layers.dispose(); texture.dispose(); }
 });
