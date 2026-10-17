@@ -4,7 +4,7 @@
 
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
-| `apps/web` | 唯一浏览器前端：导航、选曲、URL 参数、设置、加载提示与各模式视图 | 源码 MIT；构建产物 AGPL-3.0-only |
+| `apps/web` | 唯一浏览器前端：导航、选曲、URL 参数、设置、加载提示与各模式视图 | 自有代码 MIT；与 `pjsk-preview` 组合后整体 AGPL-3.0-only |
 | `packages/chart` | LLLL 原格式谱面解析；曲目的 Fever 时段与曲终时刻 | MIT |
 | `packages/llll-preview` | LLLL WebGL 渲染、HUD 与音频 | MIT |
 | `packages/pjsk-preview` | PJSK WASM 渲染、LLLL 谱面适配与 PJSK 素材 | AGPL-3.0-only |
@@ -15,6 +15,7 @@
 
 - 各包通过 `package.json` 的 `exports` 暴露模块；`apps/web` 只按包名（`@sukushow/*`）引用，并在 `dependencies` 中声明。
 - MIT 包不依赖 `@sukushow/pjsk-preview`；`@sukushow/pjsk-preview` 可以依赖 MIT 包。
+- MIT 包不复制 `@sukushow/pjsk-preview` 的代码或其 `public/` 素材；需要复用时按 `exports` 引用，避免把 AGPL 部分混进 MIT 目录。
 - 包不引用 `apps/` 中的代码；页面模块的测试位于 `apps/web/tests`。
 - 谱面解析与曲目时间（Fever 时段、曲终）只由 `@sukushow/chart` 提供；其余包与 `apps/web` 都从这里取，不各自解析。
 - `@sukushow/export` 只通过 `ExportFrameSource` 接口驱动帧源，不依赖任何渲染包。各渲染器在自己的包里写死开场区间（`EXPORT_OPENING`），导出对话框把它交给 `resolveExportRange`。
@@ -46,4 +47,10 @@ pnpm render:svg          # SVG CLI
 
 ## 许可
 
-根目录的 `LICENSE-MIT` 与 `LICENSE-AGPL` 是两种许可的全文，各目录另附自己的 LICENSE。`packages/pjsk-preview` 基于 AGPL-3.0-only 的 sekai-mmw-preview-web 改造，上游来源的代码与素材都位于该包内，按 AGPL-3.0-only 发布。根目录、`apps/web` 与其余包的自有代码按 MIT 发布。`apps/web` 的构建产物打包了 `packages/pjsk-preview`，整体按 AGPL-3.0-only 发布，页面页脚提供源码链接。第三方来源见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+根目录的 `LICENSE-MIT` 与 `LICENSE-AGPL` 是两种许可的全文，各目录另附自己的 LICENSE。边界分三层：
+
+1. **目录自有代码**：`packages/pjsk-preview` 基于 AGPL-3.0-only 的 sekai-mmw-preview-web 改造，上游来源的代码与素材都位于该包内，按 AGPL-3.0-only 发布；根目录、`apps/web` 与其余包的自有代码按 MIT 发布。
+2. **组合分发**：`apps/web` 静态引用 `packages/pjsk-preview`，组合后的源码与构建产物整体按 AGPL-3.0-only 分发，页面页脚提供源码链接。仓库根目录同时存在 `LICENSE-AGPL`，GitHub 据此把整个仓库识别为 AGPL-3.0；MIT 只适用于第 1 层列出的自有代码。
+3. **附带素材**：`apps/web/public/` 与 `packages/pjsk-preview/public/` 内的游戏贴图、音效、语音与字体不随代码许可授权，权利归原权利人，使用限制见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+
+第三方来源见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

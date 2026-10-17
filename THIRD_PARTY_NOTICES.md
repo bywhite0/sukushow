@@ -12,7 +12,7 @@
 
 `packages/pjsk-preview` 基于 [sekai-mmw-preview-web](https://github.com/watagashi-uni/sekai-mmw-preview-web)（watagashi-uni，AGPL-3.0-only）改造，按 AGPL-3.0-only 发布，许可全文见该包的 LICENSE。来自上游或由上游文件改造的部分：
 
-- `native/mmw_port/`、`native/src/`、`native/generated/`：预览引擎与 overlay 播放器。上游使用并改造了 [MikuMikuWorld](https://github.com/crash5band/MikuMikuWorld)（MIT）与 [pjsekai-overlay-APPEND](https://github.com/TootieJin/pjsekai-overlay-APPEND)（AGPL）。
+- `native/mmw_port/`、`native/src/`、`native/generated/`：预览引擎与 overlay 播放器。上游使用并改造了 [MikuMikuWorld](https://github.com/crash5band/MikuMikuWorld)（MIT；原仓库已下线，链接仅作来源记录）与 [pjsekai-overlay-APPEND](https://github.com/TootieJin/pjsekai-overlay-APPEND)（AGPL）。
 - `src/lib/`：WASM 播放器封装、音频与 overlay 辅助模块、URL 参数解析。
 - `scripts/build-wasm.mjs`。
 - `public/assets/mmw/`、`public/pwa/`：渲染素材与图标。
@@ -23,12 +23,16 @@
 
 ## 原格式实现
 
-原格式与空间数学的实现边界见 docs/evidence.md。程序化回退皮肤和演示谱由本项目生成。
+原格式与空间数学的实现边界见 docs/evidence.md。程序化回退皮肤由本项目生成。
+
+## 参考实现
+
+- pjsekai-scores-rs（Team-Haruki，MIT）：https://github.com/Team-Haruki/pjsekai-scores-rs 。`packages/chart-svg` 的 SVG 结构、信息区版式与标注排布参考其输出，未复制其代码。
 
 ## 附带的游戏相关素材
 
 - `apps/web/public/rg/`、`apps/web/public/se/` 与 `apps/web/public/*.png` 底图包含从 LLLL 客户端资源复制或导出的 UI 贴图、特效纹理、元数据、字体文件与局内音效；`se/*.wav` 由 rhythm.acb 经 vgmstream 解码导出。`packages/chart-svg/public/rg/` 是其中 2D 贴图的副本。
-- `packages/pjsk-preview/public/assets/mmw/` 由上游从 MikuMikuWorld、OpenSekai 与 pjsekai-overlay 等资源整理而来，含 PJSK 相关的贴图、音效与字体；其中 `overlay/fever-native/` 的 5 张 Fever 贴图取自 PJSK 客户端。
+- `packages/pjsk-preview/public/assets/mmw/` 由上游从 MikuMikuWorld、OpenSekai 与 pjsekai-overlay 等资源整理而来，含 PJSK 相关的贴图、音效、语音与字体；其中 `overlay/fever-native/` 的 5 张 Fever 贴图取自 PJSK 客户端。
 
 以上素材**仅供本预览器本地运行与研究**：
 

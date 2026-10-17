@@ -11,7 +11,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @sukushow/web dev
 ```
 
-打开统一前端的本地地址，在导航中选择 LLLL 舞台；舞台右上角可切换 3D / 2D 相机角度。默认提供原创演示谱；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。
+打开统一前端的本地地址，在导航中选择 LLLL 舞台；舞台右上角可切换 3D / 2D 相机角度。默认打开フォーチュンムービー（`103103`）的最高可用难度；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。
 
 此包属于 `sukushow` 根工作区；LLLL 的 2D 模式与 3D 模式共用同一套 WebGL 场景，只切换相机角度。PJSK 渲染与 SVG 图片导出分别由 `packages/pjsk-preview`、`packages/chart-svg` 提供。目录、许可边界和运行时资源见 [工作区说明](../../docs/workspace.md)。
 
@@ -60,7 +60,7 @@ pnpm preview
 
 ## Fever 元数据
 
-导入 `rhythmgame_chart_<歌曲ID>_<难度>.bytes/json` 时自动匹配。显示与特效中的“Fever 开始 / 结束（秒）”可手动覆盖，区间为 `[start,end)`；同时留空关闭，非法输入停用 Fever。手动值不写入全局设置，换谱清除；“恢复歌曲元数据”撤销覆盖。演示谱默认不配置 Fever。必要时延长播放时间轴以覆盖指定终点，但不修改源谱面文件。“Fever 显示”仅控制特效，不改变逻辑 Fever 状态。
+导入 `rhythmgame_chart_<歌曲ID>_<难度>.bytes/json` 时自动匹配。显示与特效中的“Fever 开始 / 结束（秒）”可手动覆盖，区间为 `[start,end)`；同时留空关闭，非法输入停用 Fever。手动值不写入全局设置，换谱清除；“恢复歌曲元数据”撤销覆盖。必要时延长播放时间轴以覆盖指定终点，但不修改源谱面文件。“Fever 显示”仅控制特效，不改变逻辑 Fever 状态。
 
 ## 预览皮肤 / FX
 
@@ -70,7 +70,7 @@ pnpm preview
 
 ## 依据与限制
 
-参见 [实现依据与限制](docs/evidence.md)。行为以客户端二进制与场景序列化为准；重建工程仅辅助定位逻辑。参考 sekai-mmw-preview-web 的本地文件与播放交互设计，不转换为 SUS，不移植其 WASM 渲染器。
+参见 [实现依据与限制](../../docs/evidence.md)。行为以客户端二进制与场景序列化为准；重建工程仅辅助定位逻辑。不转换为 SUS，也不经过 WASM 渲染。
 
 **不宣称像素级还原。** 有 `apps/web/public/rg` 时使用附带皮肤 / 简化 FX / SafeArea HUD；无资源时程序化回退。粒子为 Additive 近似（非完整 Unity ParticleSystem）。浮点计算以 JavaScript double 为主，Hold 计数采样与串链时间比较按原包 float32 语义处理，并非全引擎逐指令 float32 仿真。移动端扩大垂直视角属于预览器适配。
 
@@ -93,7 +93,7 @@ pnpm preview
 ## 许可与免责声明
 
 - **本仓库原创代码**采用 MIT，见 [LICENSE](LICENSE)。
-- **第三方依赖与参考**见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- **第三方依赖与参考**见 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)。
 - **`public/` 内附带的贴图、FX、字体、局内音效等**来自或还原自游戏客户端资源，**权利归各原权利人所有**；收入本仓库仅供本预览器非商业研究与互操作验证，不构成授权转载、再分发或商用许可。字体（如 FOT-Rodin Pro）尤受字厂许可约束，请勿单独抽出挪作他用。
 - 本工具为**非官方**研究预览器，与游戏运营方、开发商、发行商及任何关联商标**无隶属、无赞助、无背书**关系。
 - 使用本仓库即表示你自行评估并承担与附带游戏素材相关的合规风险；作者不对因使用或再分发这些素材产生的后果负责。
