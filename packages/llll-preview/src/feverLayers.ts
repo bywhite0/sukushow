@@ -3,6 +3,15 @@ import { feverLineParticle } from './feverLines';
 import { FEVER_EDGE_ROTATION, feverMaskGeometry, mirrorRotationToThree } from './feverMask';
 
 /**
+ * 边线三层的渲染次序，取自原包 `LineMask_L/R` 的 SpriteMask 自定义范围
+ * （`m_BackSortingOrder=1000` / `m_FrontSortingOrder=1001`）与
+ * `LineBase`/`LineMove` 的 `ParticleSystemRenderer.m_SortingOrder=1000`：
+ * 遮罩先写 stencil，两个条带再按范围读回。三层都远高于音符 sprite（20/21/25），
+ * 因此压在音符之上，与原包一致。
+ */
+export const FEVER_ORDER = { mask: 999, base: 1000, move: 1001 } as const;
+
+/**
  * 边线各层共用 LineMask 的帧。所有位置/旋转以 **Unity 世界坐标**给出，本类统一做
  * Z 镜像（位置取 -z、旋转取 (-x,-y,z,w)）交给 Three，避免同一组数值出现两种约定。
  */
@@ -38,7 +47,9 @@ export class FeverLayers {
       mesh.name = `mask-${side}`;
       this.setWorldPosition(mesh, source.position);
       mesh.quaternion.copy(this.quaternions[side]);
-      mesh.renderOrder = 1039;
+      // 原包 LineMask_L/R 的 SpriteMask 自定义范围：BackSortingOrder=1000、FrontSortingOrder=1001。
+      // mask 必须先于 base/move 写入 stencil，故取范围下界之下。
+      mesh.renderOrder = FEVER_ORDER.mask;
       mesh.frustumCulled = false;
       this.masks.push(mesh);
       this.group.add(mesh);
@@ -69,7 +80,7 @@ export class FeverLayers {
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
       mesh.name = `${kind}-${side}${i ? `-${i}` : ''}`;
       mesh.quaternion.copy(this.quaternions[side]);
-      mesh.renderOrder = kind === 'base' ? 1040 : 1041;
+      mesh.renderOrder = kind === 'base' ? FEVER_ORDER.base : FEVER_ORDER.move;
       mesh.frustumCulled = false;
       this.lines.push({ mesh, kind, side });
       this.group.add(mesh);
