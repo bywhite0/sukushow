@@ -6,6 +6,8 @@ import {
   activationTime,
   dampedDistance,
   evalHermite,
+  evalGradient,
+  evalGradientPair,
   nodeStateAt,
   particleAt,
   spawnEmitter,
@@ -99,6 +101,49 @@ describe('曲终横幅 AllPerfect', () => {
     expect(particleAt(p, e, p.spawn + 0.3)).toEqual(particleAt(p, e, p.spawn + 0.3));
     expect(particleAt(p, e, p.spawn - 0.01)).toBeNull();
     expect(particleAt(p, e, p.spawn + p.life)).toBeNull();
+  });
+
+  it('TwoGradients：每颗粒子各有一条随机轴，同刻颜色不再统一', () => {
+    const e = em('sc2_ingeame_end_AllPerfect_Effect01');
+    expect(e.grad).not.toBeNull();
+    expect(e.grad2).not.toBeNull();
+    const i = AP_BANNER_EMITTERS.indexOf(e);
+    const ps = AP_PARTICLES.filter((p) => p.emitter === i);
+    expect(ps.length).toBe(18);
+    for (const p of ps) {
+      expect(p.gr).toBeGreaterThanOrEqual(0);
+      expect(p.gr).toBeLessThan(1);
+    }
+    expect(new Set(ps.map((p) => p.gr.toFixed(4))).size).toBeGreaterThan(ps.length - 2);
+    const cols = ps.map((p) => {
+      const f = particleAt(p, e, p.spawn + 0.3)!;
+      return `${f.r.toFixed(2)}|${f.g.toFixed(2)}|${f.b.toFixed(2)}`;
+    });
+    expect(new Set(cols).size).toBeGreaterThan(1);
+  });
+
+  it('单条渐变的发射器没有第二条渐变（grad2 = null）', () => {
+    expect(em('Ring').grad2).toBeNull();
+    expect(em('sc2_ingeame_end_AllPerfectTitleEffect').grad2).toBeNull();
+  });
+
+  it('evalGradientPair 两端分别收敛到 max / min 两条渐变', () => {
+    const e = em('sc2_ingeame_end_AllPerfect_Effect01');
+    const a = e.grad!, b = e.grad2!;
+    for (const x of [0, 0.2, 0.5, 0.8, 1]) {
+      const lo = evalGradientPair(a, b, 0, x);
+      const hi = evalGradientPair(a, b, 1, x);
+      const ca = evalGradient(a, x), cb = evalGradient(b, x);
+      for (let j = 0; j < 4; j++) {
+        expect(lo[j]).toBeCloseTo(ca[j]!, 6);
+        expect(hi[j]).toBeCloseTo(cb[j]!, 6);
+      }
+      // 中间值随 r 单调变化（同一 x 上 r 越大越靠近 max 一侧的键）
+      const mid = evalGradientPair(a, b, 0.5, x);
+      const q1 = evalGradientPair(a, b, 0.25, x);
+      const q3 = evalGradientPair(a, b, 0.75, x);
+      expect(Math.abs(mid[1] - q1[1]) + Math.abs(mid[1] - q3[1])).toBeGreaterThan(0);
+    }
   });
 });
 

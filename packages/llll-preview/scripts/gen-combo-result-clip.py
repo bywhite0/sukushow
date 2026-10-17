@@ -106,6 +106,18 @@ def build(INDEX, ROOT_NAME):
         alps = [(g['atime%d' % i] / 65535.0, g['key%d' % i]['a']) for i in range(g['m_NumAlphaKeys'])]
         return cols, alps
 
+    def color_module(c):
+        """ColorOverLifetime：1 = Gradient（单条）、3 = TwoGradients（逐粒子在两条之间随机）。
+
+        返回 (主渐变, 第二渐变)；TwoGradients 的第二条是 minGradient，由每颗粒子自己的随机数
+        在两条之间插值（Unity 的 Gradient.Lerp 逐键插值后按寿命求值）。
+        """
+        if not c.get('enabled'):
+            return None, None
+        mode = c['gradient'].get('minMaxState')
+        assert mode in (1, 3), mode
+        return grad(c['gradient']['maxGradient']), (grad(c['gradient']['minGradient']) if mode == 3 else None)
+
     # 贴图名 = 材质 _MainTex（banners.json 导出时已按材质解析）
     tex_by_path = {e['path']: e['tex'] for e in banners['fx']}
     emitters = []
@@ -154,7 +166,8 @@ def build(INDEX, ROOT_NAME):
             assert v3('m_Position')[:2] == (0, 0) and v3('m_Rotation')[1:] == (0, 0) and v3('m_Rotation')[0] in (0, 180) and v3('m_Scale') == (1, 1, 1), (rel, v3('m_Position'), v3('m_Rotation'), v3('m_Scale'))
         sc = ini['startColor']
         assert sc.get('minMaxState', 0) == 0
-        mc = sc['maxColor']
+        mc = sc['maxColor']  # Constant 模式取 maxColor（minColor 是未使用的默认白）
+        g1, g2 = color_module(com)
         e = {
             'path': rel, 'tex': tex_by_path[rel],
             'delay': mm(d['startDelay']),
@@ -172,7 +185,8 @@ def build(INDEX, ROOT_NAME):
             'limit': mm(cvm['magnitude']) if cvm.get('enabled') else None,
             'dampen': cvm.get('dampen', 0.0) if cvm.get('enabled') else 0.0,
             'sizeKeys': curve_keys(szm['curve']) if szm.get('enabled') else None,
-            'grad': grad(com['gradient']['maxGradient']) if com.get('enabled') else None,
+            'grad': g1,
+            'grad2': g2,
             # SortingLayer 0 (Default) 的 order 1 < 横幅 Canvas order 10 ⇒ 画在黑罩之下；
             # 其余在更高的排序层，整体压在横幅之上。
             'underCanvas': r.get('m_SortingLayerID', 0) == 0 and r.get('m_SortingOrder', 0) < 10,
@@ -197,13 +211,15 @@ o.append('/**\n * 曲终横幅 RhythmGameComboResult（level56 GO 370 下 Root/R
          ' * 动画 = sharedassets56 AnimationClip #99/#102/#100/#101（各 4 s）StreamedClip 逐键解码：\n'
          ' * 段内 v = a·u³ + b·u² + c·u + d，u = t − 键时刻；常量绑定写成 t=0 单键。\n'
          ' * UI 树取 RectTransform / Image / GradientColor 序列化值（1920×1080，全部中心锚点）。\n'
-         ' * 发射器取 level56 ParticleSystem / ParticleSystemRenderer 原值。\n'
+         ' * 发射器取 level56 ParticleSystem / ParticleSystemRenderer 原值；着色 = startColor(maxColor)\n'
+         ' * × ColorOverLifetime 渐变（mode 1 单条；mode 3 TwoGradients 由每颗粒子自己的随机数在\n'
+         ' * min/max 两条之间插值）。\n'
          ' * 由 scripts/gen-combo-result-clip.py 生成，勿手改。\n */')
 o.append('export type BannerKey = readonly [t: number, a: number, b: number, c: number, d: number];')
 o.append('export type Range = readonly [min: number, max: number];')
 o.append('export interface BannerNode {\n  path: string; parent: number; active: boolean;\n  x: number; y: number; w: number; h: number; sx: number; sy: number; rot: number;\n  sprite?: string; rgba?: readonly [number, number, number, number];\n  gradL?: readonly [number, number, number, number]; gradR?: readonly [number, number, number, number];\n}')
 o.append('export interface BannerCurve { path: string; prop: string; keys: readonly BannerKey[] }')
-o.append('export interface BannerEmitter {\n  path: string; tex: string; delay: Range; count: number; burstT: number; cycles: number; interval: number;\n  life: Range; speed: Range; size: Range; sizeY: Range | null; color: readonly [number, number, number, number];\n  shape: \'circle\' | \'box\'; box: Range | null;\n  radius: number; thickness: number; rotSpeed: Range | null; limit: Range | null; dampen: number;\n  sizeKeys: readonly (readonly [t: number, v: number, inSlope: number, outSlope: number])[] | null;\n  grad: readonly [cols: readonly (readonly [t: number, r: number, g: number, b: number])[], alps: readonly (readonly [t: number, a: number])[]] | null;\n  underCanvas: boolean; sort: number; maxSize: number;\n}')
+o.append('export interface BannerEmitter {\n  path: string; tex: string; delay: Range; count: number; burstT: number; cycles: number; interval: number;\n  life: Range; speed: Range; size: Range; sizeY: Range | null; color: readonly [number, number, number, number];\n  shape: \'circle\' | \'box\'; box: Range | null;\n  radius: number; thickness: number; rotSpeed: Range | null; limit: Range | null; dampen: number;\n  sizeKeys: readonly (readonly [t: number, v: number, inSlope: number, outSlope: number])[] | null;\n  grad: readonly [cols: readonly (readonly [t: number, r: number, g: number, b: number])[], alps: readonly (readonly [t: number, a: number])[]] | null;\n  grad2: readonly [cols: readonly (readonly [t: number, r: number, g: number, b: number])[], alps: readonly (readonly [t: number, a: number])[]] | null;\n  underCanvas: boolean; sort: number; maxSize: number;\n}')
 built = [(idx, key, rn) + build(idx, rn) for idx, key, rn in RESULTS]
 durs = {c['dur'] for *_, c in built}
 assert len(durs) == 1, durs
@@ -235,13 +251,14 @@ for idx, key, rn, nodes, curves, emitters, clip in built:
     for e in emitters:
         tex_all.add(e['tex'])
         g = 'null' if e['grad'] is None else '[[%s], [%s]]' % (', '.join(arr(c) for c in e['grad'][0]), ', '.join(arr(a) for a in e['grad'][1]))
+        g2 = 'null' if e['grad2'] is None else '[[%s], [%s]]' % (', '.join(arr(c) for c in e['grad2'][0]), ', '.join(arr(a) for a in e['grad2'][1]))
         sk = 'null' if e['sizeKeys'] is None else '[%s]' % ', '.join(arr(k) for k in e['sizeKeys'])
-        o.append('  {\n    path: %s, tex: %s,\n    delay: %s, count: %d, burstT: %s, cycles: %d, interval: %s,\n    life: %s, speed: %s, size: %s, sizeY: %s, color: %s,\n    shape: %s, box: %s,\n    radius: %s, thickness: %s, rotSpeed: %s, limit: %s, dampen: %s,\n    sizeKeys: %s,\n    grad: %s,\n    underCanvas: %s, sort: %d, maxSize: %s,\n  },' % (
+        o.append('  {\n    path: %s, tex: %s,\n    delay: %s, count: %d, burstT: %s, cycles: %d, interval: %s,\n    life: %s, speed: %s, size: %s, sizeY: %s, color: %s,\n    shape: %s, box: %s,\n    radius: %s, thickness: %s, rotSpeed: %s, limit: %s, dampen: %s,\n    sizeKeys: %s,\n    grad: %s,\n    grad2: %s,\n    underCanvas: %s, sort: %d, maxSize: %s,\n  },' % (
             json.dumps(e['path']), json.dumps(e['tex']), pair(e['delay']), e['count'], num(e['burstT']), e['cycles'], num(e['interval']),
             pair(e['life']), pair(e['speed']), pair(e['size']), pair(e['sizeY']), arr(e['color']),
             json.dumps(e['shape']), pair(e['box']),
             num(e['radius']), num(e['thickness']), pair(e['rotSpeed']), pair(e['limit']), num(e['dampen']),
-            sk, g, 'true' if e['underCanvas'] else 'false', e['sort'], num(e['maxSize'])))
+            sk, g, g2, 'true' if e['underCanvas'] else 'false', e['sort'], num(e['maxSize'])))
     o.append('];')
 o.append('/** 按 GetResultIndex 排列：0 AP、1 FC、2 Clear、3 Finish。 */')
 o.append('export const COMBO_RESULT_BANNERS: readonly BannerClip[] = [')

@@ -214,7 +214,8 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移和输入大
 - 出现时 `ShowAsync`（4.12.0 状态机 @0x486B024）调用 `SetActiveRoot`（@0x486AF1C，`roots[i].SetActive(i == idx)`）把 `roots[idx]` 互斥激活，播放 `ComboResultSeNames[idx]`：AP→`se_rhythm_finish_0004`、FC→`0003`、Clear→`0002`、Finish→`0001`，再播动画片段。四个 Root 在 prefab 里只有一个是 active，所以预览把 Root 本身恒视为激活，只看其下节点的 active 与曲线。预览在播放中正向越过 FinishTime（0.25 s 内）时播放 SE。
 - 画布为 World Space、Default 层、order 10；Bg 为黑色 α 0.698。
 - 层序：Glow 发射器位于 Default 层 order 1，画在画布下；其余发射器位于更高的 sorting layer，画在画布上。
-- 粒子材质均为加色（tex × 顶点色，SrcAlpha One），预览用 `lighter` / `plus-lighter` 合成。
+- 粒子材质均为加色（tex × 顶点色）。两套着色器：`UI/Additive`（`sc2_Result_*` 三个材质，Blend One One）与 `Mobile/Particles/Additive`（其余，Blend SrcAlpha One）；横幅贴图 RGB 全白、形状只在 alpha 里，两者在预览里都落到同一条「tex.rgb × tex.a × 顶点色」的加色路径，用 `lighter` / `plus-lighter` 合成。材质 `_Color` 均为白，不额外乘色。
+- 粒子着色 = `startColor` × `ColorOverLifetime` 渐变。`startColor` 是 Constant 模式，取 `maxColor`（`minColor` 是未使用的默认白；四档各自的主题色在这里：AP 青、FC 粉、Clear 橙、Finish 灰蓝）。`ColorModule` 有两种模式：**mode 1 单条渐变**（标题特效、Ring、flare02 等）直接按寿命相位采样；**mode 3 TwoGradients**（AP 的 Effect01 / Glow / flare / Particle / StarParticle / ShineParticle / BurstParticle、FC 的 Effect01 等）每颗粒子在出生时定死一个混合比例，同一寿命相位采样两条渐变后连续混合——所以同一个发射器里会同时出现两套配色（如 AP 的 StarParticle 是「粉→红」与「蓝紫→蓝」并存）。口径同 HitFx 的 `MinMaxGradient.Evaluate(time, lerpFactor)`（见上文「双色渐变」），不是随机二选一。混合比例用 `(发射器路径, 轮次, 序号)` 的哈希单独取，不占主随机序列，避免新增随机数把已有粒子的位置整体挪位。
 - 动画曲线与节点来自 banners.json；发射器参数直接取 level56 的 ParticleSystem/Renderer：burst cycles/interval、startDelay、LimitVelocity 的 dampen 与 magnitude 随机范围、Circle 半径/厚度、Box 尺寸、Hermite 尺寸曲线（time/value/inSlope/outSlope × scalar）、渐变、maxParticleSize、sortingOrder。生成脚本 `scripts/gen-combo-result-clip.py` 对不支持的模块直接断言失败。
 - 只导出实际绘制的发射器：GameObject 自身及祖先全部 active，且 `ParticleSystemRenderer.m_Enabled` 为真。AP 12 个、FC 11 个全部满足；Clear 只剩标题特效、BurstParticle01、flare02（Ring / Glow 等 9 个关闭，所以没有光球），Finish 只剩标题特效与 flare02。
 - Circle 发射器允许形状 Z 偏移（如 AP 标题特效 z = −3，沿视线）与绕 X 180°（只镜像圆，均匀角分布不变），缩放必须为 1。
