@@ -6,6 +6,8 @@
 - just 和 holds 使用绝对秒；Flags 保留类型及四个 6-bit 轨道字段。
 - 保留 60 格坐标、Hold 原始端点、共享后继与同时押分组。
 - 三次下落曲线为 `borderZ + 3.9*d + 0.072*d³`；相机俯角 33.2°，垂直 FOV 60°。
+- 垂直 FOV 随画布比例变化：`ResolutionResolver` 的 `BaseRatio` 固定 16/9、`CurrentRatio = Screen.width/height`，`WorldRenderResolver.Initialize` 取 `2·atan(tan(baseFov/2) · BaseRatio / min(CurrentRatio, BaseRatio))`——窄于 16:9 时放大以保持水平视野（4:3 ⇒ 75.2°），宽于 16:9 时保持 60°。世界 UI 画布的参考分辨率同源：`(1920, 1920 / CurrentRatio × 1.2)`，1.2 为 `RawImageScaler` 的过扫描系数。
+- 无黑边：`Camera.set_rect` 在客户端二进制里没有业务调用点，画布铺满即原包行为。
 - 求根收敛返回新迭代值；非法速度和求根失败不会送入 GPU。
 - 音符世界宽 `((Width-6)*0.2+1.15)*0.75`，深度 0.45（Trace 0.35）；来自 NoteSilhouette / 二进制 dump，而非猜测。
 
@@ -45,7 +47,7 @@
 
 不宣称像素级还原。有 `apps/web/public/rg` 时的贴图 / FX / HUD 仍是浏览器近似（粒子非完整 Unity ParticleSystem；9-slice 仅水平；自定义粒子 shader 降级为 Additive）。无资源时的程序化贴片同为近似。已接入 AutoPlay 计分、AP / Fever、局内 SE 与 MV 时间线；MV 在 Canvas 内铺满舞台，未复刻 CRI/Unity 的 UI 缩放与遮罩。未实现完整手动判定状态机、结算、角色技能和语音，不能视为完整对局客户端。
 
-JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端扩大视角和输入大小限制属于预览器行为。
+JavaScript double 运算没有逐指令模拟 float32。音频偏移和输入大小限制属于预览器行为。
 
 ## HUD 实现要点
 
@@ -56,6 +58,7 @@ JavaScript double 运算没有逐指令模拟 float32。音频偏移、移动端
 - **判定字**：寿命 0.7 s 硬切（无淡出）；缩放 `JudgementRectTween` 0.5->1 / 0.1 s；combo >= 10 时 `ComboRectTween` 0.8->1 / 0.1 s。
 - **判定字高度**：level56 `Canvas` CanvasScaler ScaleWithScreenSize 1920×1080 / Expand；`SafeArea` aMin(.5,0) aMax(.5,1) 1920 宽纵向拉伸；`JudgeRoot` 锚点/轴心 (.5,.5)、pos (0,0)、400×400；`Judge` anchoredPosition (0,−270)、`Condition` (0,−210)（均为 prefab 值）。4.12.0 `ScoreResolver.Inject` @0x49A3738–0x49A3858 执行 `judge.localPosition.y += Config.JudgementY × 70`（`LineHeight`），ConfigResolver 原样照抄 `RhythmGameOptionValue.JudgementY`（`get_JudgementYRange` @0x44A126C：1..10，First 5）⇒ 默认判定字在 JudgeRoot 中心上方 **+80**，不是 −270。Condition 于 @0x49A3A68–0x49A3B8C：JudgementY == FastSlowY ⇒ 判定字 y + 60（`OverlapOffsetY`），否则 −210 + FastSlowY × 70 ⇒ 默认 +140。`PreviewScoreResolver.ApplyLayout` @0x485A244 同式。预览此前按 −270 + (档−5)×30，整体偏下 350 逻辑像素。
 - **AP/Voltage 环**：level56 Image Filled / Radial360 / fillOrigin Top / fillClockwise=false；fillAmount=ApResolver 小数部（Voltage 为 CalcGauge）；CSS 对 gage img 做 from 0deg（正上方）逆时针 conic mask（度单位）。
+- **AP/Voltage 环位置**：`APVoltageRoot` 为 `a(0,0.5) pos(0,306) size(320,160) piv(0,0.5)`——左侧贴边、锚在 SafeArea 竖直中心；子项 `APBase / VoltageBase (±60/80, −8)` 138×138，环 90×90 居中，标签 y=53。CanvasScaler 为 Expand 且运行时不改写、SafeArea 纵向拉伸 ⇒ 非 16:9 时中心锚节点随逻辑高度移动：4:3 下逻辑高 1440，环心距顶 242 → 422（占画面高 22.41% → 29.31%），`ComboRoot`、`JudgeRoot` 同步下移，顶锚的 SCORE / MENTAL / 暂停不动。这是原包行为，不要为观感改锚点或给舞台加 16:9 锁。
 - **isAuto 死码**：4.12.0 `ScoreResolver.isAuto` 无置 true 写入，`autoSprite` 运行时不出现；AutoPlay 仍走常规判定精灵。
 - **P2 chrome**：GaugeRoot + RankLabels + RankRoot（开局 SetRankNotActive / D）；PauseButton 包含遮罩内 Pattern；TechnicalScoreRoot 默认隐藏，由技术分三态设置控制。
 - **TechnicalScoreDisplay**：「计分」面板中的「技术分显示」映射；默认关闭。
