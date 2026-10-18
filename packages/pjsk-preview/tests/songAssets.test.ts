@@ -36,7 +36,7 @@ afterEach(() => {
 describe('songAssets', () => {
   it('仅为有视频模式且有原包时序的歌曲提供 MV', () => {
     expect(songAssets({ ...baseSong, isVideoMode: true })).toMatchObject({
-      mvUrl: '/assets/mv/103103.mp4', mvStartSec: 0, mvDurationSec: 83.06666666666666,
+      mvUrl: '/assets/mv/103103/index.m3u8', mvStartSec: 0, mvDurationSec: 83.06666666666666,
     })
     expect(songAssets(baseSong)).toMatchObject({ mvUrl: null, mvStartSec: 0, mvDurationSec: 0 })
     expect(songAssets({ ...baseSong, id: 'unknown', isVideoMode: true }).mvUrl).toBeNull()

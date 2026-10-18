@@ -15,10 +15,11 @@ for (const view of ['llll', 'pjsk']) {
       } else await route.fulfill({ status: 404, body: 'test media unavailable' })
     })
     await page.goto(`/?view=${view}&song=103112&difficulty=HARD`)
-    await expect.poll(() => requested, { timeout: 60000 }).toContain('/assets/mv/103112.mp4')
-    expect(requested).toContain('/assets/audio/bgm_10311201.ogg')
-    expect(requested.some(path => path.includes('/jacket/103112.'))).toBe(true)
-    expect(requested).not.toContain('/assets/mv/105101.mp4')
+    await expect.poll(() => requested, { timeout: 60000 }).toContain('/assets/mv/103112/index.m3u8')
+    // 三个资源各自并发解析，谁先到达不定，逐个轮询而不是拿到 MV 就断言。
+    await expect.poll(() => requested, { timeout: 60000 }).toContain('/assets/audio/bgm_10311201.ogg')
+    await expect.poll(() => requested.some(path => path.includes('/jacket/103112.')), { timeout: 60000 }).toBe(true)
+    expect(requested).not.toContain('/assets/mv/105101/index.m3u8')
   })
   for (const [songId, sourceId, title] of [
     ['103112', '105101', 'Dream Believers'],

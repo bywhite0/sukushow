@@ -28,12 +28,13 @@ describe('曲目列表 apps/web/public/song-list.json', () => {
   });
   it('BGM / 封面 URL 以 soundId / jacketId 为准', () => {
     const song = list.songs.find((s) => s.hasChart && s.hasJacket)!;
-    expect(songAssets(song)).toMatchObject({ bgmUrl: `/assets/audio/bgm_${song.soundId}.ogg`, coverUrl: `/assets/jacket/${song.jacketId}.png`, mvUrl: song.isVideoMode ? `/assets/mv/${song.id}.mp4` : null });
+    expect(songAssets(song)).toMatchObject({ bgmUrl: `/assets/audio/bgm_${song.soundId}.ogg`, coverUrl: `/assets/jacket/${song.jacketId}.png`, mvUrl: song.isVideoMode ? `/assets/mv/${song.id}/index.m3u8` : null });
   });
   it('仅视频曲目按曲目 Id 查找 MV，不使用不同的 BGM SoundId', () => {
     const mvSong = list.songs.find((song) => song.isVideoMode && song.soundId !== song.id)!;
     const plainSong = list.songs.find((song) => !song.isVideoMode)!;
-    expect(songAssets(mvSong).mvUrl).toBe(`/assets/mv/${mvSong.id}.mp4`);
+    // MV 走 HLS 分段：单文件超 25 MiB 会被 Workers 静态资源拒绝。
+    expect(songAssets(mvSong).mvUrl).toBe(`/assets/mv/${mvSong.id}/index.m3u8`);
     expect(songAssets(plainSong).mvUrl).toBeNull();
   });
   it('非零 MV 片段起点取原包时间线，不等于谱面零时刻', () => {

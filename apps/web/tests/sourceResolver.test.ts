@@ -169,7 +169,7 @@ describe('有效来源解析', () => {
         expect(urls).toContain('/assets/chart/rhythmgame_chart_103103_04.bytes')
         expect(urls).toContain('/song-credits.json')
         expect(urls).toContain('/assets/audio/bgm_10310301.ogg')
-        expect(urls).not.toContain('/assets/mv/103103.mp4')
+        expect(urls).not.toContain('/assets/mv/103103/index.m3u8')
         return new Map([['/assets/chart/rhythmgame_chart_103103_04.bytes', 24],
           ['/song-credits.json', 30], ['/assets/audio/bgm_10310301.ogg', 100], ['/assets/jacket/103103.png', 0]])
       },
@@ -226,7 +226,7 @@ describe('有效来源解析', () => {
     const second = await resolve(store.getSource())
     expect(first.download?.totalBytes).toBe(40)
     expect(second.download?.totalBytes).toBe(50)
-    expect(second.download?.sizes?.['/assets/mv/103103.mp4']).toBe(10)
+    expect(second.download?.sizes?.['/assets/mv/103103/index.m3u8']).toBe(10)
     expect(charts).toBe(1)
     expect(credits).toBe(1)
     expect(measured).toHaveLength(2)

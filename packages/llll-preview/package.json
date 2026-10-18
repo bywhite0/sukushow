@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@sukushow/chart": "workspace:*",
+    "hls.js": "^1.7.3",
     "three": "^0.183.0"
   },
   "devDependencies": {

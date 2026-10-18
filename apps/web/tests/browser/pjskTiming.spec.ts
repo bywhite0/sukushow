@@ -23,7 +23,7 @@ test('曲终时序覆盖主数据、无 BGM、未知曲目与 MV 尾段', async 
 
 test('MV 缺失不阻断预览，清除媒体后不沿用上一首音视频', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.route('**/assets/mv/*.mp4', route => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/assets/mv/**', route => route.fulfill({ status: 404, body: '' }));
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
   await expect(page.locator('#message')).toContainText('フォーチュン', { timeout: 90_000 });
   expect(await page.evaluate(() => (window as any).__LLL_PJSK__.musicVideo.useVideoBackground)).toBe(false);

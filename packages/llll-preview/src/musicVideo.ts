@@ -6,9 +6,25 @@ export type MusicVideoLoadProgress = {
   totalBytes?: number;
 };
 
+/** MV 可能是 HLS 播放列表（分段下发，绕开单文件体积上限），也可能是单个 MP4。 */
+const isHlsUrl = (url: string): boolean => /\.m3u8(\?|#|$)/i.test(url);
+
+/** hls.js 的最小接口；动态引入，避免不用 MV 时把解码库塞进主包。 */
+type HlsInstance = {
+  destroy(): void;
+  loadSource(url: string): void;
+  attachMedia(media: HTMLMediaElement): void;
+  on(event: string, callback: (event: string, data: { fatal?: boolean }) => void): void;
+};
+type HlsConstructor = {
+  new (config?: Record<string, unknown>): HlsInstance;
+  isSupported(): boolean;
+};
+
 /** 静音 MV 只提供画面；音乐和走带仍由 AudioPlayer 控制。 */
 export class MusicVideo {
   private video: HTMLVideoElement | null = null;
+  private hls: HlsInstance | null = null;
   private url: string | null = null;
   private start = 0;
   private clipDuration = Infinity;
@@ -119,6 +135,8 @@ export class MusicVideo {
       this.reportProgress('download', downloadedBytes);
     };
     const onLoadedData = (): void => settle(true);
+    // hls.js 实例按 video 各自持有，销毁时不会误伤后来新建的那个。
+    let ownHls: HlsInstance | null = null;
     video.muted = true;
     video.playsInline = true;
     video.preload = 'auto';
@@ -131,16 +149,66 @@ export class MusicVideo {
       video.removeEventListener('progress', onProgress);
       video.removeEventListener('seeked', this.notify);
       video.removeEventListener('error', this.onError);
+      // 先拆 HLS 再清 src：hls.js 持有 MediaSource，顺序反了会留悬空引用。
+      ownHls?.destroy();
+      if (this.hls === ownHls) this.hls = null;
       video.pause();
       video.removeAttribute('src');
       video.load();
     };
     this.reportProgress('download', 0);
-    video.src = this.url;
     this.video = video;
-    video.load();
+    void this.attachSource(video, this.url, settle, (hls) => {
+      ownHls = hls;
+      this.hls = hls;
+    });
     this.invalidate();
     return this.loadPromise;
+  }
+
+  /**
+   * 挂载播放源。
+   *
+   * HLS 优先走 hls.js，只有它不支持时才退回浏览器原生实现：
+   * - Chrome 142+ 虽然自称支持 HLS，但实测对 206 分块响应会报
+   *   `DEMUXER_ERROR_COULD_NOT_PARSE`，不能依赖；
+   * - Safari / iOS 不支持 MSE，hls.js 在那里不可用，只能靠原生。
+   */
+  private async attachSource(
+    video: HTMLVideoElement,
+    url: string,
+    settle: (loaded: boolean) => void,
+    onHls: (hls: HlsInstance) => void,
+  ): Promise<void> {
+    if (!isHlsUrl(url)) {
+      video.src = url;
+      video.load();
+      return;
+    }
+    try {
+      const module = await import('hls.js');
+      const Hls = (module.default ?? module) as unknown as HlsConstructor;
+      if (this.video !== video) return;
+      if (Hls.isSupported()) {
+        const hls = new Hls({ enableWorker: true });
+        hls.on('hlsError', (_event, data) => {
+          if (data?.fatal) settle(false);
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        onHls(hls);
+        return;
+      }
+    } catch {
+      // hls.js 拿不到（离线、构建裁剪）时退回原生。
+    }
+    if (this.video !== video) return;
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.load();
+      return;
+    }
+    settle(false);
   }
 
   private ready(video: HTMLVideoElement): boolean {
