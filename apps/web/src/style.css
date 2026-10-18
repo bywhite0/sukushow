@@ -231,7 +231,7 @@ kbd { padding: 2px 4px; margin: 0 4px; border: 1px solid var(--shell-line); bord
 
 /* PJSK 原生 UI 的难度色只在 PJSK 模式覆盖，避免污染 LLLL / 2D。 */
 .workspace[data-view="pjsk"] .picker {
-  --difficulty-normal: oklch(76% .13 155);
+  --difficulty-normal: oklch(66% .18 264);
   --difficulty-hard: oklch(80% .13 85);
   --difficulty-expert: oklch(68% .16 20);
   --difficulty-master: oklch(74% .15 300);
