@@ -72,6 +72,7 @@ export type BinaryLoadProgress = DownloadProgress
 
 const BGM_BASE = '/assets/audio'
 const JACKET_BASE = '/assets/jacket'
+const MV_BASE = '/assets/mv'
 
 /** 曲目列表在 public 下的落盘位置。 */
 export const SONG_LIST_URL = '/song-list.json'
@@ -95,7 +96,9 @@ export function songAssets(song: SongEntry): SongAssets {
     bgmUrl: song.soundId ? `${BGM_BASE}/bgm_${song.soundId}.ogg` : null,
     // 曲绘用 image_sticker_40<JacketId> 原始 PNG（保留原始分辨率）。
     coverUrl: song.hasJacket ? `${JACKET_BASE}/${song.jacketId}.png` : null,
-    mvUrl: timing ? `/assets/mv/${song.id}.mp4` : null,
+    // MV 走 HLS：单文件超 25 MiB 会被 Workers 静态资源拒绝，分段下发则零画质损失。
+    // 未切分的老产物回落到同名 mp4，由 localMedia 的站点探测决定用哪个。
+    mvUrl: timing ? `${MV_BASE}/${song.id}/index.m3u8` : null,
     mvStartSec: timing?.[0] ?? 0,
     mvDurationSec: timing?.[1] ?? 0,
   }

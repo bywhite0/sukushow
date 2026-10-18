@@ -1,0 +1,8 @@
+# Cloudflare 静态资源按扩展名猜 MIME，.m3u8 / .m4s 不在常见表里会退成
+# application/octet-stream。hls.js 不在乎，但 Safari 的原生 HLS 需要
+# application/vnd.apple.mpegurl 才认这是播放列表。
+/assets/mv/*/index.m3u8
+  Content-Type: application/vnd.apple.mpegurl
+
+/assets/mv/*/seg_*.m4s
+  Content-Type: video/iso.segment

@@ -17,6 +17,10 @@ export type ResourceLoadingController = {
 export async function measureResourceSizes(urls: readonly (string | null | undefined)[]): Promise<Map<string, number>> {
   const uniqueUrls = [...new Set(urls.filter((url): url is string => Boolean(url)))]
   const measured = await Promise.all(uniqueUrls.map(async (url) => {
+    if (isHlsPlaylist(url)) {
+      const total = await measureHls(url)
+      if (total !== null) return [url, total] as const
+    }
     try {
       const response = await fetch(url, { method: 'HEAD' })
       if (!response.ok) return [url, null] as const
@@ -28,6 +32,52 @@ export async function measureResourceSizes(urls: readonly (string | null | undef
     }
   }))
   return new Map(measured.filter((entry): entry is readonly [string, number] => entry[1] !== null))
+}
+
+function isHlsPlaylist(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url)
+}
+
+/**
+ * HLS 的体积等于播放列表加上它引用的全部文件。
+ *
+ * 只 HEAD 播放列表会得到几百字节，进度条分母会低得离谱（几十 MB 的 MV
+ * 显示成 400 B）。这里把 `#EXT-X-MAP` 的 init 段和所有分片一起算上。
+ */
+async function measureHls(url: string): Promise<number | null> {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const text = await response.text()
+    if (!text.startsWith('#EXTM3U')) return null
+    const base = new URL(url, location.href)
+    const targets = new Set<string>()
+    for (const raw of text.split('\n')) {
+      const line = raw.trim()
+      if (!line) continue
+      if (line.startsWith('#')) {
+        // #EXT-X-MAP:URI="init.mp4"
+        const match = /URI="([^"]+)"/.exec(line)
+        if (match?.[1]) targets.add(new URL(match[1], base).href)
+        continue
+      }
+      targets.add(new URL(line, base).href)
+    }
+    if (targets.size === 0) return null
+    const sizes = await Promise.all([...targets].map(async (target) => {
+      try {
+        const head = await fetch(target, { method: 'HEAD' })
+        const value = Number(head.headers.get('content-length'))
+        return Number.isFinite(value) && value > 0 ? value : 0
+      } catch {
+        return 0
+      }
+    }))
+    const total = sizes.reduce((sum, value) => sum + value, text.length)
+    return total > 0 ? total : null
+  } catch {
+    return null
+  }
 }
 
 export function totalResourceSize(sizes: ReadonlyMap<string, number>): number | undefined {

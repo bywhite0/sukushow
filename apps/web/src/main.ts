@@ -10,6 +10,11 @@ import { createSourceResolver, type SourceProgress } from './sourceResolver'
 import { decodeChart } from '@sukushow/chart/chart'
 import { readInitialSource, withCatalogChoice } from './sourceUrl'
 import { resolveCatalogChoice, type CatalogChoice } from './songVersions'
+import { currentLibrary, localChart, localizeMv, setLibrary, subscribeLibrary, type LocalLibrary } from './localMedia'
+import {
+  forgetDirectory, grantPending, libraryFromInput, pendingHandle,
+  pickDirectory, restoreDirectory, supportsDirectoryPicker,
+} from './localAssets'
 
 type ViewId = 'llll' | 'pjsk'
 
@@ -89,6 +94,12 @@ app.innerHTML = `
             </div>
           </div>
           <button id="edit-metadata" class="quiet" type="button">编辑元数据</button>
+          <div class="library-controls">
+            <button id="pick-library" class="quiet" type="button">资源目录</button>
+            <button id="forget-library" class="quiet" type="button" hidden>断开</button>
+            <span id="library-status" role="status"></span>
+            <input class="sr-only" id="library-input" type="file" webkitdirectory multiple aria-label="选择资源文件夹">
+          </div>
           <span id="source-status" role="status"></span>
         </div>
       </div>
@@ -116,7 +127,16 @@ const sourceDependencies = {
   measure: measureResourceSizes,
   includeMv: () => viewRoot.querySelector<HTMLInputElement>('#opt-mv')?.checked ?? true,
   loadList: () => loadSongList(),
+  // 本地库里命中谱面就直接读文件；读不了或不是合法谱面则回落到站点资源。
   loadChart: async (filename: string, onProgress?: (progress: DownloadProgress) => void) => {
+    const local = await localChart(filename)
+    if (local) {
+      try {
+        return decodeChart(new Uint8Array(await local.arrayBuffer()))
+      } catch {
+        // 同名但不是谱面（选错目录 / 文件损坏）时继续走站点资源。
+      }
+    }
     const response = await fetch(`/assets/chart/${filename}`)
     if (!response.ok) throw new Error(`谱面下载失败（${response.status}）：${filename}`)
     return decodeChart(await readResponseBytes(response, onProgress))
@@ -128,6 +148,8 @@ const sourceDependencies = {
       arranger: song.arranger ?? song.stringsArranger ?? null,
       vocal: song.vocal.length ? song.vocal.join('、') : null }
   },
+  localizeMv: (path: string | null) => localizeMv(path),
+  isLocalUrl: (url: string) => url.startsWith('blob:'),
 }
 const resolveSource = createSourceResolver(sourceDependencies)
 const sourceControls = createSourceControls({
@@ -144,6 +166,82 @@ const sourceControls = createSourceControls({
   },
 })
 const sourceStatus = toolbar.querySelector<HTMLElement>('#source-status')!
+const libraryStatus = toolbar.querySelector<HTMLElement>('#library-status')!
+const pickLibrary = toolbar.querySelector<HTMLButtonElement>('#pick-library')!
+const forgetLibrary = toolbar.querySelector<HTMLButtonElement>('#forget-library')!
+const libraryInput = toolbar.querySelector<HTMLInputElement>('#library-input')!
+
+/** 换库后重新解析当前来源，让已打开的曲目立刻用上本地文件。 */
+function applyLibrary(next: Parameters<typeof setLibrary>[0]) {
+  setLibrary(next)
+  const state = songSelection.getSource()
+  // revision 递增触发视图重新应用；不改 identity，保留已打开的自制谱与编辑资料。
+  songSelection.touch()
+  if (state.songId) void refreshSourceStatus()
+}
+
+const describeLibrary = (next: LocalLibrary | null) => {
+  if (!next) {
+    libraryStatus.textContent = '未连接资源目录'
+    forgetLibrary.hidden = true
+    return
+  }
+  const names = next.names()
+  const count = (test: (name: string) => boolean) => names.filter(test).length
+  const parts = [
+    `MV ${count(name => name.endsWith('.usm') || /^\d+\.mp4$/.test(name))}`,
+    `谱面 ${count(name => /^rhythmgame_chart_.*\.bytes$/.test(name))}`,
+  ]
+  libraryStatus.textContent = `${next.label} · ${parts.join(' · ')}`
+  forgetLibrary.hidden = next.origin !== 'directory'
+}
+describeLibrary(currentLibrary())
+
+pickLibrary.onclick = () => {
+  if (!supportsDirectoryPicker()) { libraryInput.click(); return }
+  void (async () => {
+    try {
+      const picked = await pickDirectory()
+      if (!picked) return
+      applyLibrary(picked)
+    } catch (error) {
+      libraryStatus.textContent = `选择目录失败：${String(error)}`
+    }
+  })()
+}
+
+libraryInput.onchange = () => {
+  const files = libraryInput.files
+  if (files?.length) applyLibrary(libraryFromInput(files))
+  libraryInput.value = ''
+}
+
+forgetLibrary.onclick = () => {
+  void (async () => {
+    await forgetDirectory()
+    applyLibrary(null)
+  })()
+}
+
+// 上次选过的目录：有权限就静默恢复，没权限就在用户点击时再授权。
+void (async () => {
+  const restored = await restoreDirectory()
+  if (restored) { applyLibrary(restored); return }
+  const handle = await pendingHandle()
+  if (!handle) return
+  libraryStatus.textContent = '资源目录需要重新授权'
+  pickLibrary.onclick = () => {
+    void (async () => {
+      const granted = await grantPending(handle)
+      if (granted) { applyLibrary(granted); return }
+      pickLibrary.onclick = null
+      libraryStatus.textContent = '未连接资源目录'
+    })()
+  }
+})()
+
+subscribeLibrary(next => describeLibrary(next))
+
 let failedSourceRevision = -1
 const refreshSourceStatus = async () => {
   const state = songSelection.getSource()

@@ -92,6 +92,9 @@ importers:
       '@sukushow/chart':
         specifier: workspace:*
         version: link:../chart
+      hls.js:
+        specifier: ^1.7.3
+        version: 1.7.3
       three:
         specifier: ^0.183.0
         version: 0.183.2
@@ -580,6 +583,9 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  hls.js@1.7.3:
+    resolution: {integrity: sha512-MsPlx6yVW4Qv4C7mEVou4/gk/5cN2dVxOTnrNjPSmyH2f0Ln+/UkG10Ax1PE6OvrmTVPKgQYozTtBaPOuCzq7A==}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -1113,6 +1119,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  hls.js@1.7.3: {}
 
   magic-string@0.30.21:
     dependencies:

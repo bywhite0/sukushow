@@ -93,6 +93,15 @@ export class SongSelectionStore {
     this.publish({ media: { ...this.source.media, [kind]: { ...value } } })
   }
 
+  /**
+   * 内容没变但外部依赖变了（例如换了本地资源目录），让视图重新解析一次。
+   *
+   * 只递增 revision，不动 identity —— 已打开的自制谱和编辑资料都要保留。
+   */
+  touch(): void {
+    this.publish({})
+  }
+
   constructor(initial: { songId: string } | null = null) {
     if (initial) this.source = { ...this.source, songId: initial.songId }
   }

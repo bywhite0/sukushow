@@ -4,8 +4,12 @@ const SONG = '103103';
 
 async function openMv(page: import('@playwright/test').Page, request: import('@playwright/test').APIRequestContext) {
   const chart = await request.get('/assets/chart/rhythmgame_chart_103103_04.bytes');
-  const mv = await request.get(`/assets/mv/${SONG}.mp4`, { method: 'HEAD' });
-  test.skip(!chart.ok() || !mv.ok(), '本地曲目谱面 / MV 尚未解包');
+  // 未命中静态资源时服务器会回退 index.html，状态码仍是 200，只能看内容/类型。
+  const hls = await request.get(`/assets/mv/${SONG}/index.m3u8`);
+  const hasHls = (await hls.text()).startsWith('#EXTM3U');
+  const mp4 = await request.get(`/assets/mv/${SONG}.mp4`);
+  const hasMp4 = mp4.ok() && (mp4.headers()['content-type'] ?? '').startsWith('video/');
+  test.skip(!chart.ok() || !(hasHls || hasMp4), '本地曲目谱面 / MV 尚未解包');
   await page.goto(`/?song=${SONG}&difficulty=MASTER`);
   await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
   await expect(page.locator('#message')).toContainText('MV ✓');
@@ -55,8 +59,11 @@ test('切歌谱面下载失败时不把原曲和原 MV 显示成新歌', async (
 test('原包电影轨道非零起点：开始前保持普通背景，之后按片段起点定位', async ({ page, request }) => {
   test.setTimeout(90_000);
   const chart = await request.get('/assets/chart/rhythmgame_chart_203102_04.bytes');
-  const mv = await request.get('/assets/mv/203102.mp4', { method: 'HEAD' });
-  test.skip(!chart.ok() || !mv.ok(), '本地 203102 谱面 / MV 尚未解包');
+  const hls = await request.get('/assets/mv/203102/index.m3u8');
+  const mp4 = await request.get('/assets/mv/203102.mp4');
+  const hasMv = (await hls.text()).startsWith('#EXTM3U')
+    || (mp4.ok() && (mp4.headers()['content-type'] ?? '').startsWith('video/'));
+  test.skip(!chart.ok() || !hasMv, '本地 203102 谱面 / MV 尚未解包');
   await page.goto('/?song=203102&difficulty=MASTER');
   await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {

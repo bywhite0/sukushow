@@ -1,6 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MusicVideo, type MusicVideoLoadProgress } from '../src/musicVideo';
 
+// hls.js 用假实现替身：只关心「有没有挂载、有没有销毁、致命错误是否上报」。
+const { hlsInstances } = vi.hoisted(() => ({ hlsInstances: [] as FakeHls[] }));
+
+class FakeHls {
+  static supported = true;
+  static isSupported = () => FakeHls.supported;
+  destroyed = false;
+  loadedSource = '';
+  attachedMedia: unknown = null;
+  private handlers = new Map<string, (event: string, data: { fatal?: boolean }) => void>();
+  constructor(public readonly config?: Record<string, unknown>) { hlsInstances.push(this); }
+  destroy() { this.destroyed = true; }
+  loadSource(url: string) { this.loadedSource = url; }
+  attachMedia(media: unknown) { this.attachedMedia = media; }
+  on(event: string, callback: (event: string, data: { fatal?: boolean }) => void) {
+    this.handlers.set(event, callback);
+  }
+  emit(event: string, data: { fatal?: boolean }) { this.handlers.get(event)?.(event, data); }
+}
+
+vi.mock('hls.js', () => ({ default: FakeHls }));
+
+/** 模拟浏览器是否原生支持 HLS（Safari 与 Chrome 142+ 支持，Firefox / Edge 不支持）。 */
+let nativeHls = false;
+
 class FakeVideo extends EventTarget {
   src = '';
   muted = false;
@@ -20,6 +45,7 @@ class FakeVideo extends EventTarget {
   pause = vi.fn(() => { this.paused = true; });
   load = vi.fn();
   removeAttribute = vi.fn(() => { this.src = ''; });
+  canPlayType = (type: string) => (nativeHls && type.includes('mpegurl') ? 'maybe' : '');
   frame(time: number) {
     this.currentTime = time;
     this.seeking = false;
@@ -38,6 +64,9 @@ const create = () => videos.at(-1)!;
 
 beforeEach(() => {
   videos = [];
+  hlsInstances.length = 0;
+  nativeHls = false;
+  FakeHls.supported = true;
   vi.stubGlobal('document', { createElement: () => {
     const video = new FakeVideo();
     videos.push(video);
@@ -221,6 +250,79 @@ describe('MusicVideo', () => {
     const pending = mv.seekFrame(3);
     mv.setUrl(null);
     expect(await pending).toBeNull();
+    mv.dispose();
+  });
+});
+
+describe('MusicVideo HLS', () => {
+  it('优先用 hls.js，即使浏览器自称支持原生 HLS', async () => {
+    // Chrome 142+ 自称支持 HLS，但对 206 分块会 DEMUXER_ERROR_COULD_NOT_PARSE，
+    // 所以顺序必须是 hls.js 在前。
+    nativeHls = true;
+    const mv = new MusicVideo(() => {});
+    mv.setUrl('/assets/mv/103103/index.m3u8');
+    mv.setEnabled(true);
+    await vi.waitFor(() => expect(hlsInstances).toHaveLength(1));
+    expect(hlsInstances[0]!.loadedSource).toBe('/assets/mv/103103/index.m3u8');
+    expect(create().src).toBe('');
+    mv.dispose();
+  });
+
+  it('hls.js 不支持时退回原生（Safari / iOS 走这条路）', async () => {
+    nativeHls = true;
+    FakeHls.supported = false;
+    const mv = new MusicVideo(() => {});
+    mv.setUrl('/assets/mv/104119/index.m3u8');
+    mv.setEnabled(true);
+    await vi.waitFor(() => expect(create().src).toBe('/assets/mv/104119/index.m3u8'));
+    expect(hlsInstances).toHaveLength(0);
+    mv.dispose();
+  });
+
+  it('hls.js 与原生都不可用时判定加载失败', async () => {
+    nativeHls = false;
+    FakeHls.supported = false;
+    const mv = new MusicVideo(() => {});
+    const loaded = mv.setUrl('/assets/mv/405206/index.m3u8');
+    mv.setEnabled(true);
+    await expect(loaded).resolves.toBe(false);
+    mv.dispose();
+  });
+
+  it('原生不支持时用 hls.js 挂载（Firefox / Edge 走这条路）', async () => {
+    nativeHls = false;
+    const mv = new MusicVideo(() => {});
+    mv.setUrl('/assets/mv/204105/index.m3u8');
+    mv.setEnabled(true);
+    await vi.waitFor(() => expect(hlsInstances).toHaveLength(1));
+    const hls = hlsInstances[0]!;
+    expect(hls.loadedSource).toBe('/assets/mv/204105/index.m3u8');
+    expect(hls.attachedMedia).toBe(create());
+    mv.dispose();
+    expect(hls.destroyed).toBe(true);
+  });
+
+  it('hls.js 报致命错误时判定加载失败', async () => {
+    nativeHls = false;
+    const mv = new MusicVideo(() => {});
+    const loaded = mv.setUrl('/assets/mv/204104/index.m3u8');
+    mv.setEnabled(true);
+    await vi.waitFor(() => expect(hlsInstances).toHaveLength(1));
+    hlsInstances[0]!.emit('hlsError', { fatal: true });
+    await expect(loaded).resolves.toBe(false);
+    mv.dispose();
+  });
+
+  it('切换曲目时销毁上一首的 hls 实例', async () => {
+    nativeHls = false;
+    const mv = new MusicVideo(() => {});
+    mv.setUrl('/assets/mv/103103/index.m3u8');
+    mv.setEnabled(true);
+    await vi.waitFor(() => expect(hlsInstances).toHaveLength(1));
+    const first = hlsInstances[0]!;
+    mv.setUrl('/assets/mv/103106/index.m3u8');
+    expect(first.destroyed).toBe(true);
+    await vi.waitFor(() => expect(hlsInstances).toHaveLength(2));
     mv.dispose();
   });
 });

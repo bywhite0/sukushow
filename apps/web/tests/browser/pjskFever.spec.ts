@@ -2,6 +2,12 @@ import { expect, test } from '@playwright/test';
 
 test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) => {
   test.setTimeout(180_000);
+  // 关掉 MV：这里比对的是 0.125s / 0.25s 的画面，此时还没有音符，
+  // 能看见的只有舞台背景与 Fever 闪光。MV 会整块替换舞台背景，
+  // 于是「特效配置」这类只影响背景的差异会被盖住，断言失去意义。
+  await page.addInitScript(() => {
+    localStorage.setItem('llll-pjsk-preview:settings:v1', JSON.stringify({ enableMusicVideo: false }));
+  });
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
   await page.waitForFunction(() => Boolean((window as any).__LLL_PJSK__?.getChart?.()), null, { timeout: 90_000 });
   await page.locator('#tab-display').click();

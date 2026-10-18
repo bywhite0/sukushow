@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test'
 
+/** 最小 HLS 播放列表：1 个 init 段 + 1 个媒体分片。 */
+const PLAYLIST = [
+  '#EXTM3U',
+  '#EXT-X-VERSION:7',
+  '#EXT-X-TARGETDURATION:10',
+  '#EXT-X-MAP:URI="init.mp4"',
+  '#EXTINF:10,',
+  'seg_000.m4s',
+  '#EXT-X-ENDLIST',
+  '',
+].join('\n')
+
+// 谱面 22 + 曲目资料 12 + 音频 1 + 曲绘 200 + MV（播放列表 + init 100 + 分片 100）
+const MV_TOTAL = 22 + 12 + 1 + 200 + PLAYLIST.length + 100 + 100
+
 for (const view of ['llll', 'pjsk']) {
   test(`${view} 媒体大小未知时不显示不完整的总量`, async ({ page }) => {
     let requested = false
@@ -108,18 +123,25 @@ for (const view of ['llll', 'pjsk']) {
     await page.route('**/assets/jacket/**', route => route.fulfill(route.request().method() === 'HEAD'
       ? { headers: { 'content-length': '200' }, body: '' } : { status: 404, body: '' }))
     await page.route('**/assets/mv/**', async route => {
-      if (route.request().method() === 'HEAD') {
-        await route.fulfill({ headers: { 'content-length': '100' }, body: '' })
-        return
+      const request = route.request();
+      if (request.url().endsWith('.m3u8')) {
+        // 播放列表要放行：体积统计靠它拿到分片清单。
+        await route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: PLAYLIST });
+        return;
       }
-      await pending
-      await route.fulfill({ status: 404, body: '' })
-    })
+      if (request.method() === 'HEAD') {
+        await route.fulfill({ headers: { 'content-length': '100' }, body: '' });
+        return;
+      }
+      await pending;
+      await route.fulfill({ status: 404, body: '' });
+    });
     await page.locator('#song-search').fill('103103')
     await page.locator('[data-song-id="103103"]').click()
     try {
       await expect(page.locator('[data-resource-loading-detail]')).toContainText('MV')
-      await expect(page.locator('[data-resource-loading-size]')).toHaveText('(已下载 34 B / 335 B)')
+      // MV 总量 = 播放列表本身 + init + 1 个分片（各 100 B）。
+      await expect(page.locator('[data-resource-loading-size]')).toHaveText(`(已下载 34 B / ${MV_TOTAL} B)`)
     } finally { release() }
   })
 
