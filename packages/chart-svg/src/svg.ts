@@ -121,16 +121,25 @@ export interface SidePanel {
 
 /**
  * 底部信息区——照参考仓库 `pjsekai-scores-rs` 的做法：**图片底部一条横带**，
- * 左边一张方形封面，右边两行文字（曲名 / 难度与等级）。
+ * 左边一张方形封面，右边是曲名与补充信息。
  *
  * 参考仓库的算法（`drawing.rs`）：画布总高 = 谱面段高 + `time_padding×2` + `meta_size`
  * + `time_padding×2`，其中 `meta_size = 192`；封面是 `meta_size` 见方，左上角落在
  * `(lane_padding×2, max_height + time_padding×3)`。
+ *
+ * 补充信息有两种排法，二选一：
+ * - `subtitle`：标题**下方**一行（CLI 的「难度 · 等级」）。
+ * - `eyebrow` + `aside`：标题**上方**一行小字，与标题**右侧**同一基线上的补充文字
+ *   （如「MASTER 谱面预览」与演唱者）。三者同时给会挤在一起。
  */
 export interface MetaPanel {
-  /** 曲名（第一行）。 */
+  /** 曲名（主行）。 */
   title?: string;
-  /** 副标题（第二行，通常放难度与等级）。 */
+  /** 标题上方的一行小字：难度、用途这类标签。 */
+  eyebrow?: string;
+  /** 标题右侧同一基线上的补充文字：演唱者、曲师等。 */
+  aside?: string;
+  /** 副标题（标题下方一行，通常放难度与等级）。 */
   subtitle?: string;
   /**
    * 封面图（data URI 或链接）。
@@ -211,6 +220,8 @@ const DEFAULT_CSS = [
   '.meta-line{stroke:#2a3a55;stroke-width:1}',
   '.meta-title{font-family:"Segoe UI",system-ui,sans-serif;font-weight:900;fill:#e8eefc}',
   '.meta-sub{font-family:"Segoe UI",system-ui,sans-serif;font-weight:700;fill:#9fb0cc}',
+  '.meta-eyebrow{font-family:"Segoe UI",system-ui,sans-serif;font-weight:700;fill:#8fa3c0;letter-spacing:.08em}',
+  '.meta-aside{font-family:"Segoe UI",system-ui,sans-serif;font-weight:700;fill:#9fb0cc}',
   '.meta-frame{fill:none;stroke:#2a3a55;stroke-width:1}',
 ].join('\n');
 
@@ -590,12 +601,16 @@ export function renderSvg(chart: Chart, lib: SpriteLibrary, opt: SvgOptions): { 
 }
 
 /**
- * 底部信息区 —— 照参考仓库 `pjsekai-scores-rs`：封面 + 曲名 + 副标题，横带贴在图底。
+ * 底部信息区 —— 照参考仓库 `pjsekai-scores-rs`：封面 + 曲名 + 补充信息，横带贴在图底。
  *
  * 参考仓库的排布（`drawing.rs` 的 meta 段，数值取自其 `0642_master.svg` 实测）：
  * 封面 `meta_size` 见方、左边距 `lane_padding×2`；文字块在封面右侧，
  * **标题字号 = `meta_size/2`、副标题 = `meta_size/4`**，基线分别贴在封面底边
  * 上 16px 与 `meta_size/3` 处。字号随封面一起缩放，故不写进 CSS 类。
+ *
+ * `eyebrow` 与 `aside` 是在此之上加的两处：前者把一行小字压在标题的字头之上，
+ * 后者接在标题右侧——用同一个 `<text>` 里的 `tspan` 续写，由 SVG 自己排版，
+ * 不必估曲名宽度（这里没有字体度量）。
  */
 function metaPanel(meta: MetaPanel, totalW: number, yTop: number, padX: number): string {
   const size = meta.size ?? 192;
@@ -619,10 +634,24 @@ function metaPanel(meta: MetaPanel, totalW: number, yTop: number, padX: number):
   // 两者相距 `size×0.625`——96px 的标题与 48px 的副标题才不叠在一起。
   const titleY = imgY + size - padX;
   const subY = imgY + size / 3 - 8;
-  if (meta.title) {
+  if (meta.eyebrow) {
+    // 小字基线收在标题基线上一个字身处：与标题字头之间留出约四分之一字号的空隙。
+    out.push(
+      `<text class="meta-eyebrow" x="${n(textX)}" y="${n(titleY - titleSize)}"`
+      + ` font-size="${n(size / 8)}">${esc(meta.eyebrow)}</text>`,
+    );
+  }
+  if (meta.title || meta.aside) {
+    const title = meta.title ? esc(meta.title) : '';
+    // 没有 aside 时保持单段文本：多一个 tspan 只是噪音，也让输出与旧版一致。
+    const body = meta.aside
+      ? `${title ? `<tspan>${title}</tspan>` : ''}`
+        + `<tspan class="meta-aside"${title ? ` dx="${n(size / 6)}"` : ''}`
+        + ` font-size="${n(size / 5)}">${esc(meta.aside)}</tspan>`
+      : title;
     out.push(
       `<text class="meta-title" x="${n(textX)}" y="${n(titleY)}"`
-      + ` font-size="${n(titleSize)}">${esc(meta.title)}</text>`,
+      + ` font-size="${n(titleSize)}">${body}</text>`,
     );
   }
   if (meta.subtitle) {

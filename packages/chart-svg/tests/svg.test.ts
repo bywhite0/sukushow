@@ -476,6 +476,20 @@ describe('底部信息区', () => {
     expect(metaY).toBeGreaterThan(plain.columnHeight - 1);
   });
 
+  it('eyebrow 压在标题字头之上，aside 从标题排版终点接续', () => {
+    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
+    const { svg } = renderSvg(chart, lib(), opts({
+      aspect: 0,
+      meta: { eyebrow: 'MASTER 谱面预览', title: 'フォーチュンムービー', aside: '日野下花帆、乙宗梢' },
+    }));
+    const eyebrowY = Number(svg.match(/<text class="meta-eyebrow" x="[\d.]+" y="([\d.]+)"/)![1]);
+    const titleY = Number(svg.match(/<text class="meta-title" x="[\d.]+" y="([\d.]+)"/)![1]);
+    expect(eyebrowY).toBeLessThan(titleY);
+    expect(svg).toContain('>MASTER 谱面预览</text>');
+    // 演唱者与曲名同属一个 <text>：第二个 tspan 从曲名的排版终点接着写，不必估宽。
+    expect(svg).toMatch(/<text class="meta-title"[^>]*><tspan>フォーチュンムービー<\/tspan><tspan class="meta-aside" dx="[\d.]+" font-size="[\d.]+">日野下花帆、乙宗梢<\/tspan><\/text>/);
+  });
+
   it('不给封面时只画文字', () => {
     const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
     const { svg } = renderSvg(chart, lib(), opts({ aspect: 0, meta: { title: 'T' } }));
