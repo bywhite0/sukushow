@@ -36,6 +36,15 @@ pnpm render:svg          # SVG CLI
 
 `pnpm verify:shared-assets` 比较 `apps/web` 与 `packages/chart-svg` 的 7 张 2D 贴图及元数据哈希。
 
+## 界面图标
+
+界面只用 Lucide（ISC）一套图标，构建期从 `@iconify-json/lucide` 抽取，整套图标留在 devDependency 里。
+
+- `apps/web/scripts/generate-ui-icons.mjs` 里的 `ICONS` 是唯一清单，生成 `apps/web/src/icons.generated.ts`；加图标就是加一个 Lucide 名字，然后跑 `pnpm --filter @sukushow/web icons`（`pnpm build` 会先自动跑一次）。
+- 调用点统一走 `apps/web/src/icons.ts` 的 `icon(name, size, { strokeWidth, className })`，颜色、描边与对齐由包装层决定；图形本身是 24×24 网格，`size=16` 时 `strokeWidth` 1.75 约等于 1.2px。
+- 播放按钮这类会换图标的控件用 `setIconButton()`：它只在状态真的变化时写 DOM，因此可以放在逐帧渲染里。
+- 图标一律走 Lucide。字形（`▶`、`Ⅱ`、`⏭`、`✓`、`×`、`♪`、`↗`、`⌄`）依赖字体、宽度不一致，部分平台还会落进 emoji 字体；这类字符只用在 `0.5×` 这类排版文本和 `<kbd>` 的方向键里。
+
 ## 来源状态与资源所有权
 
 `apps/web` 的共享壳层持有歌曲版本、谱面来源、元数据和媒体覆盖。`songId` 表示媒体版本，官方谱面来源可指向另一个明确兼容的歌曲 ID；`identity` 表示文件关联边界，`revision` 表示可见状态修订。

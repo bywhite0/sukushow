@@ -27,6 +27,7 @@ import {
   type ExportVideoSettings,
   type OpeningSpan,
 } from '@sukushow/export'
+import { icon } from '../icons'
 
 export type ExportDialogContext = {
   /** 本模式写死的开场区间。 */
@@ -83,7 +84,7 @@ export async function probeAllConfigs(): Promise<{ video: ConfigSupportRow[]; au
 
 const dialogHtml = (openingLabel: string) => `
 <form method="dialog" class="export-form">
- <header class="export-head"><h2>导出视频</h2><button type="button" class="text-button" data-close aria-label="关闭">✕</button></header>
+ <header class="export-head"><h2>导出视频</h2><button type="button" class="text-button" data-close aria-label="关闭">${icon('x', 16)}</button></header>
  <div class="export-grid">
   <label class="setting"><span>格式</span><select name="container"><option value="mp4" selected>MP4（H.264 + AAC）</option><option value="webm">WebM（VP9 + Opus，长片段建议用 MP4）</option></select></label>
   <label class="setting"><span>分辨率</span><select name="resolution"></select></label>

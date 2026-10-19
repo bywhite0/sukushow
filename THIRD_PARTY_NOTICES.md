@@ -5,6 +5,7 @@
 - Three.js：MIT，https://github.com/mrdoob/three.js
 - fflate：MIT，https://github.com/101arrowz/fflate
 - Mediabunny：MPL-2.0，https://github.com/Vanilagy/mediabunny ，用于视频封装；其代码适用 MPL-2.0。
+- Lucide：ISC，https://github.com/lucide-icons/lucide ，界面图标。构建期由 `apps/web/scripts/generate-ui-icons.mjs` 从 `@iconify-json/lucide` 抽取用到的图形，生成 `apps/web/src/icons.generated.ts`，图形路径随产物内联。
 
 构建与测试：Vite、Vitest、TypeScript、tsx（MIT）；Playwright（Apache-2.0）。完整依赖树和版本见 pnpm-lock.yaml，包内许可文件随安装提供。
 
