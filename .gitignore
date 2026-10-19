@@ -10,6 +10,7 @@ test-results/
 !.env.example
 output/
 tmp/
+apps/web/tools/
 apps/web/public/assets/audio/
 apps/web/public/assets/jacket/
 apps/web/public/assets/chart/

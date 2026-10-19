@@ -21,6 +21,7 @@ import { fetchBytes } from '@sukushow/llll-preview/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
 import { createTrackHeader } from './trackHeader';
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome';
+import { icon, setIconButton } from '../icons';
 import type { SongSelectionStore, ResolvedSource } from '../songSelection';
 import { createSourceBinding, waitForSource } from '../sourceBinding';
 import type { createSourceFiles } from '../sourceFiles';
@@ -62,7 +63,7 @@ app.innerHTML=`
  ${transportMarkup}
 </section>
 <aside id="preview-inspector" aria-label="预览设置" hidden>
- <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">×</button></div>
+ <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">${icon('x', 16)}</button></div>
  <div class="settings-tabs" role="tablist" aria-label="设置分类">
   <button id="tab-track" role="tab" aria-selected="true" aria-controls="panel-track">播放与轨道</button>
   <button id="tab-display" role="tab" aria-selected="false" aria-controls="panel-display" tabindex="-1">显示与特效</button>
@@ -121,7 +122,7 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>{
 };
 const input=(id:string)=>el<HTMLInputElement>(id);
 const track=createTrackHeader(root);
-bindViewChrome(root);
+const unbindChrome=bindViewChrome(root);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
 el('panel-display').prepend(el('opt-hit-effect').closest('label')!);
 el('panel-score').prepend(el('tech-score').closest('label')!);
@@ -554,7 +555,7 @@ function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;st
  const previous=lastLiveFrame;
  const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||previous.dpr!==next.dpr||previous.mode!==next.mode;
  if(!playing&&!changed)return;
- musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
+ musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;setIconButton(el('play'),skip?'skip-forward':playing?'pause':'play',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
 }
 function animate(){
  const current=chart;
@@ -679,7 +680,7 @@ if(!player)el<HTMLButtonElement>('export-video').disabled=true;
 };
 let disposed=false;
 let unsubscribeSongSelection=()=>{};
-const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();el('fullscreen').onclick=null;cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
 window.addEventListener('pagehide',dispose,{once:true});
 
 const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0],ResolvedSource>({

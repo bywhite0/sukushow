@@ -7,6 +7,7 @@
  */
 import { songAssets, type SongEntry, type SongList } from '@sukushow/llll-preview/songAssets'
 import { vocalVersions, chartSongFor } from './songVersions'
+import { icon } from './icons'
 
 export const DIFFICULTY_ORDER = ['NORMAL', 'HARD', 'EXPERT', 'MASTER'] as const
 export type DifficultyName = (typeof DIFFICULTY_ORDER)[number]
@@ -94,11 +95,11 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   const root = document.createElement('div')
   root.className = 'picker'
   root.innerHTML = `
-    <button class="picker-open" type="button" data-picker-open aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>更换曲目</span><span aria-hidden="true">↗</span></button>
+    <button class="picker-open" type="button" data-picker-open aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false">${icon('list-music', 16)}<span>更换曲目</span><span aria-hidden="true">${icon('arrow-up-right', 14)}</span></button>
     <div id="song-versions" class="version-group" hidden>
       <button id="song-version-toggle" class="version-toggle" type="button"
               aria-label="演唱版本" aria-haspopup="menu" aria-expanded="false" aria-controls="song-version-panel">
-        <span class="version-caption">演唱版本</span><span data-version-current></span><span aria-hidden="true">⌄</span>
+        <span class="version-caption">演唱版本</span><span data-version-current></span><span aria-hidden="true">${icon('chevron-down', 14)}</span>
       </button>
       <div id="song-version-panel" class="version-panel" role="menu" aria-label="演唱版本" popover="manual" hidden></div>
     </div>
@@ -113,11 +114,11 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   panel.setAttribute('role', 'dialog')
   panel.setAttribute('aria-labelledby', 'song-library-title')
   panel.innerHTML = `
-    <div class="library-heading"><h2 id="song-library-title">曲库</h2><span id="song-count" class="picker-count"></span><button class="quiet" type="button" data-library-close aria-label="关闭曲库">×</button></div>
+    <div class="library-heading"><h2 id="song-library-title">曲库</h2><span id="song-count" class="picker-count"></span><button class="quiet" type="button" data-library-close aria-label="关闭曲库">${icon('x', 20)}</button></div>
     <div class="library-search picker-field">
-      <svg class="picker-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
+      ${icon('search', 18, { className: 'picker-icon' })}
       <input id="song-search" class="picker-input" type="text" role="combobox" autocomplete="off" spellcheck="false" aria-expanded="false" aria-controls="song-listbox" aria-autocomplete="list" aria-label="搜索曲目" placeholder="搜索曲名、组合或 ID">
-      <button id="song-clear" class="picker-clear" type="button" aria-label="清空搜索" hidden>×</button>
+      <button id="song-clear" class="picker-clear" type="button" aria-label="清空搜索" hidden>${icon('x', 14)}</button>
     </div>
     <div class="picker-toolbar">
       <select id="song-category" aria-label="曲目分类"><option value="">全部分类</option></select>
@@ -227,7 +228,11 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       title.textContent = version.title
       const detail = document.createElement('small')
       detail.textContent = `${version.generationsId}期 · ${version.unitName}`
-      button.append(title, detail)
+      const check = document.createElement('span')
+      check.className = 'version-check'
+      check.setAttribute('aria-hidden', 'true')
+      check.innerHTML = icon('check', 12, { strokeWidth: 2.6 })
+      button.append(title, detail, check)
       button.onclick = () => {
         if (selectedSongId === version.id) { closeVersions(true); return }
         selectedSongId = version.id
@@ -394,7 +399,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         const art = document.createElement('span')
         art.className = 'song-option-art'
         art.setAttribute('aria-hidden', 'true')
-        art.textContent = '♪'
+        art.innerHTML = icon('music', 20)
         const coverUrl = songAssets(song).coverUrl
         if (coverUrl) {
           const image = document.createElement('img')

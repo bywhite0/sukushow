@@ -18,6 +18,7 @@ import {
   forgetDirectory, grantPending, libraryFromInput, pendingHandle,
   pickDirectory, restoreDirectory, supportsDirectoryPicker,
 } from './localAssets'
+import { icon } from './icons'
 
 type ViewId = 'llll' | 'pjsk'
 
@@ -71,8 +72,8 @@ app.innerHTML = `
         `).join('')}
       </nav>
       <div class="header-actions">
-        <button type="button" class="quiet" id="browse-library" aria-label="搜索曲库" aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false" disabled><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>曲库</span><kbd>/</kbd></button>
-        <button type="button" class="quiet" id="open-settings" aria-label="全局设置" aria-haspopup="dialog" aria-controls="global-settings" aria-expanded="false"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2a6 6 0 0 0-1.4.8l-2-.6-2 3.5 1.5 1.4a6 6 0 0 0 0 1.8l-1.5 1.4 2 3.5 2-.6a6 6 0 0 0 1.4.8L8 18h4l.5-2a6 6 0 0 0 1.4-.8l2 .6 2-3.5-1.5-1.4a6 6 0 0 0 0-1.8l1.5-1.4-2-3.5-2 .6a6 6 0 0 0-1.4-.8L12 2Z"/><circle cx="10" cy="10" r="2.7"/></svg><span>设置</span></button>
+        <button type="button" class="quiet" id="browse-library" aria-label="打开曲库" aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false" disabled>${icon('library-big', 16)}<span>曲库</span><kbd>/</kbd></button>
+        <button type="button" class="quiet" id="open-settings" aria-label="全局设置" aria-haspopup="dialog" aria-controls="global-settings" aria-expanded="false">${icon('settings', 17)}<span>设置</span></button>
       </div>
       <div id="song-picker-mount" class="song-picker" aria-label="选择曲目">
         <div class="picker-loading" role="status">
@@ -83,7 +84,7 @@ app.innerHTML = `
       </div>
       <div class="view-toolbar" id="view-toolbar" aria-label="谱面来源与预览选项">
         <div class="file-toolbar" aria-label="打开谱面与音频">
-          <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
+          <button id="open-chart" class="file-action" type="button">${icon('plus', 16)}<span>打开谱面</span></button>
           <input class="sr-only" id="chart-file" type="file" accept=".json,.bytes,application/json" aria-label="选择谱面文件">
           <div class="media-controls">
             <button id="media-toggle" class="quiet" type="button" aria-expanded="false" aria-controls="media-panel">媒体</button>

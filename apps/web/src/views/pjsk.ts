@@ -26,6 +26,7 @@ import { chargeNotesInWindow } from '@sukushow/pjsk-preview/lib/feverCharge'
 import { installExportDialog, probeAllConfigs } from './exportDialog'
 import { createTrackHeader } from './trackHeader'
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome'
+import { icon, setIconButton } from '../icons'
 import type { ExportFrameSource } from '@sukushow/export'
 import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 import type { SongSelectionStore } from '../songSelection'
@@ -85,7 +86,7 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
  ${transportMarkup}
 </section>
 <aside id="preview-inspector" aria-label="预览设置" hidden>
- <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">×</button></div>
+ <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">${icon('x', 16)}</button></div>
  <div class="settings-tabs" role="tablist" aria-label="设置分类">
   <button id="tab-track" role="tab" aria-selected="true" aria-controls="panel-track">播放与轨道</button>
   <button id="tab-display" role="tab" aria-selected="false" aria-controls="panel-display" tabindex="-1">显示与特效</button>
@@ -126,14 +127,14 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
 </main>`
 
   const track = createTrackHeader(root)
-  bindViewChrome(root)
+  const unbindChrome = bindViewChrome(root)
   if (!toolbarHost) {
     toolbarHost = document.createElement('div')
     toolbarHost.className = 'file-toolbar'
     toolbarHost.setAttribute('aria-label', '打开谱面与音频')
     toolbarHost.innerHTML = `
       <div id="song-picker-mount" class="song-picker" aria-label="选择曲目"></div>
-      <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
+      <button id="open-chart" class="file-action" type="button">${icon('plus', 16)}<span>打开谱面</span></button>
       <input class="sr-only" id="chart-file" type="file" accept=".json,.bytes,application/json" aria-label="选择谱面文件">
       <button id="open-audio" class="quiet" type="button">添加音频</button>
       <input class="sr-only" id="audio-file" type="file" accept="audio/*" aria-label="选择本地音频">
@@ -601,7 +602,8 @@ function renderLoop() {
     el('play').setAttribute('disabled', 'true')
     el('export-video').setAttribute('disabled', 'true')
   }
-  el('play').textContent = snapshot.transportState === 'playing' ? 'Ⅱ 暂停' : '▶ 播放'
+  const playing = snapshot.transportState === 'playing'
+  setIconButton(el('play'), playing ? 'pause' : 'play', playing ? '暂停' : '播放')
   rafHandle = requestAnimationFrame(renderLoop)
 }
 
@@ -878,6 +880,7 @@ window.__LLL_PJSK__ = {
     if (disposing) return disposing
     disposed = true
     unsubscribeSongSelection()
+    unbindChrome()
     liveRenderingSuspended = true
     el('fullscreen').onclick = null
     cancelAnimationFrame(rafHandle)
