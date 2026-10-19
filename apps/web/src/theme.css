@@ -1,0 +1,25 @@
+/* Interface colors only. Chart, difficulty and in-game HUD palettes are independent. */
+:root {
+  color-scheme: dark;
+  --shell-bg:#141416; --shell-surface:#1b1b1e; --shell-raised:#252529;
+  --shell-panel:#202025; --shell-hover:#343039; --shell-canvas:#101012;
+  --shell-line:#303034; --shell-line-strong:#505057; --shell-line-subtle:#242427;
+  --shell-text:#efeee9; --shell-secondary:#c0bdc5; --shell-muted:#a09fa7;
+  --shell-track:#39383f; --shell-error:#f2a0ab;
+  --shell-accent:#e8a3b8; --shell-accent-text:#e8a3b8; --shell-accent-hover:#f0bccb; --shell-ink:#291b23;
+  --shell-accent-soft:color-mix(in srgb,var(--shell-accent) 12%,transparent);
+  --shell-backdrop:oklch(10% .006 300 / .6);
+  --shell-shadow:oklch(5% .005 300 / .45);
+  --stage-bg:#151c2c;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --shell-bg:#f6f5f7; --shell-surface:#fdfcfe; --shell-raised:#eae8ee;
+  --shell-panel:#fdfcfe; --shell-hover:#eae8ee; --shell-canvas:#eeedf1;
+  --shell-line:#dedbe2; --shell-line-strong:#a8a3b0; --shell-line-subtle:#e7e4eb;
+  --shell-text:#242129; --shell-secondary:#524d5b; --shell-muted:#696370;
+  --shell-track:#d1cdd8; --shell-error:#a32e45;
+  --shell-backdrop:oklch(25% .008 300 / .25);
+  --shell-shadow:oklch(20% .008 300 / .18);
+}

@@ -1,4 +1,6 @@
 import './style.css'
+import { initAppearance } from './theme'
+import { createGlobalSettings } from './globalSettings'
 import { initPwa } from './pwa'
 import { loadSongList } from '@sukushow/llll-preview/songAssets'
 import { cachedJsonResource, readResponseBytes, type DownloadProgress } from '@sukushow/llll-preview/resourceDownload'
@@ -43,6 +45,7 @@ type ViewModule = {
 
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('缺少统一前端容器。')
+const appearance = initAppearance()
 
 function initialSongBinding(): { songId: string } | null {
   try {
@@ -67,7 +70,10 @@ app.innerHTML = `
           </button>
         `).join('')}
       </nav>
-      <div class="header-actions"><button type="button" class="quiet" id="browse-library" aria-label="搜索曲库" aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false" disabled><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>曲库</span><kbd>/</kbd></button></div>
+      <div class="header-actions">
+        <button type="button" class="quiet" id="browse-library" aria-label="搜索曲库" aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false" disabled><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>曲库</span><kbd>/</kbd></button>
+        <button type="button" class="quiet" id="open-settings" aria-label="全局设置" aria-haspopup="dialog" aria-controls="global-settings" aria-expanded="false"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="m8 2-.5 2a6 6 0 0 0-1.4.8l-2-.6-2 3.5 1.5 1.4a6 6 0 0 0 0 1.8l-1.5 1.4 2 3.5 2-.6a6 6 0 0 0 1.4.8L8 18h4l.5-2a6 6 0 0 0 1.4-.8l2 .6 2-3.5-1.5-1.4a6 6 0 0 0 0-1.8l1.5-1.4-2-3.5-2 .6a6 6 0 0 0-1.4-.8L12 2Z"/><circle cx="10" cy="10" r="2.7"/></svg><span>设置</span></button>
+      </div>
       <div id="song-picker-mount" class="song-picker" aria-label="选择曲目">
         <div class="picker-loading" role="status">
           <span class="picker-loading-detail" data-picker-loading-detail>正在下载 song-list.json…</span>
@@ -114,6 +120,7 @@ app.innerHTML = `
   </div>
 `
 
+createGlobalSettings(app.querySelector<HTMLButtonElement>('#open-settings')!, appearance)
 initPwa()
 
 const workspace = app.querySelector<HTMLElement>('.workspace')!
