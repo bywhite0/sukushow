@@ -13,6 +13,10 @@
     "test": "pnpm --filter @sukushow/* --if-present run test",
     "test:browser": "pnpm --filter @sukushow/web test:browser",
     "verify:shared-assets": "node ./scripts/verify-shared-assets.mjs",
+    "version:status": "node ./scripts/version.mjs status",
+    "version:bump": "node ./scripts/version.mjs bump",
+    "version:baseline": "node ./scripts/version.mjs baseline",
+    "version:check": "node ./scripts/version.mjs check",
     "workspace:check": "pnpm verify:shared-assets && pnpm build && pnpm test"
   },
   "pnpm": {
