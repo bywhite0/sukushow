@@ -21,10 +21,10 @@ for (const view of ['llll', 'pjsk']) {
     await expect.poll(() => requested.some(path => path.includes('/jacket/103112.')), { timeout: 60000 }).toBe(true)
     expect(requested).not.toContain('/assets/mv/105101/index.m3u8')
   })
-  for (const [songId, sourceId, title] of [
-    ['103112', '105101', 'Dream Believers'],
-    ['103109', '104106', '永遠のEuphoria'],
-    ['405143', '405138', 'アイシイ（B.G.P. Ver.）'],
+  for (const [songId, sourceId] of [
+    ['103112', '105101'],
+    ['103109', '104106'],
+    ['405143', '405138'],
   ]) {
   test(`${view} Another Vocal ${songId} 请求来源谱面而非目标版本不存在的谱面`, async ({ page }) => {
     test.setTimeout(90000)
@@ -36,7 +36,7 @@ for (const view of ['llll', 'pjsk']) {
     await page.goto(`/?view=${view}&song=${songId}&difficulty=HARD`)
     await expect.poll(() => charts, { timeout: 60000 }).toContain(`/assets/chart/rhythmgame_chart_${sourceId}_02.bytes`)
     expect(charts.every(path => path.includes(`${sourceId}_02`))).toBe(true)
-    await expect(page.locator('#song-search')).toHaveValue(title)
+    await expect(page.locator('.picker')).toHaveAttribute('data-song-id', songId)
   })
   }
 }

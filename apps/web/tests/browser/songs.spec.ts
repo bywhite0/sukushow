@@ -7,8 +7,8 @@ test('?song= 打开本地曲目，开场过场带上曲名 / 难度 / 封面',as
  test.skip(!probe.ok()||!(await probe.body()).length,'未运行 scripts/link-assets.py');
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`/?song=${song.id}&difficulty=MASTER`);
- await expect(page.locator('#message')).toContainText(`已加载 ${song.title} [MASTER]`,{timeout:20_000});
- await expect(page.locator('#chart-name')).toHaveText(`${song.title} [MASTER]`);
+ await expect(page.locator('#chart-name')).toHaveText(song.title,{timeout:20_000});
+ await expect(page.locator('#chart-difficulty')).toHaveText('MASTER');
  await expect(page.locator('.difficulty-chip.is-active')).toHaveAttribute('data-difficulty','MASTER');
  await page.getByRole('button',{name:'播放',exact:true}).click();
  await expect(page.locator('#stage-canvas')).toHaveAttribute('data-intro','playing');
@@ -24,12 +24,14 @@ test('搜索框选曲并切难度，URL 同步',async({page,request})=>{
  const song=list.songs.find((s:any)=>s.hasChart&&s.charts.HARD);
  const probe=await request.get(`/assets/chart/${song.charts.HARD}`);
  test.skip(!probe.ok()||!(await probe.body()).length,'未运行 scripts/link-assets.py');
- await page.goto('/');await expect(page.locator('#message')).toContainText('就绪');
+ await page.goto('/');
+ await page.locator('#browse-library').click();
+ await expect(page.locator('#song-search')).toBeEnabled();
  await page.locator('#song-search').fill(song.id);
  await page.locator('.song-option').first().click();
- await expect(page.locator('#message')).toContainText(`已加载 ${song.title}`,{timeout:20_000});
+ await expect(page.locator('#chart-name')).toHaveText(song.title,{timeout:20_000});
  await page.locator('.difficulty-chip[data-difficulty="HARD"]').click();
- await expect(page.locator('#chart-name')).toHaveText(`${song.title} [HARD]`,{timeout:20_000});
+ await expect(page.locator('#chart-difficulty')).toHaveText('HARD',{timeout:20_000});
  await expect.poll(()=>new URL(page.url()).searchParams.get('difficulty')).toBe('HARD');
  expect(new URL(page.url()).searchParams.get('song')).toBe(song.id);
 });

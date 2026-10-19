@@ -4,7 +4,7 @@ test('手动开启 MV 时计入加载任务和资源大小，就绪后解锁', a
   test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('llll-pjsk-preview:settings:v1', JSON.stringify({ enableMusicVideo: false })));
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
-  await expect(page.locator('#message')).toContainText('フォーチュン', { timeout: 90_000 });
+  await expect(page.locator('#chart-name')).toContainText('フォーチュン', { timeout: 90_000 });
   await expect(page.locator('[data-resource-loading]')).toBeHidden();
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -17,6 +17,7 @@ test('手动开启 MV 时计入加载任务和资源大小，就绪后解锁', a
     if (request.method() === 'GET' && isMedia) await gate;
     await route.continue();
   });
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await page.locator('#opt-mv').check();
   try {
@@ -36,10 +37,11 @@ test('开启 MV 下载失败后报告回退并解除加载锁', async ({ page })
   test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.setItem('llll-pjsk-preview:settings:v1', JSON.stringify({ enableMusicVideo: false })));
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
-  await expect(page.locator('#message')).toContainText('フォーチュン', { timeout: 90_000 });
+  await expect(page.locator('#chart-name')).toContainText('フォーチュン', { timeout: 90_000 });
   await expect(page.locator('[data-resource-loading]')).toBeHidden();
   // 两种产物形态都要挡：切过的是 mv/<id>/**，没切过的是 mv/<id>.mp4。
   await page.route('**/assets/mv/103103**', route => route.fulfill({ status: 404, body: '' }));
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await page.locator('#opt-mv').check();
   await expect(page.locator('#message')).toContainText('MV 加载失败');

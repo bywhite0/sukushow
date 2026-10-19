@@ -28,7 +28,7 @@ test('PJSK 连续换谱时 session 不并发且最终显示最新谱面', async 
   await upload('older.json')
   await expect.poll(() => page.evaluate(() => typeof (window as any).__releaseOlder)).toBe('function')
   await upload('latest.json')
-  await expect(page.locator('#source-status')).toContainText('latest.json')
+  await expect(page.locator('#chart-file')).toHaveValue('')
   expect(await page.evaluate(() => (window as any).__sessionCalls)).toEqual(['older.json'])
   await page.evaluate(() => (window as any).__releaseOlder())
   await expect(page.locator('#chart-name')).toHaveText('latest.json')

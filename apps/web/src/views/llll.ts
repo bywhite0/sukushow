@@ -19,6 +19,8 @@ import { SE_RESOURCE_URLS, type SeLoadProgress } from '@sukushow/llll-preview/se
 import { COMBO_RESULT_TEXTURES } from '@sukushow/llll-preview/comboResultClip';
 import { fetchBytes } from '@sukushow/llll-preview/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
+import { createTrackHeader } from './trackHeader';
+import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome';
 import type { SongSelectionStore, ResolvedSource } from '../songSelection';
 import { createSourceBinding, waitForSource } from '../sourceBinding';
 import type { createSourceFiles } from '../sourceFiles';
@@ -38,12 +40,12 @@ const app=root;
 app.innerHTML=`
 <main>
 <section class="viewer" aria-label="谱面预览">
- <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">未加载谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
+ ${trackHeaderMarkup}
+ ${stageToolbarMarkup()}
  <div class="stage-shell"><div class="stage" id="stage" data-stage-mode="3d">
   <canvas id="chart-canvas" aria-hidden="true"></canvas>
   <canvas id="stage-canvas" aria-label="LLLL 舞台谱面预览画面" aria-hidden="false"></canvas>
   <div class="stage-mode-switch" role="group" aria-label="谱面显示模式">
-   <span class="stage-mode-label">显示</span>
    <button type="button" data-stage-mode="3d" aria-pressed="true">3D</button>
    <button type="button" data-stage-mode="2d" aria-pressed="false">2D</button>
   </div>
@@ -56,11 +58,11 @@ app.innerHTML=`
    </div>
   </div>
  </div></div>
- <div id="message" class="viewer-status" role="status" aria-live="polite">就绪。请选择歌曲或打开本地谱面。</div>
- <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="export-video" class="quiet" type="button">导出视频</button><button id="fullscreen" class="quiet">全屏预览</button></div></div>
+ <div id="message" class="viewer-status" role="status" aria-live="polite"></div>
+ ${transportMarkup}
 </section>
-<aside aria-label="预览设置">
- <div class="inspector-heading"><h2>预览设置</h2><span>自动保存</span></div>
+<aside id="preview-inspector" aria-label="预览设置" hidden>
+ <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">×</button></div>
  <div class="settings-tabs" role="tablist" aria-label="设置分类">
   <button id="tab-track" role="tab" aria-selected="true" aria-controls="panel-track">播放与轨道</button>
   <button id="tab-display" role="tab" aria-selected="false" aria-controls="panel-display" tabindex="-1">显示与特效</button>
@@ -68,7 +70,7 @@ app.innerHTML=`
   <button id="tab-score" role="tab" aria-selected="false" aria-controls="panel-score" tabindex="-1">计分</button>
  </div>
  <div class="settings-body">
- <section class="panel" id="panel-track" role="tabpanel" aria-labelledby="tab-track" tabindex="0"><h2>轨道与播放</h2>
+ <section class="panel" id="panel-track" role="tabpanel" aria-labelledby="tab-track" tabindex="0">
 <label class="setting" for="speed"><span>下落速度 <small>NoteSpeed×0.1</small><output id="speed-value">5.0</output></span><input id="speed" type="range" min="1" max="20" step="0.1" value="5"></label>
 <label class="setting" for="opt-start-z"><span>出现位置 NoteStartZ<output id="opt-start-z-value">0</output></span><input id="opt-start-z" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="opt-lane-width"><span>轨道宽度 LaneWidth<output id="opt-lane-width-value">100</output></span><input id="opt-lane-width" type="range" min="80" max="120" step="1" value="100"></label>
@@ -78,7 +80,7 @@ app.innerHTML=`
 <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
 <label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label>
 </section>
-<section class="panel" id="panel-display" role="tabpanel" aria-labelledby="tab-display" tabindex="0" hidden><h2>显示与特效</h2>
+<section class="panel" id="panel-display" role="tabpanel" aria-labelledby="tab-display" tabindex="0" hidden>
 <label class="setting" for="opt-lane-dark"><span>轨道暗度 LaneDarkness<output id="opt-lane-dark-value">80</output></span><input id="opt-lane-dark" type="range" min="0" max="130" step="1" value="80"></label>
 <label class="setting" for="opt-bg-dark"><span>背景暗度 BackgroundDarkness<output id="opt-bg-dark-value">0</output></span><input id="opt-bg-dark" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="opt-judge-y"><span>判定字高度 JudgementY<output id="opt-judge-y-value">5</output></span><input id="opt-judge-y" type="range" min="1" max="10" step="1" value="5"></label>
@@ -98,19 +100,18 @@ app.innerHTML=`
 <label class="setting" for="opt-combo-result"><span>曲终横幅 <small>GetResultIndex</small></span><select id="opt-combo-result"><option value="0" selected>AllPerfect</option><option value="1">FullCombo</option><option value="2">Clear</option><option value="3">Finish</option></select><small>自动演奏恒为 AP；其余档位仅供预览。</small></label>
 <label class="check"><input id="opt-mv" type="checkbox" checked>MV / MusicVideo</label>
 </section>
-<section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
+<section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden>
 <label class="setting" for="volume"><span>音乐 Music</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.7"></label>
 <label class="setting" for="vol-tap"><span>打击音 NoteTap</span><input id="vol-tap" type="range" min="0" max="1" step="0.01" value="1"></label>
 <label class="setting" for="vol-se"><span>SE</span><input id="vol-se" type="range" min="0" max="1" step="0.01" value="1"></label>
 <label class="setting" for="vol-voice"><span>Voice</span><input id="vol-voice" type="range" min="0" max="1" step="0.01" value="1"></label>
 </section>
-<section class="panel" id="panel-score" role="tabpanel" aria-labelledby="tab-score" tabindex="0" hidden><h2>计分预览</h2>
+<section class="panel" id="panel-score" role="tabpanel" aria-labelledby="tab-score" tabindex="0" hidden>
 <label class="setting" for="opt-appeal"><span>TotalAppeal</span><input id="opt-appeal" type="number" min="1000" max="2000000" step="1000" value="350000"><small>卡组 Appeal；默认 350000。</small></label>
 <label class="setting" for="opt-mastery"><span>熟练度等级</span><input id="opt-mastery" type="number" min="0" max="50" step="1" value="0"><small>MusicMasteryLevel；halfwayScore = Appeal×(1+等级×0.01)/音符数。</small></label>
 <label class="setting" for="opt-hit-effect"><span>击中特效</span><select id="opt-hit-effect"><option value="current" selected>直冲天上</option><option value="limited">限速</option><option value="full">加深</option><option value="off">关闭</option></select></label>
 <label class="setting" for="rank-preview"><span>段位预览</span><select id="rank-preview"><option value="none" selected>未激活</option><option value="D">D</option><option value="C">C</option><option value="B">B</option><option value="A">A</option><option value="S">S</option></select></label>
 </section></div>
-<div class="inspector-footer">设置仅影响预览，不会修改源文件。</div>
 </aside>
 </main>`;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>{
@@ -119,9 +120,11 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>{
  return node;
 };
 const input=(id:string)=>el<HTMLInputElement>(id);
+const track=createTrackHeader(root);
+bindViewChrome(root);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
-el('panel-display').querySelector('h2')!.after(el('opt-hit-effect').closest('label')!);
-el('panel-score').querySelector('h2')!.after(el('tech-score').closest('label')!);
+el('panel-display').prepend(el('opt-hit-effect').closest('label')!);
+el('panel-score').prepend(el('tech-score').closest('label')!);
 const settingTabs=Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
 function selectSettingsTab(tab:HTMLButtonElement){
  for(const item of settingTabs){
@@ -256,7 +259,6 @@ const reportInitialResource=(url:string,phase:'download'|'ready',downloaded?:num
  }
  const totalBytes=initialResourceTotal();
  const downloadedBytes=[...initialResourceDownloads.values()].reduce((sum,value)=>sum+value,0);
- initialResourceTask.setLabel(phase==='ready'?`已加载 ${detail}`:`下载 ${detail}`);
  initialResourceTask.update(initialResourceDone.size,phase==='ready'?`${detail} 已就绪`:`正在下载 ${detail}…`,{downloadedBytes,totalBytes});
 };
 const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((sizes)=>{
@@ -279,7 +281,7 @@ function clearChart(){
  input('timeline').disabled=true;input('timeline').value='0';input('timeline').max='0';
  el<HTMLButtonElement>('restart').disabled=true;
  el<HTMLButtonElement>('play').disabled=true;el<HTMLButtonElement>('export-video').disabled=true;
- el('chart-name').textContent='未加载谱面';el('audio-name').textContent='未加载音频 · 可以无声预览';
+ track.show();track.paint();message('');
  el('time').textContent='00:00.000 / 00:00.000';
  const canvas=el<HTMLCanvasElement>('stage-canvas');
  canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
@@ -287,7 +289,7 @@ function clearChart(){
  lastLiveFrame=null;
 }
 
-function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart?.duration??0);}
+function metadata(){input('timeline').min=String(Math.floor((player?.transport.start??0)*1000)/1000);input('timeline').max=String(chart?.duration??0);track.paint();}
 
 const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
@@ -552,7 +554,7 @@ function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;st
  const previous=lastLiveFrame;
  const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||previous.dpr!==next.dpr||previous.mode!==next.mode;
  if(!playing&&!changed)return;
- musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
+ musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;el('play').textContent=skip?'⏭ 跳过开场':playing?'Ⅱ 暂停':'▶ 播放';el('play').setAttribute('aria-label',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
 }
 function animate(){
  const current=chart;
@@ -665,8 +667,7 @@ const exportDialog=installExportDialog(el<HTMLButtonElement>('export-video'),{
  durationSec:()=>player?.transport.duration??chart?.duration??0,
  openingDefault:()=>input('opt-start-anim').checked,
  lockTargets:()=>[document.querySelector<HTMLElement>('.workspace-header')!,document.querySelector<HTMLElement>('aside')!,document.querySelector<HTMLElement>('.transport')!],
- title:()=>el('chart-name').textContent??'',
- message,
+ title:()=>track.title(),
 });
 if(!player)el<HTMLButtonElement>('export-video').disabled=true;
 
@@ -691,9 +692,16 @@ const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0
  },
  retain:state=>sourceFiles.retain(Object.values(state.media).flatMap(media=>media.kind==='file'?[media.url]:[])),
  pause:()=>{generation++;player?.pause();se?.stopAll();void musicVideo.setUrl(null);clearChart();},
- empty:state=>{clearChart();void resolveSource(state).then(source=>{
-  if(!disposed&&state.revision===songSelection.getSource().revision)el('chart-name').textContent=source.metadata.title;
- }).catch(()=>{});},
+ empty:state=>{
+  clearChart();
+  const current=()=>!disposed&&!disposing&&state.revision===songSelection.getSource().revision;
+  void resolveSource(state).then(source=>{
+   if(!current())return;
+   const md=source.metadata;
+   track.show({title:md.title,difficulty:md.difficulty,artist:md.vocal,jacket:source.assets.coverUrl,
+    credits:[['作词',md.lyricist],['作曲',md.composer],['编曲',md.arranger]]});
+  }).catch(error=>{if(current())message(`曲目加载失败：${String(error)}`,true);});
+ },
  error:error=>{loading.cancel();clearChart();message(`曲目加载失败：${String(error)}`,true);},
  apply:async(source:ResolvedSource,current,signal)=>{
   const next=source.chart;
@@ -717,14 +725,13 @@ const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0
    const bytes=await waitForSource(fetchBytes(assets.bgmUrl,state=>report(assets.bgmUrl,0,'正在下载音频…',state.downloadedBytes)),signal);
    if(!current())return;
    player?.clear();
-   let hasBgm=false;
-   if(bytes&&player){try{hasBgm=await player.loadBuffer(bytes.buffer as ArrayBuffer);}catch(error){console.warn('[llll-preview] BGM 解码失败：',error);}}
+   if(bytes&&player){try{await player.loadBuffer(bytes.buffer as ArrayBuffer);}catch(error){console.warn('[llll-preview] BGM 解码失败：',error);}}
    if(!current())return;
    report(null,1,'正在加载曲绘…');
    if(assets.coverUrl)await waitForSource(preloadImages([assets.coverUrl]),signal);
    if(!current())return;
    report(assets.coverUrl,2,'正在加载 MV…',assets.coverUrl&&!imageFailed(assets.coverUrl)?sizes.get(assets.coverUrl)??0:0);
-   const mvLoaded=await musicVideo.setUrl(assets.mvUrl,assets.mvStartSec,assets.mvDurationSec,
+   await musicVideo.setUrl(assets.mvUrl,assets.mvStartSec,assets.mvDurationSec,
     state=>report(assets.mvUrl,2,state.phase==='ready'?'MV 已就绪':'正在加载 MV…',state.downloadedBytes),sizes.get(assets.mvUrl??''));
    if(!current())return;
    currentMvId=assets.mvUrl?(source.songId??'local'):'';
@@ -736,12 +743,13 @@ const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0
    restoreFever();comboResult.hide();
    player?.setOffset(source.metadata.offsetMs/1000);
    input('offset').value=String(source.metadata.offsetMs);
-   el('chart-name').textContent=source.metadata.difficulty
-    ? `${source.metadata.title} [${source.metadata.difficulty}]` : source.metadata.title;
-   el('audio-name').textContent=hasBgm?'BGM 已加载':'未加载音频 · 可以无声预览';
+   const md=source.metadata;
+   track.show({title:md.title,difficulty:md.difficulty,artist:md.vocal,jacket:assets.coverUrl,chart:next,
+    credits:[['作词',md.lyricist],['作曲',md.composer],['编曲',md.arranger]],
+    stats:[['音符数',next.notes.length],['最大连击',next.maxCombo]]});
    setStartInfo({title:source.metadata.title,difficulty:source.metadata.difficulty,jacketUrl:assets.coverUrl});
    player?.reset();metadata();
-   message(`已加载 ${el('chart-name').textContent}（BGM ${hasBgm?'✓':'—'}${assets.mvUrl?`，MV ${mvLoaded?'✓':'—'}`:''}）。`);
+   message('');
    task.update(3,'预览已更新');
   }finally{task.finish();}
  },

@@ -33,6 +33,8 @@ for (const view of ['llll', 'pjsk']) {
     test.skip(!video, '浏览器不支持 VP8 MediaRecorder')
     await page.locator('#mv-file').setInputFiles({ name: 'local.webm', mimeType: 'video/webm', buffer: Buffer.from(video!) })
     await expect(page.locator('[data-media-kind="mv"] [data-media-status]')).toHaveText('local.webm')
+    await page.locator('[data-inspector-toggle]').click()
+    await page.getByRole('tab', { name: '显示与特效', exact: true }).click()
     await page.locator('#opt-mv').check()
     await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30000 })
     const state = await page.evaluate(view => {

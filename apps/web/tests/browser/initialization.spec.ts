@@ -6,7 +6,6 @@ for (const missingSe of [false, true]) {
     page.on('pageerror', error => errors.push(error.message));
     if (missingSe) await page.route('**/se/*.wav', route => route.fulfill({ status: 404, body: '' }));
     await page.goto('/');
-    await expect(page.locator('#message')).toContainText('就绪');
     await expect(page.locator('#stage-canvas')).toBeAttached();
     await expect.poll(() => page.evaluate(() => typeof (window as any).__LPW__?.hud?.inspect)).toBe('function');
     const play = page.getByRole('button', { name: '播放', exact: true });

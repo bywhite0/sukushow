@@ -31,8 +31,9 @@ for (const view of ['llll', 'pjsk']) {
       await pending
       await route.fulfill({ status: 404, body: '' })
     })
+    await page.locator('#browse-library').click()
     await page.locator('#song-search').fill('103103')
-    await page.locator('[data-song-id="103103"]').click()
+    await page.locator('.song-option[data-song-id="103103"]').click()
     try {
       await expect.poll(() => requested).toBe(true)
       await expect(page.locator('[data-resource-loading-size]')).toBeHidden()
@@ -43,6 +44,7 @@ for (const view of ['llll', 'pjsk']) {
     await page.goto(`/?view=${view}&song=missing`)
     await expect(page.locator('#message')).toContainText('曲目加载失败', { timeout: 30000 })
     await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30000 })
+    await page.locator('[data-inspector-toggle]').click()
     await page.getByRole('tab', { name: '显示与特效', exact: true }).click()
     await page.locator('#opt-mv').uncheck()
     const chart = JSON.stringify({ Notes: [{ Uid: 1, just: '1', holds: [], Flags: 160 }], Bpms: [] })
@@ -66,8 +68,9 @@ for (const view of ['llll', 'pjsk']) {
         await route.fulfill({ status: 404, body: '' })
       })
     }
+    await page.locator('#browse-library').click()
     await page.locator('#song-search').fill('103103')
-    await page.locator('[data-song-id="103103"]').click()
+    await page.locator('.song-option[data-song-id="103103"]').click()
     try {
       const loaded = Buffer.byteLength(chart) + Buffer.byteLength(credits)
       await expect(page.locator('[data-resource-loading-size]')).toHaveText(`(已下载 ${loaded} B / ${loaded + 300} B)`)
@@ -136,8 +139,9 @@ for (const view of ['llll', 'pjsk']) {
       await pending;
       await route.fulfill({ status: 404, body: '' });
     });
+    await page.locator('#browse-library').click()
     await page.locator('#song-search').fill('103103')
-    await page.locator('[data-song-id="103103"]').click()
+    await page.locator('.song-option[data-song-id="103103"]').click()
     try {
       await expect(page.locator('[data-resource-loading-detail]')).toContainText('MV')
       // MV 总量 = 播放列表本身 + init + 1 个分片（各 100 B）。

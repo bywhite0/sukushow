@@ -24,6 +24,8 @@ import { MusicVideo } from '@sukushow/llll-preview/musicVideo'
 import type { SongAssets } from '@sukushow/pjsk-preview/llll/songAssets'
 import { chargeNotesInWindow } from '@sukushow/pjsk-preview/lib/feverCharge'
 import { installExportDialog, probeAllConfigs } from './exportDialog'
+import { createTrackHeader } from './trackHeader'
+import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome'
 import type { ExportFrameSource } from '@sukushow/export'
 import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 import type { SongSelectionStore } from '../songSelection'
@@ -67,7 +69,8 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
   root.innerHTML = `
 <main>
 <section class="viewer" aria-label="谱面预览">
- <div class="preview-heading"><div class="current-file"><span class="section-label">当前谱面</span><h1 id="chart-name">未加载谱面</h1></div><span class="file-name" id="audio-name">未加载音频 · 可以无声预览</span></div>
+ ${trackHeaderMarkup}
+ ${stageToolbarMarkup()}
  <div class="stage-shell"><div class="stage" id="stage"><canvas id="chart-canvas" aria-label="三维谱面画布"></canvas>
   <div class="resource-loading" data-resource-loading role="status" aria-live="polite">
    <div class="resource-loading-card">
@@ -78,11 +81,11 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
    </div>
   </div>
  </div></div>
- <div id="message" class="viewer-status" role="status" aria-live="polite">正在初始化渲染器…</div>
- <div class="transport"><label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0"><div class="transport-row"><button id="play" class="primary" aria-label="播放">▶ 播放</button><button id="restart" class="quiet" aria-label="回到开头">↺ 重播</button><output id="time">00:00.000 / 00:36.000</output><label class="rate-label">播放倍率<select id="rate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="fullscreen" class="quiet">全屏预览</button><button id="export-video" class="quiet" type="button">导出视频</button></div></div>
+ <div id="message" class="viewer-status" role="status" aria-live="polite"></div>
+ ${transportMarkup}
 </section>
-<aside aria-label="预览设置">
- <div class="inspector-heading"><h2>预览设置</h2><span>自动保存</span></div>
+<aside id="preview-inspector" aria-label="预览设置" hidden>
+ <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">×</button></div>
  <div class="settings-tabs" role="tablist" aria-label="设置分类">
   <button id="tab-track" role="tab" aria-selected="true" aria-controls="panel-track">播放与轨道</button>
   <button id="tab-display" role="tab" aria-selected="false" aria-controls="panel-display" tabindex="-1">显示与特效</button>
@@ -90,7 +93,7 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
   <button id="tab-score" role="tab" aria-selected="false" aria-controls="panel-score" tabindex="-1">计分</button>
  </div>
  <div class="settings-body">
- <section class="panel" id="panel-track" role="tabpanel" aria-labelledby="tab-track" tabindex="0"><h2>轨道与播放</h2>
+ <section class="panel" id="panel-track" role="tabpanel" aria-labelledby="tab-track" tabindex="0">
 <label class="setting" for="note-speed"><span>下落速度 noteSpeed<output id="note-speed-value">10.5</output></span><input id="note-speed" type="range" min="1" max="12" step="0.1" value="10.5"></label>
 <label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label>
 <label class="setting" for="note-skin"><span>Note Skin</span><select id="note-skin"><option value="0" selected>Notes 01</option><option value="1">Notes 02</option></select></label>
@@ -99,7 +102,7 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
 <label class="check"><input id="flick-anim" type="checkbox" checked>Flick 箭头动画</label>
 <label class="check"><input id="hold-anim" type="checkbox" checked>Hold 流动动画</label>
 </section>
-<section class="panel" id="panel-display" role="tabpanel" aria-labelledby="tab-display" tabindex="0" hidden><h2>显示与特效</h2>
+<section class="panel" id="panel-display" role="tabpanel" aria-labelledby="tab-display" tabindex="0" hidden>
 <label class="setting" for="stage-cover"><span>上隐 StageCover<output id="stage-cover-value">0</output></span><input id="stage-cover" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="stage-opacity"><span>舞台不透明度<output id="stage-opacity-value">100</output></span><input id="stage-opacity" type="range" min="0" max="100" step="1" value="100"></label>
 <label class="setting" for="bg-brightness"><span>背景亮度<output id="bg-brightness-value">100</output></span><input id="bg-brightness" type="range" min="0" max="100" step="1" value="100"></label>
@@ -112,17 +115,18 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
 <label class="setting" for="effect-profile"><span>特效配置</span><select id="effect-profile"><option value="0" selected>Profile 0</option><option value="1">Profile 1</option></select></label>
 <p class="setting" id="fever-status"><small>Fever：未加载曲目。</small></p>
 </section>
-<section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden><h2>音量</h2>
+<section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden>
 <label class="setting" for="bgm-volume"><span>BGM 音量<output id="bgm-volume-value">100</output></span><input id="bgm-volume" type="range" min="0" max="100" step="1" value="100"></label>
 <label class="setting" for="sound-volume"><span>音效音量<output id="sound-volume-value">100</output></span><input id="sound-volume" type="range" min="0" max="100" step="1" value="100"></label>
 </section>
-<section class="panel" id="panel-score" role="tabpanel" aria-labelledby="tab-score" tabindex="0" hidden><h2>计分预览</h2>
+<section class="panel" id="panel-score" role="tabpanel" aria-labelledby="tab-score" tabindex="0" hidden>
 <p class="setting"><small>计分与段位由 wasm 侧的 PJSK HUD 接管，暂无可调项。</small></p>
 </section></div>
-<div class="inspector-footer">设置仅影响预览，不会修改源文件。</div>
 </aside>
 </main>`
 
+  const track = createTrackHeader(root)
+  bindViewChrome(root)
   if (!toolbarHost) {
     toolbarHost = document.createElement('div')
     toolbarHost.className = 'file-toolbar'
@@ -303,6 +307,7 @@ const format = (seconds: number) =>
 
 function setDuration(durationSec: number) {
   input('timeline').max = String(durationSec)
+  track.paint()
 }
 
 /**
@@ -434,7 +439,7 @@ input('opt-mv').onchange = async () => {
       sizes.get(assets.mvUrl!))
     if (disposed || assets !== currentSongAssets || !input('opt-mv').checked) return
     applySongTiming()
-    message(loaded ? 'MV 已就绪。' : 'MV 加载失败；已回退默认背景。', !loaded)
+    message(loaded ? '' : 'MV 加载失败；已回退默认背景。', !loaded)
   } finally {
     task.finish()
   }
@@ -472,7 +477,6 @@ async function loadChart(
   const resourceTask = loading.begin(`正在准备 ${label} 的预览`, 3)
   try {
   const score = chartToMusicScore(chart)
-  const maxLane = score.NoteList.reduce((max, note) => Math.max(max, note.laneEnd), 0)
 
   // BGM 与曲绘缺失不该阻断渲染：失败一律退回 null。
   player.pause()
@@ -481,9 +485,6 @@ async function loadChart(
   if (!current()) return
   const bgmUrl = assets.bgmUrl ?? null
   const coverUrl = assets.coverUrl ?? null
-  if (bgmUrl || coverUrl) {
-    message('正在加载曲目资源…')
-  }
   const downloadSizes = options.source?.download?.sizes ? new Map(Object.entries(options.source.download.sizes))
     : await wait(measureResourceSizes([bgmUrl, coverUrl, input('opt-mv').checked ? assets.mvUrl : null]))
   if (!current()) return
@@ -569,13 +570,14 @@ async function loadChart(
   setDuration(snapshot.durationSec)
   player.setPlaybackRate(Number(select('rate').value))
   // 页面 UI 保留难度信息（HUD 上的曲名不带难度，难度走独立徽章）。
-  const uiLabel = difficulty ? `${label}　[${difficulty}]` : label
-  el('chart-name').textContent = uiLabel
-  const parts = [`音符 ${score.NoteList.length} 个（Hold 展开后）`, `最大轨道 ${maxLane}`]
-  parts.push(bgmBytes ? 'BGM ✓' : 'BGM —')
-  parts.push(loadedCoverBytes ? '曲绘 ✓' : '曲绘 —')
-  el('audio-name').textContent = bgmBytes ? 'BGM 已加载' : '未加载音频 · 可以无声预览'
-  message(`${uiLabel}　${parts.join('　')}`)
+  track.show({
+    title: label, difficulty: difficulty ?? null,
+    artist: credits?.vocal,
+    credits: [['作词', credits?.lyricist], ['作曲', credits?.composer], ['编曲', credits?.arranger]],
+    jacket: coverUrl, chart,
+    stats: [['音符数', score.NoteList.length], ['长条数', chart.roots.filter(note => note.type === 1).length]],
+  })
+  message('')
   resourceTask.update(3, '预览已就绪', { downloadedBytes: sessionDownloadedBytes, totalBytes: downloadTotalBytes })
   } finally {
     resourceTask.finish()
@@ -593,6 +595,7 @@ function renderLoop() {
   player.renderFrame()
   if (currentChart) {
     input('timeline').value = String(snapshot.currentTimeSec)
+    track.paint()
     el('time').textContent = `${format(snapshot.currentTimeSec)} / ${format(snapshot.durationSec)}`
   } else {
     el('play').setAttribute('disabled', 'true')
@@ -623,7 +626,6 @@ async function boot() {
   canvas.height = height * dpr
 
   bootTask.update(0, '正在下载 wasm 渲染器…')
-  message('正在初始化渲染器…')
   await player.init(canvas, width, height, dpr)
   if (disposed) return
   bootTask.update(1, 'wasm 渲染器已加载', { downloadedBytes: wasmBytes, totalBytes })
@@ -645,11 +647,9 @@ async function boot() {
       : `已加载 ${label}`
     bootTask.setLabel(progress.phase === 'download' ? '下载 PJSK 资源' : '准备 PJSK 资源')
     bootTask.update(1 + progress.done, detail, { downloadedBytes: progress.downloadedBytes, totalBytes: progress.totalBytes })
-    message(`${detail}　${progress.done}/${progress.total}`)
   })
   if (disposed) return
   bootTask.update(manifestTotal + 1, '渲染资源已就绪，正在载入曲目…', { downloadedBytes, totalBytes })
-  message('渲染器就绪。')
 
   startSharedBinding()
   renderLoop()
@@ -713,7 +713,9 @@ function startSharedBinding() {
     currentChart = null
     input('timeline').disabled = true
     el<HTMLButtonElement>('restart').disabled = true
-    el('chart-name').textContent = '未加载谱面'
+    track.show({})
+    track.paint()
+    message('')
     el<HTMLButtonElement>('play').disabled = true
     el<HTMLButtonElement>('export-video').disabled = true
     el('chart-canvas').style.visibility = 'hidden'
@@ -730,7 +732,20 @@ function startSharedBinding() {
       } finally { task.finish() }
     },
     retain: state => sourceFiles.retain(Object.values(state.media).flatMap(media => media.kind === 'file' ? [media.url] : [])),
-    pause: empty, empty,
+    pause: empty,
+    empty: state => {
+      empty()
+      const current = () => !disposed && state.revision === songSelection.getSource().revision
+      void resolveSource(state).then(source => {
+        if (!current()) return
+        const md = source.metadata
+        track.show({
+          title: md.title, difficulty: md.difficulty, artist: md.vocal,
+          jacket: source.assets.coverUrl,
+          credits: [['作词', md.lyricist], ['作曲', md.composer], ['编曲', md.arranger]],
+        })
+      }).catch(error => { if (current()) message(`曲目加载失败：${String(error)}`, true) })
+    },
     error: error => { loading.cancel(); empty(); message(`曲目加载失败：${String(error)}`, true) },
     apply: async (source, current, signal) => {
       if (!source.chart || !current()) return
@@ -782,12 +797,15 @@ function resizeCanvasToStage() {
 }
 
 const onResize = () => {
-  if (disposed) return
+  if (disposed || !runtimeReady) return
   // 导出期间画布固定为预设尺寸，结束后会按舞台尺寸恢复。
   if (liveRenderingSuspended) return
   resizeCanvasToStage()
 }
 window.addEventListener('resize', onResize)
+// UI panels and fullscreen can resize the stage without resizing the window.
+const stageResizeObserver = new ResizeObserver(onResize)
+stageResizeObserver.observe(el('stage'))
 
 /** 导出帧源：导出期间停掉实时渲染循环、画布固定到预设尺寸（dpr 1），结束或取消后恢复尺寸、倍率与播放位置。 */
 function createExportSource(): ExportFrameSource {
@@ -838,8 +856,7 @@ const exportDialog = installExportDialog(el<HTMLButtonElement>('export-video'), 
     return Math.max(snapshot.durationSec, snapshot.chartEndSec)
   },
   lockTargets: () => [toolbarHost!, root.querySelector<HTMLElement>('aside')!, root.querySelector<HTMLElement>('.transport')!],
-  title: () => el('chart-name').textContent ?? 'pjsk-preview',
-  message,
+  title: () => track.title() || 'pjsk-preview',
 })
 
 /** 调试钩子：便于自动化验证（例如 60 轨坐标探针）。 */
@@ -866,6 +883,7 @@ window.__LLL_PJSK__ = {
     cancelAnimationFrame(rafHandle)
     document.removeEventListener('keydown', onKeydown)
     window.removeEventListener('resize', onResize)
+    stageResizeObserver.disconnect()
     window.removeEventListener('pagehide', onPagehide)
     exportDialog.dialog.close()
     exportDialog.dialog.remove()

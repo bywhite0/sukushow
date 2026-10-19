@@ -10,7 +10,7 @@ type Counts = { render: number; hud: number; compose: number };
 
 async function watch(page: Page) {
   await openChartFixture(page);
-  await expect(page.locator('#message')).toContainText('已加载 custom-chart.json');
+  await expect(page.locator('#chart-name')).toHaveText('custom-chart.json');
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
   await page.evaluate(() => {
@@ -64,6 +64,7 @@ test('暂停帧静止时跳过 WebGL、HUD 与舞台合成，继续播放时逐�
 
 test('暂停时仅改变音量不重绘舞台', async ({ page }) => {
   await watch(page);
+  await page.locator('[data-inspector-toggle]').click();
   await page.getByRole('tab', { name: '音量' }).click();
   await page.locator('#volume').fill('0.5');
   await page.waitForTimeout(250);
@@ -76,6 +77,7 @@ test('暂停时拖动、显示设置、相机与尺寸变化刷新一次画面',
     el.value = '2.2'; el.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await expectOneRefresh(page);
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#speed').fill('7');
   await expectOneRefresh(page);
   await page.getByRole('tab', { name: '显示与特效' }).click();
@@ -88,6 +90,7 @@ test('暂停时拖动、显示设置、相机与尺寸变化刷新一次画面',
   await expectOneRefresh(page);
   await page.locator('#fever-reset').click();
   await expectOneRefresh(page);
+  await page.locator('[data-inspector-close]').click();
   await page.locator('.stage-mode-switch button[data-stage-mode="2d"]').click();
   await expectOneRefresh(page);
   await page.setViewportSize({ width: 1100, height: 700 });
@@ -96,7 +99,7 @@ test('暂停时拖动、显示设置、相机与尺寸变化刷新一次画面',
     name: '暂停换谱.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ Notes: [{ Uid: 1, just: '2.2', Flags: 80, holds: [] }], Bpms: [{ Time: 0, Bpm: 120 }] })),
   });
-  await expect(page.locator('#message')).toContainText('已加载 暂停换谱.json');
+  await expect(page.locator('#chart-name')).toHaveText('暂停换谱.json');
   await expectOneRefresh(page);
 });
 

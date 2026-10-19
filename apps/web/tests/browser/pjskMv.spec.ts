@@ -13,6 +13,7 @@ test('PJSK 曲终等待 BGM，2D MV 参与实时与导出渲染', async ({ page 
   expect(timing.apStartSec).toBeGreaterThanOrEqual(timing.bgmEnd);
   expect(timing.apStartSec).toBeGreaterThanOrEqual(timing.effectiveLeadInSec + 75.727);
   await expect(page.locator('#timeline')).toHaveAttribute('max', String(timing.durationSec));
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await expect(page.locator('#opt-mv')).toBeChecked();
   const frames = await page.evaluate(async () => {
@@ -65,6 +66,7 @@ test('PJSK 曲终等待 BGM，2D MV 参与实时与导出渲染', async ({ page 
   await page.locator('#opt-mv').uncheck();
   await page.reload();
   await page.waitForFunction(() => Boolean((window as any).__LLL_PJSK__?.getChart?.()), null, { timeout: 90_000 });
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await expect(page.locator('#opt-mv')).not.toBeChecked();
 });

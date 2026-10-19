@@ -24,6 +24,7 @@ test('曲终时刻之后显示 AllPerfect 横幅，拖回之前隐藏', async ({
   expect(await resultInfo(page)).toEqual({ visible: true, kind: 0 });
   await seek(finish - 1);
   await expect(root).toHaveAttribute('data-result', '');
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await page.locator('#opt-combo-result').selectOption('2');
   await expect.poll(async () => (await resultInfo(page)).kind).toBe(2);
