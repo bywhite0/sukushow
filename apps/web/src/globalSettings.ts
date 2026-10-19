@@ -1,5 +1,8 @@
 import './globalSettings.css'
+import { APP_VERSION, BUILD_COMMIT, BUILD_TIME, formatBuildTime, formatVersion } from './buildInfo'
 import { ACCENT_COLORS, DEFAULT_APPEARANCE, accentPalette, type AppearanceController, type AppearanceMode, type AccentId } from './theme'
+
+const SOURCE_URL = 'https://github.com/bywhite0/sukushow'
 
 const appearanceModes = [
   { id: 'light', name: '浅色' },
@@ -8,6 +11,8 @@ const appearanceModes = [
 ] as const
 
 const appearanceIcon = `<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4"/><path d="M10 2.5v15"/><path d="M10 3h3.5A3.5 3.5 0 0 1 17 6.5v7a3.5 3.5 0 0 1-3.5 3.5H10Z" fill="currentColor" stroke="none"/></svg>`
+const chevronIcon = `<svg class="preferences-brand-chevron" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg>`
+const githubIcon = `<svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>`
 
 export function createGlobalSettings(trigger: HTMLButtonElement, appearance: AppearanceController) {
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ ,' : 'Ctrl ,'
@@ -20,15 +25,21 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
     <div class="preferences-window">
       <aside class="preferences-sidebar" aria-label="设置分类">
         <h1 id="global-settings-title">设置</h1>
-        <div class="preferences-category" aria-current="page"><span>${appearanceIcon}</span>外观</div>
-        <div class="preferences-brand"><img src="/pwa/icon-192.png" alt="" width="30" height="30"><div><strong>sukushow</strong><span>谱面放映室</span></div></div>
+        <nav class="preferences-nav" aria-label="设置页面">
+          <button type="button" class="preferences-category" data-page="appearance" aria-current="page"><span>${appearanceIcon}</span>外观</button>
+          <button type="button" class="preferences-brand" data-page="about" aria-label="关于 sukushow" title="关于 sukushow">
+            <img src="/pwa/icon-192.png" alt="" width="30" height="30">
+            <span class="preferences-brand-copy"><strong>sukushow</strong><span>谱面放映室</span></span>
+            ${chevronIcon}
+          </button>
+        </nav>
       </aside>
-      <section class="preferences-main" aria-labelledby="appearance-title">
+      <section class="preferences-main" aria-labelledby="preferences-title">
         <header class="preferences-header">
-          <h2 id="appearance-title">外观</h2>
+          <h2 id="preferences-title">外观</h2>
           <button type="button" class="preferences-close quiet" aria-label="关闭全局设置" title="关闭（Esc）" autofocus><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
         </header>
-        <div class="preferences-content">
+        <div class="preferences-content" data-page-panel="appearance">
           <fieldset class="appearance-section">
             <legend>外观模式</legend>
             <div class="appearance-modes">
@@ -57,13 +68,53 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
             <div class="accent-detail"><span>当前主题色</span><output data-current-accent></output></div>
           </fieldset>
         </div>
-        <footer class="preferences-footer">
+        <div class="preferences-content about-page" data-page-panel="about" hidden>
+          <div class="about-hero">
+            <img src="/pwa/icon-192.png" alt="" width="64" height="64">
+            <div>
+              <strong>sukushow</strong>
+              <span>谱面放映室</span>
+              <p>在浏览器中预览 LLLL 原格式谱面，提供 LLLL 舞台（3D/2D）与 PJSK 渲染两种模式，并导出视频。</p>
+            </div>
+          </div>
+          <dl class="about-facts">
+            <div><dt>构建版本</dt><dd data-build-version>${formatVersion(APP_VERSION, BUILD_COMMIT)}</dd></div>
+            <div><dt>构建时间</dt><dd data-build-time>${formatBuildTime(BUILD_TIME)}</dd></div>
+          </dl>
+          <div class="about-legal">
+            <p>自有代码以 MIT 许可发布；包含 PJSK 预览的构建整体按 AGPL-3.0-only 分发。</p>
+            <p>游戏贴图、音效、语音与字体版权归原权利人所有，仅供本地预览与研究。</p>
+          </div>
+        </div>
+        <footer class="preferences-footer" data-page-footer="appearance">
           <span data-appearance-status role="status">更改即时生效，自动保存。</span>
           <button type="button" class="text-button" data-appearance-reset>恢复默认</button>
+        </footer>
+        <footer class="preferences-footer" data-page-footer="about" hidden>
+          <span>© ${new Date().getFullYear()} 白影White</span>
+          <a class="about-github" href="${SOURCE_URL}" target="_blank" rel="noreferrer" aria-label="在 GitHub 查看源代码（AGPL-3.0-only）" title="在 GitHub 查看源代码（AGPL-3.0-only）">${githubIcon}</a>
         </footer>
       </section>
     </div>`
   document.body.append(dialog)
+
+  const title = dialog.querySelector<HTMLHeadingElement>('#preferences-title')!
+  const panels = [...dialog.querySelectorAll<HTMLElement>('[data-page-panel]')]
+  const footers = [...dialog.querySelectorAll<HTMLElement>('[data-page-footer]')]
+  const navItems = [...dialog.querySelectorAll<HTMLButtonElement>('[data-page]')]
+  type PageId = 'appearance' | 'about'
+  const pageTitles: Record<PageId, string> = { appearance: '外观', about: '关于' }
+
+  function showPage(page: PageId) {
+    title.textContent = pageTitles[page]
+    for (const panel of panels) panel.hidden = panel.dataset.pagePanel !== page
+    for (const footer of footers) footer.hidden = footer.dataset.pageFooter !== page
+    for (const item of navItems) {
+      if (item.dataset.page === page) item.setAttribute('aria-current', 'page')
+      else item.removeAttribute('aria-current')
+    }
+  }
+  for (const item of navItems) item.onclick = () => showPage(item.dataset.page as PageId)
 
   const modes = [...dialog.querySelectorAll<HTMLInputElement>('[name="appearance-mode"]')]
   const accents = [...dialog.querySelectorAll<HTMLInputElement>('[name="appearance-accent"]')]
@@ -105,16 +156,21 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
     const rect = dialog.getBoundingClientRect()
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close()
   })
-  // Keep Tab within the window, including browsers that otherwise focus their chrome.
+  // Keep Tab within the visible page, including browsers that otherwise focus their chrome.
   dialog.addEventListener('keydown', event => {
     event.stopPropagation()
     if (event.key !== 'Tab') return
-    if (event.shiftKey && document.activeElement === closeButton) {
+    const focusable = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+      .filter(element => !element.closest('[hidden]') && element.getClientRects().length > 0)
+    if (!focusable.length) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
       event.preventDefault()
-      resetButton.focus()
-    } else if (!event.shiftKey && document.activeElement === resetButton) {
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault()
-      closeButton.focus()
+      first.focus()
     }
   })
   document.addEventListener('keydown', event => {

@@ -50,7 +50,7 @@ pnpm render:svg          # SVG CLI
 根目录的 `LICENSE-MIT` 与 `LICENSE-AGPL` 是两种许可的全文，各目录另附自己的 LICENSE。边界分三层：
 
 1. **目录自有代码**：`packages/pjsk-preview` 基于 AGPL-3.0-only 的 sekai-mmw-preview-web 改造，上游来源的代码与素材都位于该包内，按 AGPL-3.0-only 发布；根目录、`apps/web` 与其余包的自有代码按 MIT 发布。
-2. **组合分发**：`apps/web` 静态引用 `packages/pjsk-preview`，组合后的源码与构建产物整体按 AGPL-3.0-only 分发，页面页脚提供源码链接。仓库根目录同时存在 `LICENSE-AGPL`，GitHub 据此把整个仓库识别为 AGPL-3.0；MIT 只适用于第 1 层列出的自有代码。
+2. **组合分发**：`apps/web` 静态引用 `packages/pjsk-preview`，组合后的源码与构建产物整体按 AGPL-3.0-only 分发，设置窗口的关于页提供源码链接。仓库根目录同时存在 `LICENSE-AGPL`，GitHub 据此把整个仓库识别为 AGPL-3.0；MIT 只适用于第 1 层列出的自有代码。
 3. **附带素材**：`apps/web/public/` 与 `packages/pjsk-preview/public/` 内的游戏贴图、音效、语音与字体不随代码许可授权，权利归原权利人，使用限制见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 第三方来源见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。

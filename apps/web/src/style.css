@@ -147,7 +147,7 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
 select option:disabled { color:var(--shell-muted); }
 .check { display:flex; align-items:center; min-height:34px; gap:9px; margin:2px 0; font-size:12px; }
 .check input { width:15px; height:15px; margin:0; accent-color:var(--shell-accent-text); }
-.workspace-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:28px; padding:3px var(--gutter); border-top:1px solid var(--shell-line); background:var(--shell-bg); color:var(--shell-muted); font-size:9px; }
+.workspace-footer { display:flex; align-items:center; justify-content:flex-end; gap:12px; min-height:28px; padding:3px var(--gutter); border-top:1px solid var(--shell-line); background:var(--shell-bg); color:var(--shell-muted); font-size:9px; }
 .workspace-footer a { text-underline-offset:3px; }
 .workspace-footer kbd { min-width:15px; margin:0 2px; font-size:9px; line-height:15px; }
 

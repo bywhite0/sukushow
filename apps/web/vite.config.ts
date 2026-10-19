@@ -1,4 +1,5 @@
-import { cpSync, createReadStream, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, createReadStream, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream';
@@ -7,6 +8,20 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
 const require = createRequire(import.meta.url);
+const appVersion = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
+/** Checkouts carry the commit they were built from; source tarballs simply omit it. */
+function readCommit() {
+  try {
+    const hash = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim();
+    if (!hash) return '';
+    const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim();
+    return dirty ? `${hash}-dirty` : hash;
+  } catch {
+    return '';
+  }
+}
+const appCommit = readCommit();
 
 /** 随包分发的运行时资源，许可跟随所属包。 */
 const packagePublicDirs = ['@sukushow/pjsk-preview'].map((name) =>
@@ -73,7 +88,12 @@ function packagePublic(dirs: string[]): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __BUILD_COMMIT__: JSON.stringify(appCommit),
+    __BUILD_TIME__: JSON.stringify(command === 'build' ? new Date().toISOString() : ''),
+  },
   plugins: [
     packagePublic(packagePublicDirs),
     VitePWA({
@@ -84,7 +104,7 @@ export default defineConfig({
         id: '/',
         name: 'sukushow · 谱面放映室',
         short_name: 'sukushow',
-        description: '在浏览器中预览 LLLL 与 PJSK 谱面，并导出视频。',
+        description: '在浏览器中预览 LLLL 原格式谱面，提供 LLLL 舞台（3D/2D）与 PJSK 渲染两种模式，并导出视频。',
         lang: 'zh-CN',
         start_url: '/',
         scope: '/',
@@ -130,4 +150,4 @@ export default defineConfig({
   ],
   server: { port: 5170 },
   test: { include: ['tests/*.test.ts'] },
-});
+}));
