@@ -114,7 +114,6 @@ app.innerHTML = `
     </header>
     <div id="view-root" class="workspace-content view-llll"></div>
     <footer class="workspace-footer">
-      <a href="https://github.com/bywhite0/sukushow" target="_blank" rel="noreferrer">源码（AGPL-3.0-only）</a>
       <span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span>
     </footer>
   </div>

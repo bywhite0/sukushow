@@ -19,7 +19,7 @@
 
 `native/vendor/` 中的第三方库：Dear ImGui（MIT）、DirectXMath（MIT，Microsoft）、nlohmann/json（MIT）、stb_image（MIT 或公有领域）。
 
-`apps/web` 的构建产物打包了 `packages/pjsk-preview`，整体按 AGPL-3.0-only 发布；页面页脚提供对应源码的链接。
+`apps/web` 的构建产物打包了 `packages/pjsk-preview`，整体按 AGPL-3.0-only 发布；设置窗口的关于页提供对应源码的链接。
 
 ## 原格式实现
 
