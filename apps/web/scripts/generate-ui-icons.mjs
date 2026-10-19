@@ -35,6 +35,7 @@ const ICONS = [
   'list-music',
   'settings',
   'download',
+  'file-code',
   'plus',
   'x',
   'check',

@@ -91,6 +91,8 @@ export async function resolveSource(state: SourceState, dependencies: SourceDepe
   const song = list?.songs.find(item => item.id === state.songId) ?? null
   if (state.songId && !song) throw new Error(`曲目列表里没有 Id ${state.songId}`)
   const chartSongId = state.chart.kind === 'official' ? state.chart.songId : null
+  // 官方谱面所属曲目：定数、谱面文件名都从它取。
+  const chartSong = list?.songs.find(item => item.id === chartSongId) ?? null
   const inherited = song ? songAssets(song) : {
     bgmUrl: null, coverUrl: null, mvUrl: null, mvStartSec: 0, mvDurationSec: 0,
   }
@@ -102,7 +104,6 @@ export async function resolveSource(state: SourceState, dependencies: SourceDepe
   const mvUrl = await localizeMv(mediaUrl(state.media.mv, inherited.mvUrl))
   const mediaUrls = [bgmUrl, coverUrl, dependencies.includeMv?.() === false ? null : mvUrl]
   if (dependencies.measure && song) {
-    const chartSong = list?.songs.find(item => item.id === chartSongId)
     const filename = state.chart.kind === 'official' ? chartSong?.charts[state.chart.difficulty] : null
     const urls = [filename ? `/assets/chart/${filename}` : null, '/song-credits.json', ...mediaUrls]
     // blob URL 无法 HEAD；本地命中的 MV 不参与测量，进度按未知处理。
@@ -113,8 +114,7 @@ export async function resolveSource(state: SourceState, dependencies: SourceDepe
   let chart: Chart | null = null
   if (state.chart.kind === 'custom') chart = structuredClone(state.chart.chart)
   if (state.chart.kind === 'official') {
-    const source = list?.songs.find(item => item.id === chartSongId)
-    const filename = source?.charts[state.chart.difficulty]
+    const filename = chartSong?.charts[state.chart.difficulty]
     if (!filename) throw new Error(`曲目 ${chartSongId} 没有难度 ${state.chart.difficulty} 的谱面`)
     chart = structuredClone(await dependencies.loadChart(filename, progress => report('chart', progress)))
   }
@@ -138,6 +138,7 @@ export async function resolveSource(state: SourceState, dependencies: SourceDepe
   return {
     revision: state.revision, identity: state.identity, songId: state.songId,
     chart, chartSongId, custom: state.chart.kind === 'custom', metadata,
+    level: state.chart.kind === 'official' ? chartSong?.levels?.[state.chart.difficulty] ?? null : null,
     download: { downloadedBytes: [...downloaded.values()].reduce((sum, bytes) => sum + bytes, 0),
       totalBytes: sizes ? totalBytes
         : [...downloaded.values()].reduce((sum, bytes) => sum + bytes, 0),

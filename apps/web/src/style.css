@@ -297,8 +297,8 @@ progress::-webkit-progress-value { background:var(--shell-accent); transition:wi
   .transport-row { gap:9px; }
 }
 @media (max-width:1050px) {
-  .rate-label > span,#export-video > span { display:none; }
-  #export-video { min-width:32px; padding-inline:6px; }
+  .rate-label > span,#export-video > span,#export-svg > span { display:none; }
+  #export-video,#export-svg { min-width:32px; padding-inline:6px; }
 }
 @media (max-width:900px) {
   :root { --gutter:16px; }
@@ -348,6 +348,9 @@ progress::-webkit-progress-value { background:var(--shell-accent); transition:wi
   #play { grid-column:2/4; grid-row:2; min-width:110px; min-height:42px; }
   #export-video { grid-column:4; grid-row:2; min-height:42px; }
   #fullscreen { grid-column:5; grid-row:2; min-height:42px; }
+  /* SVG 导出独占一行：窄屏只留图标会分不清两个导出按钮。 */
+  #export-svg { grid-column:1/6; grid-row:3; min-height:42px; }
+  #export-svg > span { display:inline; }
   .viewer-status { max-height:40px; overflow-y:auto; padding-inline:10px; font-size:9px; }
   #preview-inspector,.now-playing { bottom:123px; }
   #media-panel { position:fixed; top:104px; left:12px; right:12px; width:auto; max-height:calc(100dvh - 120px); }

@@ -1,7 +1,7 @@
 /**
  * 由 `apps/web/scripts/generate-ui-icons.mjs` 生成；图形清单与生成逻辑都在该脚本里。
  *
- * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 25 个。
+ * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 26 个。
  * 网格 24×24，纯描边；颜色与线宽由 `icons.ts` 的包装层控制。
  */
 
@@ -22,6 +22,7 @@ export const iconNames = [
   'list-music',
   'settings',
   'download',
+  'file-code',
   'plus',
   'x',
   'check',
@@ -52,6 +53,7 @@ export const iconBodies: Record<IconName, string> = {
   'list-music': '<g><path d="M16 5H3m8 7H3m8 7H3m18-3V5"/><circle cx="18" cy="16" r="3"/></g>',
   'settings': '<g><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0a2.34 2.34 0 0 0 3.319 1.915a2.34 2.34 0 0 1 2.33 4.033a2.34 2.34 0 0 0 0 3.831a2.34 2.34 0 0 1-2.33 4.033a2.34 2.34 0 0 0-3.319 1.915a2.34 2.34 0 0 1-4.659 0a2.34 2.34 0 0 0-3.32-1.915a2.34 2.34 0 0 1-2.33-4.033a2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></g>',
   'download': '<g><path d="M12 15V3m9 12v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10l5 5l5-5"/></g>',
+  'file-code': '<g><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5m-10 4.5L8 15l2 2.5m4-5l2 2.5l-2 2.5"/></g>',
   'plus': '<path d="M5 12h14m-7-7v14"/>',
   'x': '<path d="M18 6L6 18M6 6l12 12"/>',
   'check': '<path d="M20 6L9 17l-5-5"/>',

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@sukushow/chart": "workspace:*",
+    "@sukushow/chart-svg": "workspace:*",
     "@sukushow/export": "workspace:*",
     "@sukushow/llll-preview": "workspace:*",
     "@sukushow/pjsk-preview": "workspace:*"

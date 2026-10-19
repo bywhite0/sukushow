@@ -36,6 +36,8 @@ pnpm render:svg          # SVG CLI
 
 `pnpm verify:shared-assets` 比较 `apps/web` 与 `packages/chart-svg` 的 7 张 2D 贴图及元数据哈希。
 
+应用内「导出 SVG」按 URL 读取同一组贴图与 `sprite_meta.json`，渲染交给 `@sukushow/chart-svg`，结果包成 blob URL 在新标签页打开——不落盘、不经过服务端。
+
 ## 界面图标
 
 界面只用 Lucide（ISC）一套图标，构建期从 `@iconify-json/lucide` 抽取，整套图标留在 devDependency 里。

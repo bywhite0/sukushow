@@ -19,6 +19,7 @@ import { SE_RESOURCE_URLS, type SeLoadProgress } from '@sukushow/llll-preview/se
 import { COMBO_RESULT_TEXTURES } from '@sukushow/llll-preview/comboResultClip';
 import { fetchBytes } from '@sukushow/llll-preview/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
+import { buildChartSvg, openSvgInNewTab, releaseSvgUrls } from './llll/svgExport';
 import { createTrackHeader } from './trackHeader';
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome';
 import { icon, setIconButton } from '../icons';
@@ -60,7 +61,7 @@ app.innerHTML=`
   </div>
  </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite"></div>
- ${transportMarkup}
+ ${transportMarkup({ svgExport: true })}
 </section>
 <aside id="preview-inspector" aria-label="预览设置" hidden>
  <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">${icon('x', 16)}</button></div>
@@ -276,12 +277,12 @@ const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
-function setChart(next:Chart){chart=next;input('timeline').disabled=false;el<HTMLButtonElement>('restart').disabled=false;el<HTMLButtonElement>('play').disabled=false;el<HTMLButtonElement>('export-video').disabled=false;}
+function setChart(next:Chart){chart=next;input('timeline').disabled=false;el<HTMLButtonElement>('restart').disabled=false;el<HTMLButtonElement>('play').disabled=false;el<HTMLButtonElement>('export-video').disabled=false;el<HTMLButtonElement>('export-svg').disabled=false;}
 function clearChart(){
  chart=null;player?.clear();
  input('timeline').disabled=true;input('timeline').value='0';input('timeline').max='0';
  el<HTMLButtonElement>('restart').disabled=true;
- el<HTMLButtonElement>('play').disabled=true;el<HTMLButtonElement>('export-video').disabled=true;
+ el<HTMLButtonElement>('play').disabled=true;el<HTMLButtonElement>('export-video').disabled=true;el<HTMLButtonElement>('export-svg').disabled=true;
  track.show();track.paint();message('');
  el('time').textContent='00:00.000 / 00:00.000';
  const canvas=el<HTMLCanvasElement>('stage-canvas');
@@ -312,7 +313,7 @@ for(const button of stageModeButtons){
 }
 setStageMode('3d');
 comboResult.setKind(readSettings().comboResult);
-let startInfo={title:'未加载谱面',difficulty:null as string|null,jacketUrl:null as string|null};
+let startInfo={title:'未加载谱面',difficulty:null as string|null,level:null as number|null,jacketUrl:null as string|null,artist:null as string|null};
 startAnim.setInfo(startInfo);
 function setStartInfo(next:Partial<typeof startInfo>){startInfo={...startInfo,...next};startAnim.setInfo(startInfo);}
 /**
@@ -388,12 +389,15 @@ void (async()=>{
 })();
 hud.setSe(se ?? null);
 let automaticFever: FeverWindow | null = null;
+/** 当前生效的 Fever 时段（自动或手动）；SVG 导出按它画 Fever 带。 */
+let currentFever: FeverWindow | null = null;
 let baseDuration = 0;
 /** 曲终时刻：主数据 PlayTime 与已解码 BGM 实际时长取较晚者。 */
 let finishTime: number | null = null;
 let resultBaseFinishTime: number | null = null;
 function applyFever(chart:Chart,win: FeverWindow | null, source: string) {
  visualRevision++;
+ currentFever = win;
  hud.setFeverWindow(win);
  chart.duration = Math.max(baseDuration, win?.end ?? 0, finishTime === null ? 0 : finishTime + COMBO_RESULT_CLIP_DURATION);
  player?.transport.setDuration(chart.duration);
@@ -672,6 +676,40 @@ const exportDialog=installExportDialog(el<HTMLButtonElement>('export-video'),{
 });
 if(!player)el<HTMLButtonElement>('export-video').disabled=true;
 
+/**
+ * 「导出 SVG」：把当前谱面画成自包含矢量图，用 blob URL 在新标签页里直接查看。
+ * 静态图与舞台设置同源（镜像 / Fever / 曲终），但不含 HUD、MV 与判定。
+ */
+let svgExporting=false;
+/** 弹窗被拦截时的退路：把 blob URL 留在状态栏里当普通链接，点击是新的一次用户手势。 */
+function showSvgLink(url:string){
+ const host=el('message');
+ host.classList.remove('error');
+ const link=document.createElement('a');
+ link.href=url;link.target='_blank';link.rel='noopener';link.textContent='打开 SVG 谱面';
+ host.replaceChildren('新标签页被浏览器拦截，请点击这里打开：',link);
+}
+async function exportChartSvg(){
+ if(svgExporting||exporting||!chart)return;
+ svgExporting=true;
+ const button=el<HTMLButtonElement>('export-svg');
+ button.disabled=true;
+ message('正在生成 SVG 谱面…');
+ try{
+  const {svg}=await buildChartSvg({chart,finishTime,mirror,fever:currentFever,
+   title:startInfo.title,difficulty:startInfo.difficulty,level:startInfo.level,artist:startInfo.artist,jacket:startInfo.jacketUrl});
+  const {url,opened}=openSvgInNewTab(svg,startInfo.title);
+  if(opened)message(`已在新标签页打开 SVG 谱面（${Math.max(1,Math.round(svg.length/1024))} KB）。`);
+  else showSvgLink(url);
+ }catch(error){
+  message(`SVG 导出失败：${String(error)}`,true);
+ }finally{
+  svgExporting=false;
+  button.disabled=!chart;
+ }
+}
+el<HTMLButtonElement>('export-svg').onclick=()=>void exportChartSvg();
+
 /** 测试 / 调试钩子（只读取状态；导出探测 / 自动化验证用）。 */
 (window as unknown as {__LPW__:unknown}).__LPW__={
  hud,startAnim,comboResult,compositor,musicVideo,exportDialog,
@@ -680,7 +718,7 @@ if(!player)el<HTMLButtonElement>('export-video').disabled=true;
 };
 let disposed=false;
 let unsubscribeSongSelection=()=>{};
-const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;el('export-svg').onclick=null;releaseSvgUrls();cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
 window.addEventListener('pagehide',dispose,{once:true});
 
 const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0],ResolvedSource>({
@@ -748,7 +786,7 @@ const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0
    track.show({title:md.title,difficulty:md.difficulty,artist:md.vocal,jacket:assets.coverUrl,chart:next,
     credits:[['作词',md.lyricist],['作曲',md.composer],['编曲',md.arranger]],
     stats:[['音符数',next.notes.length],['最大连击',next.maxCombo]]});
-   setStartInfo({title:source.metadata.title,difficulty:source.metadata.difficulty,jacketUrl:assets.coverUrl});
+   setStartInfo({title:source.metadata.title,difficulty:source.metadata.difficulty,level:source.level,jacketUrl:assets.coverUrl,artist:md.vocal});
    player?.reset();metadata();
    message('');
    task.update(3,'预览已更新');

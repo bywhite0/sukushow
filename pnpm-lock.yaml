@@ -13,6 +13,9 @@ importers:
       '@sukushow/chart':
         specifier: workspace:*
         version: link:../../packages/chart
+      '@sukushow/chart-svg':
+        specifier: workspace:*
+        version: link:../../packages/chart-svg
       '@sukushow/export':
         specifier: workspace:*
         version: link:../../packages/export

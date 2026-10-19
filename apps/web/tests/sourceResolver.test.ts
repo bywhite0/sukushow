@@ -62,7 +62,7 @@ describe('有效来源解析', () => {
     const result = await resolveSource(store.getSource(), {
       loadList: unavailable, loadChart: unavailable, loadCredits: unavailable,
     })
-    expect(result).toMatchObject({ custom: true, songId: null, chartSongId: null,
+    expect(result).toMatchObject({ custom: true, songId: null, chartSongId: null, level: null,
       metadata: { title: 'local.json', offsetMs: 125, fever: null, finishTime: null },
       assets: { bgmUrl: null, coverUrl: null, mvUrl: null } })
     expect(result.chart?.notes).toHaveLength(1)
@@ -87,7 +87,8 @@ describe('有效来源解析', () => {
       },
       loadCredits: async id => ({ vocal: id === '103112' ? '原版演唱' : '错误演唱' }),
     })
-    expect(result).toMatchObject({ chartSongId: '105101', metadata: { title: 'Dream Believers', difficulty: 'HARD', vocal: '原版演唱' }, assets: { bgmUrl: '/assets/audio/bgm_10311201.ogg' } })
+    // 定数取自谱面所属曲目（105101），不是所选演唱版本（103112）。
+    expect(result).toMatchObject({ chartSongId: '105101', level: 20, metadata: { title: 'Dream Believers', difficulty: 'HARD', vocal: '原版演唱' }, assets: { bgmUrl: '/assets/audio/bgm_10311201.ogg' } })
     expect(result.chart?.notes).toHaveLength(1)
   })
   it('明确清除媒体和 Fever 不被继承值补回，本地视频使用真实时长', async () => {

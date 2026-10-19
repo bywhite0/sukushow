@@ -27,6 +27,8 @@ export type ResolvedSource = {
   revision: number; identity: number; songId: string | null
   chart: Chart | null; chartSongId: string | null; custom: boolean
   metadata: SourceMetadata
+  /** 官方难度的定数（`MusicScores` 的 Level）；自制谱或曲库缺该字段时为 null。 */
+  level: number | null
   download?: { downloadedBytes: number; totalBytes: number | undefined; sizes?: Record<string, number> }
   assets: { bgmUrl: string | null; coverUrl: string | null; mvUrl: string | null
     mvStartSec: number; mvDurationSec: number }

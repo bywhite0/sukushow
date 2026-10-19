@@ -83,7 +83,7 @@ export function mount({ root, toolbar, songSelection, resolveSource, sourceFiles
   </div>
  </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite"></div>
- ${transportMarkup}
+ ${transportMarkup()}
 </section>
 <aside id="preview-inspector" aria-label="预览设置" hidden>
  <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">${icon('x', 16)}</button></div>

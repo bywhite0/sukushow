@@ -31,7 +31,12 @@ export function stageToolbarMarkup() {
   </div>`
 }
 
-export const transportMarkup = `
+/**
+ * 走带条。`svgExport` 只给 LLLL 舞台开——静态 SVG 谱面是 LLLL 的导出形式，
+ * PJSK 侧只有视频导出，所以按钮按模式注入而不是常驻。
+ */
+export function transportMarkup({ svgExport = false }: { svgExport?: boolean } = {}) {
+  return `
  <div class="transport">
   <label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0">
   <div class="transport-row">
@@ -40,9 +45,11 @@ export const transportMarkup = `
    <output id="time">00:00.000 / 00:36.000</output>
    <label class="rate-label"><span>倍率</span><select id="rate" aria-label="播放倍率"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
    <button id="export-video" class="quiet" type="button" title="导出视频">${icon('download', 16)}<span>导出视频</span></button>
+   ${svgExport ? `<button id="export-svg" class="quiet" type="button" title="导出 SVG 谱面并在新标签页打开">${icon('file-code', 16)}<span>导出 SVG</span></button>` : ''}
    <button id="fullscreen" class="quiet" aria-label="全屏预览" title="全屏预览">${icon('maximize', 18)}</button>
   </div>
  </div>`
+}
 
 export function bindViewChrome(root: HTMLElement) {
   const toggle = root.querySelector<HTMLButtonElement>('[data-inspector-toggle]')!
