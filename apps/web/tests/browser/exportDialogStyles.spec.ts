@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { openChartFixture } from './chartFixture';
 
 test('导出对话框样式完整（.setting / .check / .primary / .quiet / .text-button）', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('#message')).toContainText('就绪');
+  await openChartFixture(page);
   await page.locator('#export-video').click();
 
   const dialog = page.locator('.export-dialog');
@@ -31,12 +31,9 @@ test('导出对话框样式完整（.setting / .check / .primary / .quiet / .tex
   expect(primaryBg).not.toBe('rgba(0, 0, 0, 0)'); // 不是透明
   expect(primaryBg).toMatch(/rgb|oklch/); // 有颜色（支持现代色彩空间）
 
-  // .quiet：应有边框与背景
-  const quietBtn = dialog.locator('.quiet').first();
-  const quietBorder = await quietBtn.evaluate((el) => window.getComputedStyle(el).borderWidth);
-  const quietBg = await quietBtn.evaluate((el) => window.getComputedStyle(el).backgroundColor);
-  expect(parseInt(quietBorder, 10)).toBeGreaterThan(0);
-  expect(quietBg).not.toBe('rgba(0, 0, 0, 0)');
+  // 尚未导出时，不显示下载与取消导出入口。
+  await expect(dialog.locator('[data-download]')).toBeHidden();
+  await expect(dialog.locator('[data-cancel]')).toBeHidden();
 
   // .text-button（关闭按钮）：应有 color: var(--shell-muted)
   const textBtn = dialog.locator('.text-button');
@@ -44,7 +41,6 @@ test('导出对话框样式完整（.setting / .check / .primary / .quiet / .tex
   expect(textColor).toMatch(/rgb|oklch/);
 
   // option:disabled 应置灰（color: var(--shell-muted)）
-  await page.locator('[name="resolution"]').selectOption('720p');
   const disabledOption = await page.locator('[name="resolution"] option:disabled').first();
   if (await disabledOption.count() > 0) {
     const optionColor = await disabledOption.evaluate((el) => window.getComputedStyle(el).color);

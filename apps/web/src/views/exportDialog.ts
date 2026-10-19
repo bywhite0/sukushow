@@ -44,7 +44,6 @@ export type ExportDialogContext = {
   /** 导出期间需要锁住的区域。 */
   lockTargets: () => HTMLElement[]
   title: () => string
-  message: (text: string, error?: boolean) => void
 }
 
 export type ConfigSupportRow = {
@@ -263,13 +262,11 @@ export function installExportDialog(trigger: HTMLButtonElement, ctx: ExportDialo
       progressText.textContent =
         `完成：${result.frameCount} 帧 / ${result.durationSec.toFixed(2)} 秒，用时 ${result.elapsedSec.toFixed(1)} 秒` +
         ` · ${result.encodeFps.toFixed(1)} fps（${result.realtimeFactor.toFixed(2)}× 实时）· ${sizeMb} MB`
-      ctx.message(`视频导出完成（${sizeMb} MB）。`)
     } catch (error) {
       if (error instanceof ExportCancelledError) {
         progressText.textContent = '已取消。'
       } else {
         progressText.textContent = `导出失败：${String(error)}`
-        ctx.message(`视频导出失败：${String(error)}`, true)
         console.error(error)
       }
     } finally {

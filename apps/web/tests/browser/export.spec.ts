@@ -109,7 +109,7 @@ test('密集谱拖尾导出时编码帧与舞台逐像素一致', async ({ page 
   await expect.poll(() => page.evaluate(() => Boolean((window as any).__LPW__?.renderer))).toBe(true);
   await expect(page.locator('[data-resource-loading]')).toBeHidden({ timeout: 30_000 });
   await page.locator('#chart-file').setInputFiles({ name: 'dense-trails.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(chart)) });
-  await expect(page.locator('#message')).toContainText('已加载 dense-trails.json');
+  await expect(page.locator('#chart-name')).toHaveText('dense-trails.json');
   await page.locator('#export-video').click();
   await page.locator('[name="resolution"]').selectOption('720p');
   await page.locator('[name="fps"]').selectOption('30');

@@ -45,7 +45,7 @@ test('局部上传在密集谱和 2D/3D 相机下保留 WebGL 谱面像素', asy
     expect(hits).toBeGreaterThan(0);
     for (const page of [baseline, optimized]) {
       await page.locator('#chart-file').setInputFiles({ name: 'dense.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(CHART)) });
-      await expect(page.locator('#message')).toContainText('已加载 dense.json');
+      await expect(page.locator('#chart-name')).toHaveText('dense.json');
       await page.locator('#timeline').evaluate((el: HTMLInputElement) => {
         el.value = '12'; el.dispatchEvent(new Event('input'));
       });
@@ -147,7 +147,7 @@ test('空画面不提交动态缓冲，密集谱仅提交活跃顶点', async ({
   expect(empty).toBe(0);
 
   await page.locator('#chart-file').setInputFiles({ name: 'dense.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(CHART)) });
-  await expect(page.locator('#message')).toContainText('已加载 dense.json');
+  await expect(page.locator('#chart-name')).toHaveText('dense.json');
   await page.locator('#timeline').evaluate((el: HTMLInputElement) => {
     el.value = '12'; el.dispatchEvent(new Event('input'));
   });

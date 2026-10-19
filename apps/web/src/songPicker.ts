@@ -1,15 +1,11 @@
 /**
- * 曲目选择器：可搜索的下拉框，替代原生 `<select>`。
- *
- * 原生 select 放 236 项时的问题：不能搜索（只能靠首字跳转）、
- * 无谱面的 82 首占满列表、也看不到难度等级。
- * 这里换成 combobox 模式（input + listbox），按曲名 / 假名 / 组合 /
- * 分类 / 曲目 Id 过滤，并把难度等级做成徽章直接显示。
+ * 独立曲库浏览面板与当前曲目的版本、难度控件。
+ * 搜索词、分类和排序保留在浏览面板中，选曲不会改变预览布局。
  *
  * 无谱面的曲目默认隐藏（它们打不开），需要时用「含无谱面」勾选框放出来。
  * 列表按分类分组、组内保持曲目列表原有的 orderId 顺序。
  */
-import type { SongEntry, SongList } from '@sukushow/llll-preview/songAssets'
+import { songAssets, type SongEntry, type SongList } from '@sukushow/llll-preview/songAssets'
 import { vocalVersions, chartSongFor } from './songVersions'
 
 export const DIFFICULTY_ORDER = ['NORMAL', 'HARD', 'EXPERT', 'MASTER'] as const
@@ -75,6 +71,8 @@ export type SongPickerOptions = {
 }
 export type SongPickerHandle = {
   root: HTMLElement
+  library: HTMLElement
+  openLibrary: (trigger?: HTMLElement) => void
   /** 当前曲目 Id；未选中为空串。 */
   currentSongId: () => string
   /** 当前难度；无谱面时为 null。 */
@@ -84,6 +82,8 @@ export type SongPickerHandle = {
   /** 曲目列表就绪前禁用。 */
   setCustom: (active: boolean) => void
   setDisabled: (disabled: boolean) => void
+  /** Refresh floating controls after the record controls move to another view. */
+  refreshLayout: () => void
   dispose: () => void
 }
 
@@ -94,42 +94,50 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   const root = document.createElement('div')
   root.className = 'picker'
   root.innerHTML = `
-    <div class="picker-anchor">
-      <div class="picker-field">
-        <span class="picker-icon" aria-hidden="true">♪</span>
-        <input id="song-search" class="picker-input" type="text" role="combobox"
-               autocomplete="off" spellcheck="false" aria-expanded="false"
-               aria-controls="song-listbox" aria-autocomplete="list"
-               placeholder="搜索曲目…">
-        <button id="song-clear" class="picker-clear" type="button" aria-label="清空搜索" hidden>✕</button>
-      </div>
-      <div class="picker-panel" id="song-panel" hidden>
-        <div class="picker-toolbar">
-          <span id="song-count" class="picker-count"></span>
-          <label class="picker-toggle">
-            <input id="song-include-no-chart" type="checkbox">
-            <span>含无谱面</span>
-          </label>
-        </div>
-        <ul id="song-listbox" class="picker-list" role="listbox" aria-label="曲目"></ul>
-      </div>
-    </div>
+    <button class="picker-open" type="button" data-picker-open aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false"><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>更换曲目</span><span aria-hidden="true">↗</span></button>
     <div id="song-versions" class="version-group" hidden>
       <button id="song-version-toggle" class="version-toggle" type="button"
               aria-label="演唱版本" aria-haspopup="menu" aria-expanded="false" aria-controls="song-version-panel">
         <span class="version-caption">演唱版本</span><span data-version-current></span><span aria-hidden="true">⌄</span>
       </button>
-      <div id="song-version-panel" class="version-panel" role="menu" aria-label="演唱版本" hidden></div>
+      <div id="song-version-panel" class="version-panel" role="menu" aria-label="演唱版本" popover="manual" hidden></div>
     </div>
     <div id="song-difficulty" class="difficulty-group" role="radiogroup" aria-label="难度"></div>
   `
 
-  const field = root.querySelector<HTMLInputElement>('#song-search')!
-  const clear = root.querySelector<HTMLButtonElement>('#song-clear')!
-  const panel = root.querySelector<HTMLDivElement>('#song-panel')!
-  const listbox = root.querySelector<HTMLUListElement>('#song-listbox')!
-  const count = root.querySelector<HTMLSpanElement>('#song-count')!
-  const includeNoChart = root.querySelector<HTMLInputElement>('#song-include-no-chart')!
+  const panel = document.createElement('div')
+  panel.id = 'song-panel'
+  panel.className = 'picker-panel'
+  panel.popover = 'manual'
+  panel.hidden = true
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-labelledby', 'song-library-title')
+  panel.innerHTML = `
+    <div class="library-heading"><h2 id="song-library-title">曲库</h2><span id="song-count" class="picker-count"></span><button class="quiet" type="button" data-library-close aria-label="关闭曲库">×</button></div>
+    <div class="library-search picker-field">
+      <svg class="picker-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
+      <input id="song-search" class="picker-input" type="text" role="combobox" autocomplete="off" spellcheck="false" aria-expanded="false" aria-controls="song-listbox" aria-autocomplete="list" aria-label="搜索曲目" placeholder="搜索曲名、组合或 ID">
+      <button id="song-clear" class="picker-clear" type="button" aria-label="清空搜索" hidden>×</button>
+    </div>
+    <div class="picker-toolbar">
+      <select id="song-category" aria-label="曲目分类"><option value="">全部分类</option></select>
+      <select id="song-sort" aria-label="曲目排序"><option value="order">收录顺序</option><option value="title">曲名顺序</option><option value="level">最高等级</option></select>
+      <label class="picker-toggle"><input id="song-include-no-chart" type="checkbox"><span>含无谱面</span></label>
+    </div>
+    <div class="library-columns" aria-hidden="true"><span>曲目 / 演唱组合</span><div>${DIFFICULTY_ORDER.map((name, index) => `<span data-difficulty="${name}" data-short="${['N', 'H', 'EX', 'MA'][index]}">${name}</span>`).join('')}</div></div>
+    <ul id="song-listbox" class="picker-list" role="listbox" aria-label="曲目"></ul>
+    <div class="picker-help"><span><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>Enter</kbd> 打开</span><span><kbd>Esc</kbd> 关闭</span></div>
+  `
+  root.append(panel)
+  const openButton = root.querySelector<HTMLButtonElement>('[data-picker-open]')!
+  const field = panel.querySelector<HTMLInputElement>('#song-search')!
+  const clear = panel.querySelector<HTMLButtonElement>('#song-clear')!
+  const listbox = panel.querySelector<HTMLUListElement>('#song-listbox')!
+  const count = panel.querySelector<HTMLSpanElement>('#song-count')!
+  const includeNoChart = panel.querySelector<HTMLInputElement>('#song-include-no-chart')!
+  const category = panel.querySelector<HTMLSelectElement>('#song-category')!
+  const sort = panel.querySelector<HTMLSelectElement>('#song-sort')!
+  for (const name of new Set(songs.map(song => song.category))) category.add(new Option(name, name))
   const difficultyGroup = root.querySelector<HTMLDivElement>('#song-difficulty')!
   const versionGroup = root.querySelector<HTMLDivElement>('#song-versions')!
   const versionToggle = root.querySelector<HTMLButtonElement>('#song-version-toggle')!
@@ -137,23 +145,52 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   const versionCurrent = root.querySelector<HTMLSpanElement>('[data-version-current]')!
 
   let custom = false
+  let disabled = false
   let selectedSongId = ''
   let selectedDifficulty: DifficultyName | null = null
-  /**
-   * 真正的搜索词，与输入框显示的内容分开。
-   *
-   * 输入框在选中曲目后显示的是曲名（供人看），但那不是「查询」——
-   * 若直接拿 field.value 过滤，点开菜单只会看到当前这一首，
-   * 等于打不开选曲列表。故查询单独存，只有用户真的输入才写入。
-   */
   let query = ''
+  let libraryTrigger: HTMLElement | null = null
+  let libraryHome: HTMLElement | null = null
   // 过滤后可见的选项，键盘上下键在它上面移动；顺序与 DOM 一致。
   let visible: SongEntry[] = []
   let activeIndex = -1
 
   const findSong = (id: string) => songs.find((song) => song.id === id) ?? null
 
+  // Fixed panels escape the scrolling record rail; keep them inside the viewport.
+  function positionPanel(node: HTMLElement, anchor: HTMLElement) {
+    const bounds = anchor.getBoundingClientRect()
+    const width = node.getBoundingClientRect().width
+    const transport = root.closest('.viewer')?.querySelector('.transport')?.getBoundingClientRect()
+    const bottom = innerWidth <= 900 && transport ? Math.min(innerHeight, transport.top) : innerHeight
+    const below = bottom - bounds.bottom - 16
+    const above = bounds.top - 16
+    const openBelow = below >= Math.min(280, innerHeight / 2) || below >= above
+    node.style.left = `${Math.max(12, Math.min(bounds.left, innerWidth - width - 12))}px`
+    node.style.maxHeight = `${Math.max(100, openBelow ? below : above)}px`
+    node.style.top = openBelow ? `${bounds.bottom + 8}px` : 'auto'
+    node.style.bottom = openBelow ? 'auto' : `${innerHeight - bounds.top + 8}px`
+  }
+  function positionOpenPanels() {
+    if (!panel.hidden) positionLibrary()
+    if (!versionPanel.hidden) positionPanel(versionPanel, versionToggle)
+  }
+  function positionLibrary() {
+    const transport = root.closest('.viewer')?.querySelector('.transport')?.getBoundingClientRect()
+    const top = innerHeight <= 520 ? 12 : innerWidth <= 640 ? 64 : 88
+    const bottom = Math.min(innerHeight - 12, transport?.top ?? innerHeight - 12)
+    panel.style.top = `${Math.min(top, Math.max(12, bottom - 260))}px`
+    panel.style.maxHeight = `${Math.max(100, bottom - Number.parseFloat(panel.style.top) - 12)}px`
+  }
+  window.addEventListener('resize', positionOpenPanels)
+  document.addEventListener('scroll', positionOpenPanels, true)
+  const onFullscreenChange = () => {
+    if (libraryHome && !document.fullscreenElement?.contains(panel)) closePanel(true)
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+
   function closeVersions(focus = false) {
+    versionPanel.hidePopover()
     versionPanel.hidden = true
     versionToggle.setAttribute('aria-expanded', 'false')
     if (focus) versionToggle.focus()
@@ -163,6 +200,8 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     if (versionToggle.disabled || versionGroup.hidden) return
     closePanel()
     versionPanel.hidden = false
+    versionPanel.showPopover()
+    positionPanel(versionPanel, versionToggle)
     versionToggle.setAttribute('aria-expanded', 'true')
     versionPanel.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
   }
@@ -196,7 +235,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         const available = availableDifficulties(source)
         selectedDifficulty = available.includes(selectedDifficulty as DifficultyName)
           ? selectedDifficulty : available[available.length - 1] ?? null
-        showSelectedTitle()
+        updateSelection()
         renderDifficulty()
         renderVersions()
         closeVersions(true)
@@ -247,29 +286,51 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       button.className = 'difficulty-chip'
       button.setAttribute('role', 'radio')
       button.setAttribute('aria-checked', String(name === selectedDifficulty))
+      button.tabIndex = name === selectedDifficulty ? 0 : -1
+      button.disabled = disabled
       button.dataset.difficulty = name
       button.setAttribute('aria-label', `${name}${level ? ` Lv.${level}` : ''}`)
       button.title = `${name}${level ? ` Lv.${level}` : ''}`
       button.textContent = String(level || '-')
       if (name === selectedDifficulty) button.classList.add('is-active')
       button.onclick = () => {
+        if (selectedDifficulty === name) return
+        const focused = document.activeElement === button
         selectedDifficulty = name
         renderDifficulty()
         renderVersions()
         if (selectedSongId) onChange(selectedSongId, name)
+        if (focused) difficultyGroup.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
       }
       difficultyGroup.append(button)
     }
   }
 
+  difficultyGroup.onkeydown = event => {
+    const buttons = [...difficultyGroup.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+    if (!buttons.length) return
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    const positions: Record<string, number> = {
+      ArrowRight: (index + 1) % buttons.length, ArrowDown: (index + 1) % buttons.length,
+      ArrowLeft: (index + buttons.length - 1) % buttons.length, ArrowUp: (index + buttons.length - 1) % buttons.length,
+      Home: 0, End: buttons.length - 1,
+    }
+    const next = positions[event.key]
+    if (next === undefined) return
+    event.preventDefault()
+    event.stopPropagation()
+    buttons[next]!.click()
+    difficultyGroup.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
+  }
+
 
   function levelBadges(song: SongEntry): string {
-    if (!song.hasChart) return '<span class="song-option-badge is-none">无谱面</span>'
-    // 与 header 的难度徽章同口径：只标数字，难度靠顺序与配色区分。
+    const source = chartSongFor(list, song.id)
+    if (!source?.difficulties.length) return '<span class="song-option-badge is-none">无谱面</span>'
     return DIFFICULTY_ORDER
-      .filter((name) => song.difficulties.includes(name))
       .map((name) => {
-        const level = song.levels?.[name] || '-'
+        if (!source.difficulties.includes(name)) return '<span class="song-option-badge is-unavailable">—</span>'
+        const level = source.levels?.[name] || '—'
         return `<span class="song-option-badge" data-difficulty="${name}" ` +
           `title="${name} Lv.${level}">${level}</span>`
       })
@@ -278,12 +339,15 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
 
   function renderList(preferIndex?: number) {
     const filtered = filterSongs(songs, query, includeNoChart.checked)
+      .filter(song => !category.value || song.category === category.value)
+    if (sort.value === 'title') filtered.sort((a, b) => a.title.localeCompare(b.title, 'ja'))
+    if (sort.value === 'level') {
+      const highest = (song: SongEntry) => Math.max(0, ...Object.values(chartSongFor(list, song.id)?.levels ?? {}))
+      filtered.sort((a, b) => highest(b) - highest(a))
+    }
     listbox.replaceChildren()
 
-    const chartCount = filtered.filter((song) => song.hasChart).length
-    count.textContent = query
-      ? `匹配 ${filtered.length} 首（有谱面 ${chartCount}）`
-      : `共 ${filtered.length} 首（有谱面 ${chartCount}）`
+    count.textContent = `${filtered.length} 首`
 
     if (filtered.length === 0) {
       visible = []
@@ -292,23 +356,27 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       empty.className = 'picker-empty'
       empty.textContent = '没有匹配的曲目'
       listbox.append(empty)
+      field.removeAttribute('aria-activedescendant')
       return
     }
 
     // 列表按分类分组显示，`visible` 必须与 DOM 同序，
     // 否则键盘上下键高亮的项与 Enter 选中的项会对不上。
-    const groups = groupByCategory(filtered)
+    const groups = sort.value === 'order' ? groupByCategory(filtered) : [{ category: '', songs: filtered }]
     visible = groups.flatMap((group) => group.songs)
 
     let index = 0
     for (const group of groups) {
-      const heading = document.createElement('li')
-      heading.className = 'picker-group'
-      heading.setAttribute('role', 'presentation')
-      heading.textContent = group.category
-      listbox.append(heading)
+      if (group.category && !category.value) {
+        const heading = document.createElement('li')
+        heading.className = 'picker-group'
+        heading.setAttribute('role', 'presentation')
+        heading.textContent = group.category
+        listbox.append(heading)
+      }
 
       for (const song of group.songs) {
+        const optionIndex = index
         const option = document.createElement('li')
         option.id = `song-option-${song.id}`
         option.className = 'song-option'
@@ -319,15 +387,30 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         option.innerHTML = `
           <span class="song-option-main">
             <span class="song-option-title">${escapeHtml(song.title)}</span>
-            <span class="song-option-unit">${escapeHtml(song.unitName)}</span>
+            <span class="song-option-unit">${escapeHtml(song.unitName)}<span class="song-option-id">${escapeHtml(song.id)}</span></span>
           </span>
           <span class="song-option-badges">${levelBadges(song)}</span>
         `
+        const art = document.createElement('span')
+        art.className = 'song-option-art'
+        art.setAttribute('aria-hidden', 'true')
+        art.textContent = '♪'
+        const coverUrl = songAssets(song).coverUrl
+        if (coverUrl) {
+          const image = document.createElement('img')
+          image.alt = ''
+          image.loading = 'lazy'
+          image.decoding = 'async'
+          image.src = coverUrl
+          image.onerror = () => image.remove()
+          art.append(image)
+        }
+        option.prepend(art)
         if (song.id === selectedSongId) option.classList.add('is-selected')
         option.onclick = () => choose(song.id)
         option.onmousemove = () => {
-          if (activeIndex === index) return
-          activeIndex = index
+          if (activeIndex === optionIndex) return
+          activeIndex = optionIndex
           paintActive()
         }
         listbox.append(option)
@@ -347,7 +430,7 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     options.forEach((option) => {
       const active = Number(option.dataset.index) === activeIndex
       option.classList.toggle('is-active', active)
-      if (active) {
+      if (active && !panel.hidden) {
         field.setAttribute('aria-activedescendant', option.id)
         option.scrollIntoView({ block: 'nearest' })
       }
@@ -355,43 +438,52 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     if (activeIndex < 0) field.removeAttribute('aria-activedescendant')
   }
 
-  /** 把输入框还原成「显示当前曲名」的状态（非查询态）。 */
-  function showSelectedTitle() {
-    const song = findSong(selectedSongId)
-    field.value = song ? song.title : ''
-    field.title = song ? `${song.title}　${song.category}　${song.unitName}` : ''
-    clear.hidden = field.value === ''
+  function updateSelection() {
+    root.dataset.songId = selectedSongId
+    panel.dataset.songId = selectedSongId
   }
 
   /** 只负责把面板露出来，不动查询词。 */
   function showPanel() {
     if (!panel.hidden) return
     closeVersions()
+    // Controls outside the fullscreen element are inert, even in the top layer.
+    if (document.fullscreenElement && !document.fullscreenElement.contains(panel)) {
+      libraryHome = panel.parentElement
+      document.fullscreenElement.append(panel)
+    }
     panel.hidden = false
+    panel.showPopover()
+    positionLibrary()
     field.setAttribute('aria-expanded', 'true')
-    root.classList.add('is-open')
+    openButton.setAttribute('aria-expanded', 'true')
+    if (libraryTrigger?.hasAttribute('aria-haspopup')) libraryTrigger.setAttribute('aria-expanded', 'true')
   }
 
-  /**
-   * 用户主动「打开菜单」（聚焦 / 点击）。
-   *
-   * 这里清掉上一轮的查询并重画完整列表，并高亮当前曲目——
-   * 否则输入框里显示的是曲名，过滤后只剩当前这一首，菜单等于空的。
-   */
-  function openPanel() {
-    if (!panel.hidden) return
-    query = ''
+  function openPanel(trigger?: HTMLElement) {
+    if (disabled) return
+    if (!panel.hidden) { field.focus(); return }
+    libraryTrigger = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : openButton)
     showPanel()
+    activeIndex = -1
     renderList(Math.max(0, visible.findIndex((song) => song.id === selectedSongId)))
+    field.focus({ preventScroll: true })
+    field.select()
   }
 
-  function closePanel() {
+  function closePanel(restoreFocus = false) {
     if (panel.hidden) return
+    panel.hidePopover()
     panel.hidden = true
     field.setAttribute('aria-expanded', 'false')
-    root.classList.remove('is-open')
-    query = ''
-    showSelectedTitle()
+    field.removeAttribute('aria-activedescendant')
+    openButton.setAttribute('aria-expanded', 'false')
+    if (libraryTrigger?.hasAttribute('aria-haspopup')) libraryTrigger.setAttribute('aria-expanded', 'false')
+    if (libraryHome) {
+      libraryHome.append(panel)
+      libraryHome = null
+    }
+    if (restoreFocus && libraryTrigger?.isConnected) libraryTrigger.focus({ preventScroll: true })
   }
 
   function choose(songId: string) {
@@ -401,8 +493,8 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     const available = availableDifficulties(chartSongFor(list, songId))
     selectedDifficulty = available.includes(selectedDifficulty as DifficultyName)
       ? selectedDifficulty : available[available.length - 1] ?? null
-    query = ''
-    closePanel()
+    updateSelection()
+    closePanel(true)
     // 重渲染一次，让列表里的 is-selected 标记跟上新选择
     // （不重渲染的话，再次打开面板会看到上一首仍带勾）。
     renderList(visible.findIndex((item) => item.id === songId))
@@ -412,15 +504,11 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   }
 
   field.oninput = () => {
-    // 先写 query 再开面板：openPanel 会重置 query，顺序反了会把输入抹掉。
     query = field.value
     clear.hidden = field.value === ''
     activeIndex = 0
-    showPanel()
     renderList()
   }
-  field.onfocus = () => openPanel()
-  field.onclick = () => openPanel()
   field.onkeydown = (event) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -445,10 +533,10 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
       if (song) choose(song.id)
       return
     }
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !panel.hidden) {
       event.preventDefault()
-      closePanel()
-      field.blur()
+      event.stopPropagation()
+      closePanel(true)
     }
   }
 
@@ -465,10 +553,22 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
     activeIndex = 0
     renderList()
   }
+  category.onchange = sort.onchange = () => renderList(0)
+  openButton.onclick = () => openPanel(openButton)
+  panel.querySelector<HTMLButtonElement>('[data-library-close]')!.onclick = () => closePanel(true)
+  panel.onkeydown = event => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    closePanel(true)
+  }
+  panel.addEventListener('focusout', event => {
+    if (event.relatedTarget instanceof Node && !panel.contains(event.relatedTarget)) closePanel()
+  })
 
   // 点到控件之外就收面板。
   const onDocumentPointerDown = (event: PointerEvent) => {
-    if (!root.contains(event.target as Node)) closePanel()
+    if (!root.contains(event.target as Node) && !panel.contains(event.target as Node)) closePanel()
     if (!versionGroup.contains(event.target as Node)) closeVersions()
   }
   document.addEventListener('pointerdown', onDocumentPointerDown)
@@ -476,9 +576,12 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
   renderList()
   renderDifficulty()
   renderVersions()
+  updateSelection()
 
   return {
     root,
+    library: panel,
+    openLibrary: openPanel,
     currentSongId: () => selectedSongId,
     currentDifficulty: () => selectedDifficulty,
     select: (songId, difficulty, notify = true) => {
@@ -491,22 +594,34 @@ export function createSongPicker(options: SongPickerOptions): SongPickerHandle {
         (name) => name === (difficulty ?? '').toUpperCase(),
       )
       selectedDifficulty = wanted ?? available[available.length - 1] ?? null
-      query = ''
-      showSelectedTitle()
+      updateSelection()
       renderDifficulty()
       renderVersions()
+      renderList(visible.findIndex(song => song.id === selectedSongId))
       if (notify) onChange(songId, selectedDifficulty)
     },
     setCustom: active => { custom = active; renderDifficulty() },
-    setDisabled: (disabled) => {
-      field.disabled = disabled
-      versionToggle.disabled = disabled
-      root.classList.toggle('is-disabled', disabled)
-      if (disabled) { closePanel(); closeVersions() }
+    setDisabled: (value) => {
+      disabled = value
+      field.disabled = value
+      openButton.disabled = value
+      versionToggle.disabled = value
+      root.classList.toggle('is-disabled', value)
+      renderDifficulty()
+      if (value) { closePanel(); closeVersions() }
+    },
+    refreshLayout: () => {
+      closeVersions()
+      if (libraryHome && !document.fullscreenElement?.contains(root)) closePanel()
+      positionOpenPanels()
     },
     dispose: () => {
       document.removeEventListener('pointerdown', onDocumentPointerDown)
       versionGroup.removeEventListener('focusout', onVersionFocusOut)
+      window.removeEventListener('resize', positionOpenPanels)
+      document.removeEventListener('scroll', positionOpenPanels, true)
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      panel.remove()
       root.remove()
     },
   }

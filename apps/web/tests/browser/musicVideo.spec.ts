@@ -11,9 +11,9 @@ async function openMv(page: import('@playwright/test').Page, request: import('@p
   const hasMp4 = mp4.ok() && (mp4.headers()['content-type'] ?? '').startsWith('video/');
   test.skip(!chart.ok() || !(hasHls || hasMp4), '本地曲目谱面 / MV 尚未解包');
   await page.goto(`/?song=${SONG}&difficulty=MASTER`);
-  await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
-  await expect(page.locator('#message')).toContainText('MV ✓');
+  await expect(page.locator('#play')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('[data-resource-loading]')).toBeHidden();
+  await page.locator('[data-inspector-toggle]').click();
   await page.getByRole('tab', { name: '显示与特效' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__LPW__?.musicVideo?.frame(0)?.readyState ?? 0), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 }
@@ -48,6 +48,7 @@ test('切歌谱面下载失败时不把原曲和原 MV 显示成新歌', async (
   });
   await expect(page.locator('#stage-canvas')).toHaveAttribute('data-mv', SONG);
   await page.route('**/assets/chart/rhythmgame_chart_203102_04.bytes', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.locator('#browse-library').click();
   await page.locator('#song-search').fill('203102');
   await page.locator('.song-option').first().click();
   await expect(page.locator('#message')).toContainText('曲目加载失败');
@@ -65,7 +66,7 @@ test('原包电影轨道非零起点：开始前保持普通背景，之后按�
     || (mp4.ok() && (mp4.headers()['content-type'] ?? '').startsWith('video/'));
   test.skip(!chart.ok() || !hasMv, '本地 203102 谱面 / MV 尚未解包');
   await page.goto('/?song=203102&difficulty=MASTER');
-  await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
+  await expect(page.locator('#play')).toBeEnabled({ timeout: 30_000 });
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
     node.value = '1.5'; node.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -85,7 +86,7 @@ test('原包电影轨道非零起点：开始前保持普通背景，之后按�
   const audio = await request.get(`/assets/audio/bgm_${entry.soundId}.ogg`, { method: 'HEAD' });
   test.skip(!chart.ok() || !audio.ok(), '本地 304109 谱面 / BGM 尚未准备');
   await page.goto(`/?song=${song}&difficulty=MASTER`);
-  await expect(page.locator('#message')).toContainText('已加载', { timeout: 30_000 });
+  await expect(page.locator('#play')).toBeEnabled({ timeout: 30_000 });
   await page.locator('#timeline').evaluate((node: HTMLInputElement) => {
     node.value = '104.4'; node.dispatchEvent(new Event('input', { bubbles: true }));
   });

@@ -18,9 +18,9 @@ import {
 
 type ViewId = 'llll' | 'pjsk'
 
-const views: { id: ViewId; label: string; detail: string }[] = [
-  { id: 'llll', label: '舞台', detail: 'LLLL 3D / 2D' },
-  { id: 'pjsk', label: 'PJSK', detail: '60 轨渲染' },
+const views: { id: ViewId; label: string }[] = [
+  { id: 'llll', label: 'LLLL' },
+  { id: 'pjsk', label: 'PJSK' },
 ]
 
 type ViewContext = {
@@ -56,25 +56,25 @@ app.innerHTML = `
   <div class="workspace" data-view="llll">
     <header class="workspace-header" id="workspace-header">
       <a class="brand" href="./" aria-label="llll 谱面放映室首页">
-        <span class="brand-mark" aria-hidden="true">llll</span>
-        <span class="brand-copy">谱面放映室<small>CHART PREVIEW</small></span>
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="brand-copy">sukushow<span class="brand-period">.</span></span>
       </a>
       <nav class="mode-tabs" aria-label="预览模式">
         ${views.map((item) => `
           <button class="mode-tab${item.id === 'llll' ? ' is-active' : ''}" type="button" data-view="${item.id}" aria-controls="view-root" aria-current="${item.id === 'llll' ? 'page' : 'false'}">
-            <strong>${item.label}</strong><small>${item.detail}</small>
+            <strong>${item.label}</strong>
           </button>
         `).join('')}
       </nav>
-      <div class="view-toolbar" id="view-toolbar" aria-label="谱面来源与预览选项">
-        <div id="song-picker-mount" class="song-picker" aria-label="选择曲目">
-          <div class="picker-loading" role="status">
-            <span class="picker-loading-detail" data-picker-loading-detail>正在下载 song-list.json…</span>
-            <progress data-picker-loading-progress max="1" aria-label="曲目库下载进度"></progress>
-            <span class="picker-loading-size" data-picker-loading-size hidden></span>
-          </div>
+      <div class="header-actions"><button type="button" class="quiet" id="browse-library" aria-label="搜索曲库" aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false" disabled><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><span>曲库</span><kbd>/</kbd></button></div>
+      <div id="song-picker-mount" class="song-picker" aria-label="选择曲目">
+        <div class="picker-loading" role="status">
+          <span class="picker-loading-detail" data-picker-loading-detail>正在下载 song-list.json…</span>
+          <progress data-picker-loading-progress max="1" aria-label="曲目库下载进度"></progress>
+          <span class="picker-loading-size" data-picker-loading-size hidden></span>
         </div>
-        <div id="aspect-mount" class="aspect-mount"></div>
+      </div>
+      <div class="view-toolbar" id="view-toolbar" aria-label="谱面来源与预览选项">
         <div class="file-toolbar" aria-label="打开谱面与音频">
           <button id="open-chart" class="file-action" type="button">＋ 打开谱面</button>
           <input class="sr-only" id="chart-file" type="file" accept=".json,.bytes,application/json" aria-label="选择谱面文件">
@@ -102,12 +102,12 @@ app.innerHTML = `
           </div>
           <span id="source-status" role="status"></span>
         </div>
+        <div id="aspect-mount" class="aspect-mount"></div>
       </div>
-      <span class="local-badge">本地运行 · 文件不上传</span>
     </header>
     <div id="view-root" class="workspace-content view-llll"></div>
     <footer class="workspace-footer">
-      <span>非官方研究工具 · 原格式谱面预览 · <a href="https://github.com/bywhite0/sukushow" target="_blank" rel="noreferrer">源码（AGPL-3.0-only）</a></span>
+      <a href="https://github.com/bywhite0/sukushow" target="_blank" rel="noreferrer">源码（AGPL-3.0-only）</a>
       <span><kbd>Space</kbd> 播放 / 暂停 <kbd>←</kbd><kbd>→</kbd> 跳转 5 秒</span>
     </footer>
   </div>
@@ -116,6 +116,33 @@ app.innerHTML = `
 const workspace = app.querySelector<HTMLElement>('.workspace')!
 const viewRoot = app.querySelector<HTMLElement>('#view-root')!
 const toolbar = app.querySelector<HTMLElement>('#view-toolbar')!
+const pickerMount = app.querySelector<HTMLElement>('#song-picker-mount')!
+const pickerHome = pickerMount.parentElement!
+let sharedSongPicker: SongPickerHandle | undefined
+function moveSongPicker(host: Element) {
+  const active = document.activeElement as HTMLElement | null
+  const focused = active && pickerMount.contains(active)
+    ? active.closest('#song-version-panel') ? pickerMount.querySelector<HTMLElement>('#song-version-toggle') : active
+    : null
+  host.append(pickerMount)
+  if (focused) focused.focus({ preventScroll: true })
+  sharedSongPicker?.refreshLayout()
+}
+const browseLibrary = app.querySelector<HTMLButtonElement>('#browse-library')!
+function openLibrary(trigger?: HTMLElement) {
+  sharedSongPicker?.openLibrary(trigger)
+}
+browseLibrary.onclick = () => openLibrary(browseLibrary)
+app.addEventListener('click', event => {
+  const trigger = (event.target as HTMLElement).closest<HTMLElement>('[data-library-open]')
+  if (trigger) openLibrary(trigger)
+})
+document.addEventListener('keydown', event => {
+  if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey
+    || (event.target as HTMLElement).closest('input,select,textarea,[contenteditable],dialog')) return
+  event.preventDefault()
+  openLibrary()
+})
 const modeTabs = [...app.querySelectorAll<HTMLButtonElement>('.mode-tab')]
 const sourceFiles = createSourceFiles(songSelection)
 type SongCredit = {
@@ -166,6 +193,10 @@ const sourceControls = createSourceControls({
   },
 })
 const sourceStatus = toolbar.querySelector<HTMLElement>('#source-status')!
+function setSourceStatus(text: string, error = false) {
+  sourceStatus.textContent = text
+  sourceStatus.classList.toggle('is-error', error)
+}
 const libraryStatus = toolbar.querySelector<HTMLElement>('#library-status')!
 const pickLibrary = toolbar.querySelector<HTMLButtonElement>('#pick-library')!
 const forgetLibrary = toolbar.querySelector<HTMLButtonElement>('#forget-library')!
@@ -182,7 +213,7 @@ function applyLibrary(next: Parameters<typeof setLibrary>[0]) {
 
 const describeLibrary = (next: LocalLibrary | null) => {
   if (!next) {
-    libraryStatus.textContent = '未连接资源目录'
+    libraryStatus.textContent = ''
     forgetLibrary.hidden = true
     return
   }
@@ -235,7 +266,7 @@ void (async () => {
       const granted = await grantPending(handle)
       if (granted) { applyLibrary(granted); return }
       pickLibrary.onclick = null
-      libraryStatus.textContent = '未连接资源目录'
+      libraryStatus.textContent = ''
     })()
   }
 })()
@@ -249,11 +280,9 @@ const refreshSourceStatus = async () => {
   try {
     const source = await resolveSource(state)
     if (revision !== songSelection.getSource().revision || revision === failedSourceRevision) return
-    sourceStatus.textContent = source.chart
-      ? `${source.metadata.title}${source.metadata.difficulty ? ` [${source.metadata.difficulty}]` : ''}`
-      : state.songId ? `${source.metadata.title} · 暂无官方谱面，请打开自制谱` : '未加载谱面'
+    setSourceStatus(!source.chart && state.songId ? '暂无官方谱面，请打开自制谱' : '')
   } catch (error) {
-    if (revision === songSelection.getSource().revision) sourceStatus.textContent = `来源加载失败：${String(error)}`
+    if (revision === songSelection.getSource().revision) setSourceStatus(`来源加载失败：${String(error)}`, true)
   }
 }
 songSelection.subscribeSource(() => void refreshSourceStatus(), true)
@@ -332,7 +361,10 @@ async function initSharedSongPicker() {
         updateSongUrl({ songId, difficulty: songSelection.getSource().chart.kind === 'custom' ? null : difficulty })
       },
     })
+    sharedSongPicker = picker
     mount.replaceChildren(picker.root)
+    workspace.append(picker.library)
+    browseLibrary.disabled = false
     songSelection.subscribeSource(state => {
       const difficulty = state.chart.kind === 'official' ? state.chart.difficulty : null
       if (state.songId && (picker.currentSongId() !== state.songId
@@ -350,7 +382,7 @@ async function initSharedSongPicker() {
           if (source.offsetMs !== 0) songSelection.updateMetadata({ offsetMs: source.offsetMs })
         }
       } catch (error) {
-        sourceStatus.textContent = `来源加载失败：${String(error)}`
+        setSourceStatus(`来源加载失败：${String(error)}`, true)
       }
     }
   } catch (error) {
@@ -367,6 +399,7 @@ function disposeActive(): Promise<void> {
   if (activeDisposal) return activeDisposal
   const dispose = activeDispose
   activeDispose = undefined
+  moveSongPicker(pickerHome)
   activeDisposal = (async () => {
     if (dispose) await dispose()
     viewRoot.replaceChildren()
@@ -404,6 +437,7 @@ async function showView(view: ViewId, push = false) {
       return
     }
     activeDispose = resolveDispose(handle)
+    moveSongPicker(viewRoot.querySelector('[data-song-picker-slot]')!)
   } catch (error) {
     if (token !== transition) return
     viewRoot.innerHTML = '<main class="load-error" role="alert"><h1>预览模式加载失败</h1><p></p><button class="quiet" type="button" data-retry>返回 LLLL 模式</button></main>'
@@ -449,7 +483,7 @@ window.addEventListener('popstate', () => {
       songSelection.selectCatalog(choice, list)
       if (source.offsetMs !== 0) songSelection.updateMetadata({ offsetMs: source.offsetMs })
     } catch (error) {
-      if (token === historySourceToken) sourceStatus.textContent = `来源加载失败：${String(error)}`
+      if (token === historySourceToken) setSourceStatus(`来源加载失败：${String(error)}`, true)
     }
   })()
 })
@@ -486,7 +520,7 @@ async function initializeUrlSource(url = new URL(window.location.href), current 
     if (current() && songSelection.getSource().identity === identity) {
       songSelection.clearSource()
       failedSourceRevision = songSelection.getSource().revision
-      sourceStatus.textContent = `来源加载失败：${String(error)}`
+      setSourceStatus(`来源加载失败：${String(error)}`, true)
     }
   }
 }

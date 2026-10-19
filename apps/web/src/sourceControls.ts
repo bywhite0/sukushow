@@ -71,6 +71,7 @@ export function createSourceControls(options: {
   let editIdentity = 0
   let disposed = false
   const unsubscribe = store.subscribeSource(state => {
+    root.querySelector('#source-status')?.classList.remove('is-error')
     edit.disabled = state.chart.kind !== 'custom'
     for (const kind of ['audio', 'cover', 'mv'] as const) {
       const row = root.querySelector<HTMLElement>(`[data-media-kind="${kind}"]`)
@@ -114,7 +115,10 @@ export function createSourceControls(options: {
   const cleanups: (() => void)[] = []
   const reportFileError = (value: unknown) => {
     const status = root.querySelector<HTMLElement>('#source-status')
-    if (status) status.textContent = `文件读取失败：${String(value)}`
+    if (status) {
+      status.textContent = `文件读取失败：${String(value)}`
+      status.classList.add('is-error')
+    }
   }
   const toggle = root.querySelector<HTMLButtonElement>('#media-toggle')
   const panel = root.querySelector<HTMLElement>('#media-panel')

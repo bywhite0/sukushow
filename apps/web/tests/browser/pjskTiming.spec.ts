@@ -25,7 +25,7 @@ test('MV 缺失不阻断预览，清除媒体后不沿用上一首音视频', as
   test.setTimeout(120_000);
   await page.route('**/assets/mv/**', route => route.fulfill({ status: 404, body: '' }));
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
-  await expect(page.locator('#message')).toContainText('フォーチュン', { timeout: 90_000 });
+  await expect(page.locator('#chart-name')).toContainText('フォーチュン', { timeout: 90_000 });
   expect(await page.evaluate(() => (window as any).__LLL_PJSK__.musicVideo.useVideoBackground)).toBe(false);
   await page.getByRole('button', { name: '媒体', exact: true }).click();
   await page.locator('[data-media-kind="audio"] [data-media-clear]').click();

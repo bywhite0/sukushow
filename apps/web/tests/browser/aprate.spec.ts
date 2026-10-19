@@ -31,9 +31,9 @@ interface Capture {
 async function loadAndSeek(page: import('@playwright/test').Page, errors: string[]): Promise<void> {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await expect(page.locator('#message')).toContainText('就绪');
+  await expect(page.locator('#chart-file')).toBeAttached();
   await page.locator('#chart-file').setInputFiles({ name: 'aprate.json', mimeType: 'application/json', buffer: chart });
-  await expect(page.locator('#message')).toContainText('已加载');
+  await expect(page.locator('#chart-name')).toHaveText('aprate.json');
   await expect.poll(async () => Number(await page.locator('#chart-canvas').getAttribute('data-draw-calls'))).toBeGreaterThan(0);
   await page.locator('#timeline').evaluate((e: HTMLInputElement) => { e.value = '1.9'; e.dispatchEvent(new Event('input')); });
 }

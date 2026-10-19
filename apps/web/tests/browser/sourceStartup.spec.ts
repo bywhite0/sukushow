@@ -7,7 +7,8 @@ for (const view of ['llll', 'pjsk']) {
       body: JSON.stringify({ Notes: [{ Uid: 1, just: '1', holds: [], Flags: 160 }], Bpms: [{ Time: 0, Bpm: 120 }] }),
     }))
     await page.goto(`/?view=${view}&song=103109&difficulty=HARD`)
-    await expect(page.locator('#source-status')).toHaveText('永遠のEuphoria [HARD]')
+    await expect(page.locator('#chart-name')).toHaveText('永遠のEuphoria')
+    await expect(page.locator('#chart-difficulty')).toHaveText('HARD')
   })
 }
 
@@ -25,7 +26,7 @@ test('曲库迟到不会覆盖已经打开的自制谱', async ({ page }) => {
   })
   await expect(page.locator('#edit-metadata')).toBeEnabled()
   release()
-  await expect(page.locator('#song-search')).toHaveValue('Dream Believers（SAKURA Ver.）')
+  await expect(page.locator('.picker')).toHaveAttribute('data-song-id', '104119')
   await expect(page.locator('#source-status')).not.toContainText('请打开自制谱')
   await expect(page.locator('#edit-metadata')).toBeEnabled()
 })

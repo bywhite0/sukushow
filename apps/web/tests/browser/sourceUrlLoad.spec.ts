@@ -28,7 +28,7 @@ test('迟到 URL 响应不能覆盖已打开的本地谱', async ({ page }) => {
   const response = page.waitForResponse(url => new URL(url.url()).pathname === '/slow.json')
   release()
   await (await response).finished()
-  await expect(page.locator('#source-status')).toContainText('new-local.json')
+  await expect(page.locator('#source-status')).toBeEmpty()
   await expect(page.locator('#chart-name')).toHaveText('new-local.json')
 })
 

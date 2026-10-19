@@ -7,14 +7,14 @@ test('LLLL 切到无谱歌曲清除旧合成画面和时间状态', async ({ pag
     node.value = '2'; node.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await expect(page.locator('#chart-canvas')).toHaveAttribute('data-time', '2.0000')
-  await page.locator('#song-search').click()
+  await page.locator('#browse-library').click()
   await page.getByLabel('含无谱面').check()
   await page.locator('#song-search').fill('104119')
-  await page.locator('[data-song-id="104119"]').click()
+  await page.locator('.song-option[data-song-id="104119"]').click()
   await expect(page.locator('#play')).toBeDisabled()
   await expect(page.locator('#timeline')).toBeDisabled()
   await expect(page.locator('#chart-name')).toContainText('SAKURA')
-  await expect(page.locator('#audio-name')).toContainText('未加载音频')
+  await expect(page.locator('#source-status')).toContainText('暂无官方谱面')
   await expect(page.locator('#stage-canvas')).not.toHaveAttribute('data-intro', /.+/)
   await expect.poll(() => page.locator('#stage-canvas').evaluate((canvas: HTMLCanvasElement) => {
     const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data

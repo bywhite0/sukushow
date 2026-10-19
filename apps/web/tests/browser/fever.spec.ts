@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 const chart = Buffer.from(JSON.stringify({ Notes: [{ Uid: 1, just: '1', Flags: 80, holds: [] }], Bpms: [] }));
 test('元数据自动匹配、手动覆盖、恢复和换谱清理', async ({ page }) => {
   await page.goto('/?song=103119&difficulty=MASTER');
-  await expect(page.locator('#message')).toContainText('已加载');
+  await expect(page.locator('#play')).toBeEnabled();
+  await page.locator('[data-inspector-toggle]').click();
   await page.getByRole('tab', { name: '显示与特效' }).click();
   await page.locator('#chart-file').setInputFiles({ name: 'rhythmgame_chart_103119_04.json', mimeType: 'application/json', buffer: chart });
   await expect(page.locator('#chart-name')).not.toContainText('[MASTER]');
@@ -18,13 +19,14 @@ test('元数据自动匹配、手动覆盖、恢复和换谱清理', async ({ pa
   await expect(page.locator('#fever-status')).toContainText('已停用');
   await page.locator('#fever-reset').click();
   await expect(page.locator('#opt-fever-start')).toHaveValue('51.329');
-  await expect(page.locator('#message')).toContainText('已加载');
-  await expect(page.locator('#song-search')).toHaveValue('ハッピー至上主義！');
+  await expect(page.locator('#play')).toBeEnabled();
+  await expect(page.locator('.picker')).toHaveAttribute('data-song-id', '103119');
   await expect(page.locator('#opt-fever-start')).toHaveValue('51.329');
   await page.goto('/?chart=/missing.json');
   await expect(page.locator('#source-status')).toContainText('来源加载失败');
   await page.locator('#chart-file').setInputFiles({ name: 'custom.json', mimeType: 'application/json', buffer: chart });
-  await expect(page.locator('#message')).toContainText('已加载 custom.json');
+  await expect(page.locator('#chart-name')).toHaveText('custom.json');
+  await page.locator('[data-inspector-toggle]').click();
   await page.getByRole('tab', { name: '显示与特效' }).click();
   await expect(page.locator('#opt-fever-start')).toHaveValue('');
   await expect(page.locator('#opt-fever-end')).toHaveValue('');
@@ -35,6 +37,6 @@ test('元数据自动匹配、手动覆盖、恢复和换谱清理', async ({ pa
   await expect(page.locator('#source-status')).toContainText('文件读取失败');
   await expect(page.locator('#opt-fever-end')).toHaveValue('2');
   await page.locator('#chart-file').setInputFiles({ name: 'next.json', mimeType: 'application/json', buffer: chart });
-  await expect(page.locator('#message')).toContainText('已加载 next.json');
+  await expect(page.locator('#chart-name')).toHaveText('next.json');
   await expect(page.locator('#fever-status')).toHaveText('未配置 Fever');
 });
