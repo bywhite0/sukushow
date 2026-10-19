@@ -20,9 +20,18 @@ pnpm verify:shared-assets
 pnpm build
 pnpm test
 pnpm test:browser        # 先执行 pnpm --filter @sukushow/web exec playwright install chromium
+pnpm --filter @sukushow/web test:pwa # 构建后验证安装、离线与更新
 # 可选：从本地 4L/cache/plain 的 USM 无损重封装 MV（需 ffmpeg；源目录取 chart 配置或 LLLL_MV_DIR）
 python packages/llll-preview/scripts/link-assets.py --only mv
 ```
+
+## 安装与离线使用
+
+生产站点支持 PWA，可通过浏览器菜单安装；iPhone / iPad 可在 Safari 分享菜单中选择「添加到主屏幕」。部署需要 HTTPS，本地可通过 `pnpm preview` 检查。开发服务器不注册 Service Worker。
+
+- 首次联网打开后会缓存应用界面、两种模式的代码、WASM 和曲库索引。渲染贴图、字体、短音效在使用时缓存。安装后联网刷新一次页面，并进入需要离线使用的模式，等待资源加载完成；之后离线仍可打开该模式并选择本地谱面与媒体。
+- 歌曲音频、MV、谱面和曲绘不自动缓存，不会在安装时下载整套资源库。离线播放需自己提供本地文件；刷新后需重新选择本地文件。
+- 有新版本时会提示「更新并刷新」，可以选择「稍后」。更新不会自动刷新正在播放或导出的页面，其他标签页更新也不会强制刷新当前页。
 
 ## 选曲与本地文件
 

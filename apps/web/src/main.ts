@@ -1,4 +1,5 @@
 import './style.css'
+import { initPwa } from './pwa'
 import { loadSongList } from '@sukushow/llll-preview/songAssets'
 import { cachedJsonResource, readResponseBytes, type DownloadProgress } from '@sukushow/llll-preview/resourceDownload'
 import { createSongPicker, type SongPickerHandle } from './songPicker'
@@ -55,8 +56,8 @@ const songSelection = new SongSelectionStore(initialSongBinding())
 app.innerHTML = `
   <div class="workspace" data-view="llll">
     <header class="workspace-header" id="workspace-header">
-      <a class="brand" href="./" aria-label="llll 谱面放映室首页">
-        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <a class="brand" href="./" aria-label="sukushow 谱面放映室首页">
+        <img class="brand-mark" src="/pwa/icon-192.png" alt="" width="34" height="34" />
         <span class="brand-copy">sukushow<span class="brand-period">.</span></span>
       </a>
       <nav class="mode-tabs" aria-label="预览模式">
@@ -112,6 +113,8 @@ app.innerHTML = `
     </footer>
   </div>
 `
+
+initPwa()
 
 const workspace = app.querySelector<HTMLElement>('.workspace')!
 const viewRoot = app.querySelector<HTMLElement>('#view-root')!

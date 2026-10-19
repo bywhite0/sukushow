@@ -6,3 +6,11 @@
 
 /assets/mv/*/seg_*.m4s
   Content-Type: video/iso.segment
+
+# 每次检查发布版本，避免旧 worker 或安装信息被 CDN 长期缓存。
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
