@@ -23,6 +23,7 @@ import { buildChartSvg, openSvgInNewTab, releaseSvgUrls } from './llll/svgExport
 import { createTrackHeader } from './trackHeader';
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome';
 import { icon, setIconButton } from '../icons';
+import { controlOwnsSpace, releaseSpaceFocus } from '../keyboard';
 import type { SongSelectionStore, ResolvedSource } from '../songSelection';
 import { createSourceBinding, waitForSource } from '../sourceBinding';
 import type { createSourceFiles } from '../sourceFiles';
@@ -359,7 +360,7 @@ input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();}
 input('volume').oninput=()=>{player?.setVolume(Number(input('volume').value));persistSettings();};
 input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}songSelection.updateMetadata({offsetMs:Number(input('offset').value)});persistSettings();};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='Space'){e.preventDefault();void toggle();}if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
+const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if(e.code==='Space'){if(controlOwnsSpace(e.target))return;e.preventDefault();releaseSpaceFocus();void toggle();return;}if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
 document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
 void (async()=>{

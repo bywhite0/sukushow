@@ -27,6 +27,7 @@ import { installExportDialog, probeAllConfigs } from './exportDialog'
 import { createTrackHeader } from './trackHeader'
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome'
 import { icon, setIconButton } from '../icons'
+import { controlOwnsSpace, releaseSpaceFocus } from '../keyboard'
 import type { ExportFrameSource } from '@sukushow/export'
 import { EXPORT_OPENING } from '@sukushow/pjsk-preview/opening'
 import type { SongSelectionStore } from '../songSelection'
@@ -777,11 +778,14 @@ el('fullscreen').onclick = async () => {
 
 const onKeydown = (event: KeyboardEvent) => {
   if (disposed || !runtimeReady || !currentChart) return
-  if ((event.target as HTMLElement).closest('input,select,button,textarea,a')) return
   if (event.code === 'Space') {
+    if (controlOwnsSpace(event.target)) return
     event.preventDefault()
+    releaseSpaceFocus()
     el('play').click()
+    return
   }
+  if ((event.target as HTMLElement).closest('input,select,button,textarea,a')) return
   if (event.code === 'ArrowRight' || event.code === 'ArrowLeft') {
     event.preventDefault()
     const snapshot = player.getStateSnapshot()

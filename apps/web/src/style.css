@@ -20,6 +20,9 @@ button:disabled { opacity:.38; cursor:not-allowed; }
 a { color:inherit; }
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible { outline:2px solid var(--shell-accent-text); outline-offset:3px; }
 ::selection { background:var(--shell-accent); color:var(--shell-ink); }
+/* 界面本身不参与文本选择：拖拽舞台、双击标题都不会选中文字；输入控件保留原生选择。 */
+body { -webkit-user-select:none; user-select:none; }
+input,textarea,select,[contenteditable]:not([contenteditable="false"]) { -webkit-user-select:text; user-select:text; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 svg { flex-shrink:0; }
 #app,.workspace { width:100%; height:100%; min-height:0; }

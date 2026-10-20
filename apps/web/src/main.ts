@@ -19,6 +19,7 @@ import {
   pickDirectory, restoreDirectory, supportsDirectoryPicker,
 } from './localAssets'
 import { icon } from './icons'
+import { initKeyboardFocus } from './keyboard'
 
 type ViewId = 'llll' | 'pjsk'
 
@@ -47,6 +48,7 @@ type ViewModule = {
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('缺少统一前端容器。')
 const appearance = initAppearance()
+initKeyboardFocus()
 
 function initialSongBinding(): { songId: string } | null {
   try {
