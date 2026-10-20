@@ -97,6 +97,10 @@ export default defineConfig(({ command }) => ({
   plugins: [
     packagePublic(packagePublicDirs),
     VitePWA({
+      // 缓存策略写在 src/sw.ts：歌曲资源要按设置页的开关决定是否缓存。
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'prompt',
       injectRegister: false,
       includeAssets: ['favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png', 'pwa/*.png'],
@@ -117,33 +121,10 @@ export default defineConfig(({ command }) => ({
           { src: '/pwa/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: false,
+      injectManifest: {
         // Precache the shell and both renderers' code, never the multi-GB song library.
         globPatterns: ['index.html', 'assets/*.{js,css,wasm}', 'wasm/*.wasm', 'song-*.json'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        navigateFallback: 'index.html',
-        navigateFallbackAllowlist: [/^\/(?:index\.html)?(?:\?.*)?$/],
-        runtimeCaching: [{
-          // Renderer textures, fonts and short UI sounds are cached only as they are used.
-          // Song audio/video, charts, jackets and remote URLs remain outside this cache.
-          urlPattern: ({ url }) => url.origin === self.location.origin && (
-            /^\/(?:rg|se|assets\/mmw)\//.test(url.pathname)
-            || /^\/(?:in_game_difficulty_bg_101|sc2_ingame_bg_pattern_dot)\.png$/.test(url.pathname)
-          ),
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'sukushow-renderer-assets-v1',
-            networkTimeoutSeconds: 5,
-            // The same public texture is loaded with and without an Origin header.
-            // Its bytes do not vary; honor both image-loading paths when offline.
-            matchOptions: { ignoreVary: true },
-            cacheableResponse: { statuses: [200] },
-            expiration: { maxEntries: 768, maxAgeSeconds: 30 * 24 * 60 * 60, purgeOnQuotaError: true },
-          },
-        }],
       },
       devOptions: { enabled: false },
     }),

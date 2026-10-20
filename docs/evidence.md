@@ -33,6 +33,8 @@
 
 - 顶部工具栏导入谱面与本地音乐；预览区下方集中放置时间轴、播放、重播、倍率和全屏。
 - 设置分为「播放与轨道」「显示与特效」「音量」「计分」四类，标签支持方向键及 Home / End；击中特效位于「显示与特效」，技术分位于「计分」。
+- 全局设置含「外观」「缓存」「关于」三页；缓存页按预缓存 / 渲染资源 / 音频 / MV / 谱面 / 曲绘 / 其他七组统计 Cache Storage 条目与体积，并显示 `navigator.storage.estimate()` 的存储配额，每个分类都有独立的「清理」按钮，也可清理全部缓存。「离线缓存」开关保存在 `localStorage`（`sukushow:offline-cache:v1`）：关闭时注销 Service Worker 并清空缓存，重新开启后联网刷新一次恢复；开发模式不注册 Service Worker，开关只展示持久化状态。
+- 「缓存歌曲资源」默认关闭，保存在 `localStorage`（`sukushow:song-asset-cache:v1`）。四类歌曲资源各自一个缓存（`sukushow-song-audio-v1` / `sukushow-song-mv-v1` / `sukushow-song-chart-v1` / `sukushow-song-jacket-v1`），Service Worker 以对应缓存是否存在作为该类型的开关信号：开启时创建四个空缓存，命中 `/assets/audio|mv|chart|jacket/` 的请求按 CacheFirst 写入对应缓存（带 Range 的请求直接放行，避免破坏原生播放器分块读取）；关闭时删除全部四个缓存。按分类清理后，若开关仍开启会补回空缓存，保证下次加载继续缓存。Service Worker 改用 `vite-plugin-pwa` 的 injectManifest 策略（`apps/web/src/sw.ts`），预缓存清单与渲染资源 NetworkFirst 策略保持不变。
 - `settingsPersist.ts` 使用 localStorage 保存预览设置；不会修改源谱面。Voice、技能开关保留配置入口，尚未接入对应语音或技能演出。MV 开关已接入节奏游戏画面：原包 `RhythmGameMainSceneParam.ShouldMusicVideo` 要求 `IsVideoMode == 1` 且 `EnableMusicVideo` 开启（4.12.0 `libil2cpp.so` RVA 0x4AEB2E0）；`MusicLyricVideoResolver.Process` 使用当前时刻减去电影片段起点（RVA 0x4997D80）。58 首曲目的 MV 起点与电影自身时长提取自对应 `Cri Mana Track` / `CriManaClip`（`m_Start` / `m_clipDuration`）；MV 不按 BGM `PlayTime` 或 `Cri Mana Track.m_Duration` 提前停止。见 `packages/llll-preview/src/mv-timing.json`；15 首起点非零。电影无音轨，使用 `link-assets.py --only mv` 和 ffmpeg stream copy 重封装至不入库的 `apps/web/public/assets/mv/`；MV 已成功加载后，舞台始终处于 MV 背景模式，视频当前帧暂不可用时使用黑色 fallback，不再绘制默认背景；资源加载失败时才回退默认背景。曲目加载进度包含 MV 的 HEAD 大小与 `loadeddata` 就绪状态。
 
 ## 兼容边界

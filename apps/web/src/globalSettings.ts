@@ -1,6 +1,7 @@
 import './globalSettings.css'
 import { APP_VERSION, BUILD_COMMIT, BUILD_TIME, formatBuildTime, formatVersion } from './buildInfo'
 import { ACCENT_COLORS, DEFAULT_APPEARANCE, accentPalette, type AppearanceController, type AppearanceMode, type AccentId } from './theme'
+import { cacheFooterMarkup, cachePageMarkup, createCachePage } from './cacheSettingsView'
 import { icon } from './icons'
 
 const SOURCE_URL = 'https://github.com/bywhite0/sukushow'
@@ -12,6 +13,7 @@ const appearanceModes = [
 ] as const
 
 const appearanceIcon = icon('palette', 18)
+const cacheIcon = icon('database', 18)
 const chevronIcon = icon('chevron-right', 14, { className: 'preferences-brand-chevron' })
 const githubIcon = icon('github', 18)
 
@@ -28,6 +30,7 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
         <h1 id="global-settings-title">设置</h1>
         <nav class="preferences-nav" aria-label="设置页面">
           <button type="button" class="preferences-category" data-page="appearance" aria-current="page"><span>${appearanceIcon}</span>外观</button>
+          <button type="button" class="preferences-category" data-page="cache"><span>${cacheIcon}</span>缓存</button>
           <button type="button" class="preferences-brand" data-page="about" aria-label="关于 sukushow" title="关于 sukushow">
             <img src="/pwa/icon-192.png" alt="" width="30" height="30">
             <span class="preferences-brand-copy"><strong>sukushow</strong><span>谱面放映室</span></span>
@@ -69,6 +72,7 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
             <div class="accent-detail"><span>当前主题色</span><output data-current-accent></output></div>
           </fieldset>
         </div>
+        ${cachePageMarkup}
         <div class="preferences-content about-page" data-page-panel="about" hidden>
           <div class="about-hero">
             <img src="/pwa/icon-192.png" alt="" width="64" height="64">
@@ -91,6 +95,7 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
           <span data-appearance-status role="status">更改即时生效，自动保存。</span>
           <button type="button" class="text-button" data-appearance-reset>恢复默认</button>
         </footer>
+        ${cacheFooterMarkup}
         <footer class="preferences-footer" data-page-footer="about" hidden>
           <span>© ${new Date().getFullYear()} 白影White</span>
           <a class="about-github" href="${SOURCE_URL}" target="_blank" rel="noreferrer" aria-label="在 GitHub 查看源代码（AGPL-3.0-only）" title="在 GitHub 查看源代码（AGPL-3.0-only）">${githubIcon}</a>
@@ -99,20 +104,27 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
     </div>`
   document.body.append(dialog)
 
+  const cachePage = createCachePage(dialog)
   const title = dialog.querySelector<HTMLHeadingElement>('#preferences-title')!
   const panels = [...dialog.querySelectorAll<HTMLElement>('[data-page-panel]')]
   const footers = [...dialog.querySelectorAll<HTMLElement>('[data-page-footer]')]
   const navItems = [...dialog.querySelectorAll<HTMLButtonElement>('[data-page]')]
-  type PageId = 'appearance' | 'about'
-  const pageTitles: Record<PageId, string> = { appearance: '外观', about: '关于' }
+  type PageId = 'appearance' | 'cache' | 'about'
+  const pageTitles: Record<PageId, string> = { appearance: '外观', cache: '缓存', about: '关于' }
+  let currentPage: PageId = 'appearance'
 
   function showPage(page: PageId) {
+    currentPage = page
     title.textContent = pageTitles[page]
     for (const panel of panels) panel.hidden = panel.dataset.pagePanel !== page
     for (const footer of footers) footer.hidden = footer.dataset.pageFooter !== page
     for (const item of navItems) {
       if (item.dataset.page === page) item.setAttribute('aria-current', 'page')
       else item.removeAttribute('aria-current')
+    }
+    if (page === 'cache') {
+      cachePage.sync()
+      void cachePage.refresh()
     }
   }
   for (const item of navItems) item.onclick = () => showPage(item.dataset.page as PageId)
@@ -146,6 +158,10 @@ export function createGlobalSettings(trigger: HTMLButtonElement, appearance: App
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : trigger
     dialog.showModal()
     trigger.setAttribute('aria-expanded', 'true')
+    if (currentPage === 'cache') {
+      cachePage.sync()
+      void cachePage.refresh()
+    }
   }
   trigger.onclick = open
   dialog.addEventListener('close', () => {

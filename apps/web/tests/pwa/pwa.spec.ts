@@ -120,3 +120,101 @@ test('新版本等待用户确认，其他标签页更新也保留当前本地�
   await page.locator('[data-pwa-reload]').click()
   await expect(page.locator('html')).not.toHaveAttribute('data-pwa-session', 'preserved')
 })
+
+test('歌曲资源缓存默认关闭，开启后加载曲目写入缓存，可按分类清理并关闭', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.goto('/?chart=/fixture-missing.json')
+  await workerReady(page)
+  // 第一次注册的页面没有被控制，刷新一次再操作。
+  await page.reload()
+
+  await page.getByRole('button', { name: '全局设置' }).click()
+  const dialog = page.locator('#global-settings')
+  await dialog.getByRole('button', { name: '缓存' }).click()
+  const songToggle = dialog.locator('[data-cache-song]')
+  const audioGroup = dialog.locator('[data-cache-group="audio"]')
+  const chartGroup = dialog.locator('[data-cache-group="chart"]')
+  const jacketGroup = dialog.locator('[data-cache-group="jacket"]')
+  const clearAudio = dialog.locator('[data-cache-clear-group="audio"]')
+  const songCaches = ['sukushow-song-audio-v1', 'sukushow-song-mv-v1', 'sukushow-song-chart-v1', 'sukushow-song-jacket-v1']
+  const hasSongCaches = () => page.evaluate(async (names) => {
+    const keys = await caches.keys()
+    return names.every((name) => keys.includes(name))
+  }, songCaches)
+  await expect(songToggle).toBeEnabled()
+  await expect(songToggle).not.toBeChecked()
+  expect(await page.evaluate(() => localStorage.getItem('sukushow:song-asset-cache:v1'))).toBeNull()
+  expect(await hasSongCaches()).toBe(false)
+
+  await songToggle.check()
+  await expect(dialog.locator('[data-cache-status]')).toContainText('已启用歌曲资源缓存')
+  // 开关开启会为四个分类各建一个空缓存。
+  expect(await hasSongCaches()).toBe(true)
+
+  // 加载一首带音频、曲绘与谱面但没有 MV 的曲目，资源请求会经过 Service Worker。
+  await page.keyboard.press('Escape')
+  await page.goto('/?song=103119&difficulty=MASTER')
+  await expect(page.locator('#play')).toBeEnabled({ timeout: 90_000 })
+  await expect.poll(() => page.evaluate(async () => {
+    const cache = await caches.open('sukushow-song-chart-v1')
+    return (await cache.keys()).map((request) => new URL(request.url).pathname)
+  }), { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringMatching(/^\/assets\/chart\//)]))
+  await expect.poll(() => page.evaluate(async () => {
+    const cache = await caches.open('sukushow-song-jacket-v1')
+    return (await cache.keys()).map((request) => new URL(request.url).pathname)
+  }), { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringMatching(/^\/assets\/jacket\//)]))
+  await expect.poll(() => page.evaluate(async () => {
+    const cache = await caches.open('sukushow-song-audio-v1')
+    return (await cache.keys()).map((request) => new URL(request.url).pathname)
+  }), { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringMatching(/^\/assets\/audio\//)]))
+
+  // 按分类清理：只清音频，谱面与曲绘保留；开关仍开启，音频缓存以空缓存的形式补回。
+  await page.getByRole('button', { name: '全局设置' }).click()
+  await dialog.getByRole('button', { name: '缓存' }).click()
+  await expect.poll(async () => audioGroup.textContent(), { timeout: 30_000 }).not.toBe('0 B · 0 项')
+  await expect.poll(async () => chartGroup.textContent(), { timeout: 30_000 }).not.toBe('0 B · 0 项')
+  await expect.poll(async () => jacketGroup.textContent(), { timeout: 30_000 }).not.toBe('0 B · 0 项')
+  await expect(clearAudio).toBeEnabled()
+  await clearAudio.click()
+  await expect(dialog.locator('[data-cache-status]')).toContainText('已清理歌曲音频缓存')
+  await expect.poll(async () => audioGroup.textContent()).toBe('0 B · 0 项')
+  const remaining = await page.evaluate(async () => {
+    const audio = await caches.open('sukushow-song-audio-v1')
+    const chart = await caches.open('sukushow-song-chart-v1')
+    return { audio: (await audio.keys()).length, chart: (await chart.keys()).length }
+  })
+  expect(remaining.audio).toBe(0)
+  expect(remaining.chart).toBeGreaterThan(0)
+
+  // 关闭开关会删除四个分类的缓存并持久化。
+  await songToggle.uncheck()
+  await expect(dialog.locator('[data-cache-status]')).toContainText('已关闭歌曲资源缓存')
+  await expect.poll(hasSongCaches).toBe(false)
+  expect(await page.evaluate(() => localStorage.getItem('sukushow:song-asset-cache:v1'))).toBe('off')
+})
+
+test('缓存页关闭离线缓存会注销 Service Worker 并清空缓存，重新开启后再次注册', async ({ page }) => {
+  await page.goto('/?chart=/fixture-missing.json')
+  await workerReady(page)
+  await expect.poll(() => page.evaluate(async () => (await caches.keys()).length)).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: '全局设置' }).click()
+  const dialog = page.locator('#global-settings')
+  await dialog.getByRole('button', { name: '缓存' }).click()
+  const toggle = dialog.locator('[data-cache-offline]')
+  await expect(toggle).toBeEnabled()
+  await expect(toggle).toBeChecked()
+  await expect.poll(async () => dialog.locator('[data-cache-group="precache"]').textContent())
+    .not.toBe('0 B · 0 项')
+
+  await toggle.uncheck()
+  await expect(dialog.locator('[data-cache-status]')).toContainText('已关闭离线缓存')
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(0)
+  await expect.poll(() => page.evaluate(async () => (await caches.keys()).length)).toBe(0)
+  expect(await page.evaluate(() => localStorage.getItem('sukushow:offline-cache:v1'))).toBe('off')
+  await expect(toggle).toBeEnabled()
+
+  await toggle.check()
+  await expect(dialog.locator('[data-cache-status]')).toContainText('已启用离线缓存')
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(1)
+})

@@ -45,6 +45,7 @@ const ICONS = [
   'arrow-up-right',
   // 品牌与占位
   'palette',
+  'database',
   'music',
   'github',
 ]
