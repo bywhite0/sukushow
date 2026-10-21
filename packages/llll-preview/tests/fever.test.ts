@@ -1,6 +1,6 @@
 import { feverTrailWidthFactor, feverTrailColorFactor } from '../src/fever';
 import { describe, expect, it } from 'vitest';
-import { feverLineRgba, feverMoveLocalY, feverMovePhase, feverMoveRgba } from '../src/fever';
+import { FEVER_MOVE_CYCLE, FEVER_MOVE_SIZE, feverLineRgba, feverMoveRgba } from '../src/fever';
 
 it.each([
   [0, 0.6408690810203552], [1, 0.07189155369997025],
@@ -63,14 +63,11 @@ describe('fever LineBase / LineMove color', () => {
       expect(v).toBeLessThanOrEqual(1.001);
     }
   });
-  it('LineMove ping-pongs and peaks alpha mid-cycle', () => {
-    expect(feverMovePhase(16.0, 16)).toBeCloseTo(0);
-    expect(feverMovePhase(16.4, 16)).toBeCloseTo(0.5);
-    expect(feverMovePhase(16.8, 16)).toBeCloseTo(1);
-    expect(feverMovePhase(17.6, 16)).toBeCloseTo(0);
-    expect(feverMovePhase(17.2, 16)).toBeCloseTo(0.5);
-    expect(feverMoveLocalY(0)).toBeCloseTo(-703);
-    expect(feverMoveLocalY(1)).toBeCloseTo(694);
+  it('LineMove 的周期与尺寸取原包值，alpha 在中段达峰', () => {
+    // 寿命 = 发射周期 = 0.8s，`startSize=(0.11, 120)`：长轴远超可见范围。
+    expect(FEVER_MOVE_CYCLE).toBeCloseTo(0.8, 6);
+    expect(FEVER_MOVE_SIZE[0]).toBeCloseTo(0.11, 6);
+    expect(FEVER_MOVE_SIZE[1]).toBeCloseTo(120, 6);
     expect(feverMoveRgba(16.4, 16)[3]).toBeGreaterThan(0.9);
   });
 });

@@ -20,9 +20,25 @@ export function feverTrailColorFactor(seed: number): number {
 }
 
 export const FEVER_LINE_CYCLE = 1.6;
+/**
+ * `LineMove`（#604/#570）的寿命 / 发射周期。
+ *
+ * 它与**入场彗星** `LineCoreMove`（`n_L/R`，#607/#627）不是一回事：
+ * - `LineCoreMove` 是沿边线从近端（判定线一侧）跑向远端的行进高光，只在 Fever 起点射一次，
+ *   并「拖着」彩虹边线由近及远揭示（`LineMask` 的 `scale.y` 0→68）；
+ * - `LineMove` 是每 0.8 s 从**轨道顶部中央** `(0.024, 9.021, 0)` 射出、向**轨道外扩散**的
+ *   长条：尺寸恒为 `(0.11, 120)`（远超可见范围，两端一路扫出画面外），合速度
+ *   `(∓0.35, 0, 1.3)`，`looping` ⇒ 每个寿命周期重新出发。它**不沿边线跑**。
+ */
 export const FEVER_MOVE_CYCLE = 0.8;
-/** 近似亮条长度占边线的比例，不是原始粒子的屏幕投影。 */
-export const FEVER_MOVE_LENGTH = 0.044;
+/** `LineMove` 条带尺寸（宽 × 长，世界单位）：`startSize=(0.11, 120, 0.1)`，长轴 120。 */
+export const FEVER_MOVE_SIZE: readonly [number, number] = [0.10999999940395355, 120];
+/**
+ * `LineMove` 的发射点（轨道顶部中央）水平坐标 `ShapeModule.m_Position.x`。
+ * 条带中心从这里以 ∓0.35 u/s 向外漂；3D 观感上它贴着边线（垂距 0.6px → 16px），
+ * 所以 2D 平铺时以边线为基准、再叠加这段漂移，而不是画在轨道中央。
+ */
+export const FEVER_MOVE_EMIT_X = 0.024000000208616257;
 
 // 4.12.0 level56 ParticleSystem #542/#604 的 ColorModule，ctime/atime 为 uint16。
 const COLORS: readonly (readonly [number, number, number])[] = [
@@ -64,17 +80,7 @@ export function feverLineRgba(time: number, feverStart: number): [number, number
   return gradientRgba((time - feverStart) / FEVER_LINE_CYCLE, LINE_ALPHA);
 }
 
-/** 屏幕空间往复近似，不代表原始 ParticleSystem 的运动轨迹。 */
-export function feverMovePhase(time: number, feverStart: number): number {
-  const t = ((time - feverStart) / FEVER_MOVE_CYCLE) % 2;
-  const x = t < 0 ? t + 2 : t;
-  return x < 1 ? x : 2 - x;
-}
 
-export function feverMoveLocalY(phase01: number): number {
-  const u = Math.min(1, Math.max(0, phase01));
-  return -703 + u * (694 - (-703));
-}
 
 export function feverMoveRgba(time: number, feverStart: number): [number, number, number, number] {
   return gradientRgba((time - feverStart) / FEVER_MOVE_CYCLE, MOVE_ALPHA);

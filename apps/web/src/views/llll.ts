@@ -77,6 +77,8 @@ app.innerHTML=`
 <label class="setting" for="speed"><span>下落速度 <small>NoteSpeed×0.1</small><output id="speed-value">5.0</output></span><input id="speed" type="range" min="1" max="20" step="0.1" value="5"></label>
 <label class="setting" for="opt-start-z"><span>出现位置 NoteStartZ<output id="opt-start-z-value">0</output></span><input id="opt-start-z" type="range" min="0" max="100" step="1" value="0"></label>
 <label class="setting" for="opt-lane-width"><span>轨道宽度 LaneWidth<output id="opt-lane-width-value">100</output></span><input id="opt-lane-width" type="range" min="80" max="120" step="1" value="100"></label>
+<label class="setting" for="opt-flat-track"><span>2D 轨道宽度 <small>占屏宽 %</small><output id="opt-flat-track-value">60</output></span><input id="opt-flat-track" type="range" min="30" max="90" step="1" value="60"><small>俯视（2D）模式的轨道宽度，等价于调 2D 相机距离；越大越近、读谱窗口越短。</small></label>
+<label class="setting" for="opt-flat-judge"><span>2D 判定线位置 <small>占屏高 %</small><output id="opt-flat-judge-value">73</output></span><input id="opt-flat-judge" type="range" min="55" max="90" step="1" value="73"><small>俯视（2D）模式下判定线的高度：上下移动时轨道上的判定线、判定线贴图、边线近端与下落窗口一起跟随。</small></label>
 <label class="setting" for="opt-grid"><span>轨道分割 GridCount</span><select id="opt-grid"><option value="0" selected>关闭</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option><option value="5">6</option></select></label>
 <label class="setting" for="opt-fps"><span>目标帧率</span><select id="opt-fps"><option value="0" selected>60</option><option value="1">120</option></select></label>
 <label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label>
@@ -162,6 +164,8 @@ function readSettings():PreviewSettings{
   lines:input('lines').checked,
   noteStartZ:Number(input('opt-start-z').value),
   laneWidth:Number(input('opt-lane-width').value),
+  flatTrackWidth:Number(input('opt-flat-track').value),
+  flatJudgeLine:Number(input('opt-flat-judge').value),
   laneDarkness:Number(input('opt-lane-dark').value),
   backgroundDarkness:Number(input('opt-bg-dark').value),
   gridCount:Number(el<HTMLSelectElement>('opt-grid').value),
@@ -198,6 +202,8 @@ function applySettingsToForm(s:PreviewSettings){
  input('mirror').checked=s.mirror;input('lines').checked=s.lines;
  input('opt-start-z').value=String(s.noteStartZ);el('opt-start-z-value').textContent=String(s.noteStartZ);
  input('opt-lane-width').value=String(s.laneWidth);el('opt-lane-width-value').textContent=String(s.laneWidth);
+ input('opt-flat-track').value=String(s.flatTrackWidth);el('opt-flat-track-value').textContent=String(s.flatTrackWidth);
+ input('opt-flat-judge').value=String(s.flatJudgeLine);el('opt-flat-judge-value').textContent=String(s.flatJudgeLine);
  input('opt-lane-dark').value=String(s.laneDarkness);el('opt-lane-dark-value').textContent=String(s.laneDarkness);
  input('opt-bg-dark').value=String(s.backgroundDarkness);el('opt-bg-dark-value').textContent=String(s.backgroundDarkness);
  el<HTMLSelectElement>('opt-grid').value=String(s.gridCount);
@@ -480,20 +486,26 @@ applyHitEffect();
 const applyVisualOptions=()=>{
  const noteStartZ=Number(input('opt-start-z').value);
  const laneWidth=Number(input('opt-lane-width').value);
+ const flatTrackWidth=Number(input('opt-flat-track').value);
+ const flatJudgeLine=Number(input('opt-flat-judge').value);
  const gridCount=Number(el<HTMLSelectElement>('opt-grid').value);
  const laneDarkness=Number(input('opt-lane-dark').value);
  const backgroundDarkness=Number(input('opt-bg-dark').value);
  el('opt-start-z-value').textContent=String(noteStartZ);
  el('opt-lane-width-value').textContent=String(laneWidth);
+ el('opt-flat-track-value').textContent=String(flatTrackWidth);
+ el('opt-flat-judge-value').textContent=String(flatJudgeLine);
  el('opt-lane-dark-value').textContent=String(laneDarkness);
  el('opt-bg-dark-value').textContent=String(backgroundDarkness);
- renderer?.setVisualOptions({noteStartZ,laneWidth,gridCount,laneDarkness});
+ renderer?.setVisualOptions({noteStartZ,laneWidth,flatTrackWidth,flatJudgeLine,gridCount,laneDarkness});
  // ChangeBackgroundAlpha: Dim _Color.a = BackgroundDarkness/100（只盖舞台背景，不盖 3D / HUD）
  compositor.setBackgroundDim(backgroundDarkness/100);el('stage-canvas').dataset.bgDim=String(compositor.backgroundDim);
  persistSettings();
 };
 input('opt-start-z').oninput=applyVisualOptions;
 input('opt-lane-width').oninput=applyVisualOptions;
+input('opt-flat-track').oninput=applyVisualOptions;
+input('opt-flat-judge').oninput=applyVisualOptions;
 input('opt-lane-dark').oninput=applyVisualOptions;
 input('opt-bg-dark').oninput=applyVisualOptions;
 el<HTMLSelectElement>('opt-grid').onchange=applyVisualOptions;
@@ -524,7 +536,7 @@ let comboLastT=0;
 let lastLiveFrame: { time: number; chart: Chart | null; playing: boolean; revision: number; image: number; hudTexture: number; resultTexture: boolean; width: number; height: number; dpr: number; mode: string } | null = null;
 clearChart();
 const invalidatePreview=()=>{visualRevision++;};
-const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-grid','opt-lane-dark','opt-bg-dark',
+const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-flat-track','opt-flat-judge','opt-grid','opt-lane-dark','opt-bg-dark',
  'opt-judge-y','opt-fs-y','opt-perfect-plus','opt-judgement-output','opt-fast-slow','opt-fever',
  'opt-ap-continue','opt-start-anim','opt-combo-result','opt-hit-effect','rank-preview','tech-score','opt-appeal','opt-mastery'];
 for(const id of visualInputs){

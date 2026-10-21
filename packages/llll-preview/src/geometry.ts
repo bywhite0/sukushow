@@ -2,6 +2,8 @@ import type { Note } from '@sukushow/chart/chart';
 export const BORDER = -4.632, SPAWN = 52, Y = 4.5;
 /** Base world width of one lane flag unit (HOLD_MESH default). */
 export const BASE_LANE_WIDTH = 0.15;
+/** 轨道平面（Plane prefab）的世界 y 与 Three 坐标的 z 范围（近端 = 相机侧）。 */
+export const PLANE_Y = 3.96, PLANE_NEAR = 7.6, PLANE_FAR = -82.4;
 
 export interface Slope { duration: number; speed: number; spawn: number; zAt: (remaining: number) => number }
 

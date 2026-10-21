@@ -58,6 +58,24 @@ describe('sanitizePreviewSettings', () => {
     expect(sanitizePreviewSettings({ hitEffect: 'full' }).hitEffect).toBe('full');
     expect(sanitizePreviewSettings({ feverSectionNo: 5 })).not.toHaveProperty('feverSectionNo');
   });
+
+  it('clamps the 2D track width', () => {
+    expect(DEFAULT_PREVIEW_SETTINGS.flatTrackWidth).toBe(60);
+    expect(sanitizePreviewSettings({ flatTrackWidth: 45 }).flatTrackWidth).toBe(45);
+    expect(sanitizePreviewSettings({ flatTrackWidth: 5 }).flatTrackWidth).toBe(30);
+    expect(sanitizePreviewSettings({ flatTrackWidth: 300 }).flatTrackWidth).toBe(90);
+    expect(sanitizePreviewSettings({ flatTrackWidth: 47.8 }).flatTrackWidth).toBe(47);
+    expect(sanitizePreviewSettings({}).flatTrackWidth).toBe(60);
+  });
+
+  it('clamps the 2D judge line position', () => {
+    expect(DEFAULT_PREVIEW_SETTINGS.flatJudgeLine).toBe(73);
+    expect(sanitizePreviewSettings({ flatJudgeLine: 66 }).flatJudgeLine).toBe(66);
+    expect(sanitizePreviewSettings({ flatJudgeLine: 10 }).flatJudgeLine).toBe(55);
+    expect(sanitizePreviewSettings({ flatJudgeLine: 300 }).flatJudgeLine).toBe(90);
+    expect(sanitizePreviewSettings({ flatJudgeLine: 71.8 }).flatJudgeLine).toBe(71);
+    expect(sanitizePreviewSettings({}).flatJudgeLine).toBe(73);
+  });
 });
 
 describe('load/savePreviewSettings', () => {

@@ -57,8 +57,33 @@ export function sliceCaps(meta: SpriteMeta | undefined, worldW: number, scaleX =
   return { left, right, mid: Math.max(0, worldW - left - right), uL, uR };
 }
 
-const UP_Y = Math.cos(PITCH);
-const UP_Z = -Math.sin(PITCH);
+/**
+ * Billboard 的「屏幕向上」方向（贴图竖轴）。
+ *
+ * 3D 里是相机俯角 `PITCH`：up = (0, cos P, −sin P)（Three 的 Z，unityZ 取反）。
+ * 2D 俯视时相机垂直向下，屏幕向上 = unity +z ⇒ 调成 90° 后贴图平铺在 XZ 面。
+ * 音符、flick 装饰、粒子、拖尾全部共用这一组基向量。
+ */
+export const billboard = {
+  /** 当前俯角（弧度）。 */
+  pitch: PITCH,
+  /** 世界 +Y 分量。 */
+  upY: Math.cos(PITCH),
+  /** Three.js Z 分量（unityZ 取反）。 */
+  upZ: -Math.sin(PITCH),
+};
+
+/** 切换 billboard 基向量（相机模式切换时由 renderer 调用）。 */
+export function setBillboardPitch(pitch: number): void {
+  billboard.pitch = pitch;
+  billboard.upY = Math.cos(pitch);
+  billboard.upZ = -Math.sin(pitch);
+}
+
+/** Billboard 竖轴在 Unity 坐标里的 z 分量（= −upZ），用于沿「上」偏移（flick sign 浮动等）。 */
+export function billboardUpUnityZ(): number {
+  return -billboard.upZ;
+}
 
 function put(
   pos: Float32Array, uv: Float32Array, col: Float32Array, n: number,
@@ -88,15 +113,18 @@ export function pushQuad(
   return n;
 }
 
-function billboardCorners(x: number, y: number, unityZ: number, x0: number, x1: number, h: number) {
+/** 四角沿 billboard 基向量展开；竖轴范围 `lo`→`hi`（默认 ±h/2，底部对齐时 0→h）。 */
+function billboardCorners(
+  x: number, y: number, unityZ: number, x0: number, x1: number, lo: number, hi: number,
+) {
   const z = -unityZ;
-  const hy = UP_Y * h / 2, hz = UP_Z * h / 2;
-  const y0 = y - hy, y1 = y + hy, z0 = z - hz, z1 = z + hz;
+  const yLo = y + billboard.upY * lo, yHi = y + billboard.upY * hi;
+  const zLo = z + billboard.upZ * lo, zHi = z + billboard.upZ * hi;
   return [
-    [x + x0, y0, z0],
-    [x + x1, y0, z0],
-    [x + x1, y1, z1],
-    [x + x0, y1, z1],
+    [x + x0, yLo, zLo],
+    [x + x1, yLo, zLo],
+    [x + x1, yHi, zHi],
+    [x + x0, yHi, zHi],
   ];
 }
 
@@ -114,7 +142,7 @@ export function pushSlicedNote(
   ];
   for (const p of patches) {
     if (p.x1 - p.x0 <= 1e-6) continue;
-    const c = billboardCorners(x, y, unityZ, p.x0, p.x1, worldH);
+    const c = billboardCorners(x, y, unityZ, p.x0, p.x1, -worldH / 2, worldH / 2);
     n = pushQuad(pos, uv, col, n, cap, c, [[p.u0, 0], [p.u1, 0], [p.u1, 1], [p.u0, 1]], color);
   }
   return n;
@@ -131,7 +159,7 @@ export function pushTrailSegment(
   const dx = bx - ax, dy = by - ay, dz = az - bz;
   if (Math.hypot(dx, dy, dz) < 1e-8 || (width <= 0 && endWidth <= 0) || n + 6 > cap) return n;
   // 轨迹方向与相机法线叉乘，得到朝向相机的带状截面。
-  let sx = dy * UP_Y - dz * -UP_Z, sy = -dx * UP_Y, sz = dx * -UP_Z;
+  let sx = dy * billboard.upY - dz * -billboard.upZ, sy = -dx * billboard.upY, sz = dx * -billboard.upZ;
   const length = Math.hypot(sx, sy, sz);
   if (length < 1e-8) { sx = 1; sy = 0; sz = 0; }
   const scale = 1 / (2 * (length < 1e-8 ? 1 : length));
@@ -152,25 +180,41 @@ export function pushTrailSegment(
   return n;
 }
 
+/**
+ * Camera-facing billboard。
+ *
+ * `uvRect`（[u0,v0,u1,v1]）用于只取贴图的一个子矩形 —— 2D 下 `PlaneEffectModel01`
+ * 网格（击中光条 / flick 箭头）在 3D 走 `pushLocalQuad(..., PLANE_UV, true)`，
+ * 平铺时必须保留同一个子矩形，否则整张图集（内容挤在下缘）会被拉满整个四边形，
+ * 看上去就像特效「缩在下面、朝下」。
+ *
+ * `pivotBottom` 同理：3D 的光条/箭头以粒子为**底边**向上长，平铺后保持底部对齐，
+ * 特效才会从音符位置朝屏幕上方（与音符下落反向）伸出。
+ */
 export function pushBillboard(
   pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
   x: number, y: number, unityZ: number, w: number, h: number,
   color: number[], uTile = 1, vTile = 1, rot = 0,
+  uvRect?: readonly number[], pivotBottom = false,
 ) {
+  const [u0, v0, u1, v1] = uvRect ?? [0, 0, uTile, vTile];
+  const uvs = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+  const hw = w / 2;
+  const lo = pivotBottom ? 0 : -h / 2, hi = pivotBottom ? h : h / 2;
   if (!rot) {
-    const c = billboardCorners(x, y, unityZ, -w / 2, w / 2, h);
-    return pushQuad(pos, uv, col, n, cap, c, [[0, 0], [uTile, 0], [uTile, vTile], [0, vTile]], color);
+    const c = billboardCorners(x, y, unityZ, -hw, hw, lo, hi);
+    return pushQuad(pos, uv, col, n, cap, c, uvs, color);
   }
   // In-plane spin (Unity billboard startRotation), around the camera-facing normal.
   const z = -unityZ;
   const cos = Math.cos(rot), sin = Math.sin(rot);
   const corners: number[][] = [];
-  for (const [lx, ly] of [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]] as const) {
+  for (const [lx, ly] of [[-hw, lo], [hw, lo], [hw, hi], [-hw, hi]] as const) {
     const rx = lx * cos - ly * sin;
     const ry = lx * sin + ly * cos;
-    corners.push([x + rx, y + UP_Y * ry, z + UP_Z * ry]);
+    corners.push([x + rx, y + billboard.upY * ry, z + billboard.upZ * ry]);
   }
-  return pushQuad(pos, uv, col, n, cap, corners, [[0, 0], [uTile, 0], [uTile, vTile], [0, vTile]], color);
+  return pushQuad(pos, uv, col, n, cap, corners, uvs, color);
 }
 
 /** Flat XY quad (local particle alignment). `z` is Three.js Z. */

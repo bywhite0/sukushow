@@ -1,5 +1,8 @@
 /** Persist preview sidebar / transport settings in localStorage. */
 
+import {
+  FLAT_JUDGE_DEFAULT, FLAT_JUDGE_MAX, FLAT_JUDGE_MIN, FLAT_TRACK_DEFAULT, FLAT_TRACK_MAX, FLAT_TRACK_MIN,
+} from '@sukushow/llll-preview/flatView';
 import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '@sukushow/llll-preview/rgOptions';
 import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
 
@@ -45,6 +48,10 @@ export type PreviewSettings = {
   hitEffect: 'off' | 'current' | 'limited' | 'full';
   /** 预览窗口固定比例（顶栏按钮组）；free = 跟随窗口。 */
   aspectRatio: AspectId;
+  /** 2D 俯视模式的轨道宽度（舞台宽的百分比）；越大相机越近、读谱窗口越短。 */
+  flatTrackWidth: number;
+  /** 2D 判定线位置（舞台高的百分比）；判定线贴图 / 边线近端 / 下落窗口一起移动。 */
+  flatJudgeLine: number;
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -81,6 +88,8 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   rate: 1,
   hitEffect: 'current',
   aspectRatio: DEFAULT_ASPECT,
+  flatTrackWidth: FLAT_TRACK_DEFAULT,
+  flatJudgeLine: FLAT_JUDGE_DEFAULT,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -143,6 +152,8 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
       : d.rate,
     hitEffect: o.hitEffect === 'off' || o.hitEffect === 'current' || o.hitEffect === 'limited' || o.hitEffect === 'full' ? o.hitEffect : d.hitEffect,
     aspectRatio: isAspectId(o.aspectRatio) ? o.aspectRatio : d.aspectRatio,
+    flatTrackWidth: clamp(Math.trunc(num('flatTrackWidth', d.flatTrackWidth)), FLAT_TRACK_MIN, FLAT_TRACK_MAX),
+    flatJudgeLine: clamp(Math.trunc(num('flatJudgeLine', d.flatJudgeLine)), FLAT_JUDGE_MIN, FLAT_JUDGE_MAX),
   };
 }
 

@@ -1,6 +1,8 @@
 import { feverTrailWidthFactor, feverTrailColorFactor } from './fever';
 import feverTrailColors from './feverTrailColors.json';
 import { feverEntrance, CORE_MOVE_END } from './feverAnimation';
+import { FEVER_EDGE_LENGTH } from './feverLines';
+import { flatRailPoint, type FlatRail } from './flatView';
 import * as THREE from 'three';
 import { flushDynamicGeometry } from './dynamicBuffer';
 import type { Chart } from '@sukushow/chart/chart';
@@ -12,7 +14,8 @@ import { PITCH, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
 
 const MAX_SPARKS = 2400;
 const SEEK = 0.5;
-const PLANE_UV = [0.375, 0, 0.625, 0.25];
+/** PlaneEffectModel01 的贴图子矩形（击中光条 / flick 箭头的实际内容只在下缘这一块）。 */
+export const PLANE_UV = [0.375, 0, 0.625, 0.25];
 /** PlaneEffectModel01 is 100×100 with bottom-center pivot (resources.assets #889). */
 const PLANE_MESH = 100;
 /** Quad mesh is 1×1 centered (unity default resources #10210). */
@@ -61,12 +64,19 @@ interface Spec {
 }
 interface Spark {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
+  /** 出生点（世界坐标）；2D 俯视下用它把竖直位移折算到轨道面上，见 `flatPoint`。 */
+  x0: number; y0: number; z0: number;
   age: number; life: number; sx: number; sy: number; sliceSize: number;
   r: number; g: number; b: number; a: number; grav: number;
   align: number; mesh: number; slice: boolean; tex: string;
   pitchLocal: boolean; spin: number; followHead: boolean;
   /** 出生时的入场偏移（World 模拟空间 ⇒ 粒子留在世界坐标，不随节点一起走）。 */
   off?: [number, number, number];
+  /**
+   * 2D：fever 边线层（LineCoreMove 彗星）沿轨道边的出生进度 0–1。
+   * 俯视下入场曲线（从屏幕外侧斜着飞进来）不可用，改按进度贴到轨道边上，见 `railFlatPoint`。
+   */
+  railT?: number;
   grad?: FxGrad; gradMin?: FxGrad; gradBlend?: number; sizeOl?: FxMM; sizeOlY?: FxMM; sizeSep: boolean;
   limitEn: boolean; limitDamp: number; limitSpeed: number;
   /** ForceOverLifetime 恒定加速度（世界系）。 */
@@ -89,6 +99,25 @@ interface Live {
   coreSide?: 'left' | 'right';
   /** 本次启动的随机源：确定性模式下按（特效 id、uid、位置、启动时刻）播种，同一时刻重放得到同样的粒子。 */
   rnd: () => number;
+}
+
+/**
+ * 2D 俯视的粒子位置映射：把「相对出生点的 3D 位移」折到轨道面上。
+ *
+ * - 高度统一压到音符平面 `Y`：fever 的两侧粒子是 `abs` 发射（作者给的出生高度不是 `Y`），
+ *   俯视下留在原高度会被透视缩放到别的比例，看起来「浮在轨道外」；
+ * - 竖直位移 `Δy` → 轨道面远端（unity +Z，屏幕上就是「向上」，与音符下落反向）；
+ * - 深度位移 `Δz` 丢弃（俯视下它和竖直位移抢同一根屏幕轴）。3D 原样返回。
+ *
+ * 不折的话：3D 打击粒子几乎只沿 +Y 飞（实测 0.08 s 内 +5.5 单位），俯视下 +Y 不可见，
+ * 只剩少量 +Z 位移可见 —— 那正好是「顺音符下落」的方向；而且粒子飞近相机被透视放大，
+ * 会向屏幕外甩。
+ */
+export function flatParticlePoint(
+  spawn: { y0: number; z0: number }, flat: boolean, p: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  if (!flat) return p;
+  return { x: p.x, y: Y, z: spawn.z0 + (p.y - spawn.y0) };
 }
 
 function lerpKeys(keys: { t: number; v: number; i?: number; o?: number }[] | undefined, t: number) {
@@ -244,6 +273,24 @@ export class HitFx {
   readonly group = new THREE.Group();
   private mode: 'off' | 'current' | 'limited' | 'full' = 'current';
   private feverOn = false;
+  /**
+   * 2D 俯视：所有粒子都画成平铺 billboard，并把 3D 的竖直位移折到轨道面上。
+   *
+   * 3D 里 `Local` 对齐的粒子（impact 光柱、Core 系）是竖直在 XY 面的四边形，
+   * 垂直俯视时正好侧对相机 ⇒ 直接消失。2D 下统一走 billboard（billboard 基向量已被
+   * renderer 调成 90°），粒子平铺在轨道面上，与音符朝向一致。
+   *
+   * 位置也要重映射（见 `flatPoint`）：3D 打击粒子几乎只沿 +Y 飞（实测 0.08 s 内 +5.5 单位），
+   * 俯视下 +Y 不可见，只剩少量 +Z 位移可见 —— 那正好是「顺音符下落」的方向；而且粒子飞近
+   * 相机会被透视放大，向屏幕外甩。2D 改成：竖直位移 → 轨道面远端（unity +Z = 屏幕向上），
+   * 于是粒子朝「与音符下落相反」的方向散开，深度位移丢弃。
+   */
+  private flat = false;
+  /**
+   * 2D 下 fever 边线层要贴到的那条边线：`railX` = 边线 x（随 LaneWidth 缩放），
+   * `zNear`/`zFar` = 判定线到轨道远端（可见轨道长度）。由 renderer 每帧喂入。
+   */
+  private flatRail: FlatRail | null = null;
   /** 粒子保持默认轨道坐标，绘制时统一应用轨道宽度的 X 缩放。 */
   private laneWidthScale = 1;
   private specs = new Map<string, Spec[]>();
@@ -259,6 +306,65 @@ export class HitFx {
   }
   setLaneWidth(laneWidthOpt: number): void {
     this.laneWidthScale = laneWidthOpt / 100;
+  }
+  /** 2D 俯视：粒子一律平铺（见 flat 字段）。 */
+  setFlat(flat: boolean): void {
+    this.flat = flat;
+    if (!flat) this.flatRail = null;
+  }
+  /** 2D：fever 边线层（LineCoreMove / LineParticle 子树）要贴住的轨道边几何。 */
+  setFlatRail(rail: FlatRail | null): void {
+    this.flatRail = rail;
+  }
+  /** 2D 俯视的粒子位置：把「相对出生点的 3D 位移」折到轨道面上（见 flatParticlePoint）。 */
+  private flatPoint(s: Spark, p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+    return flatParticlePoint(s, this.flat, p);
+  }
+  /**
+   * 2D：fever 边线层贴到轨道边上的位置。
+   *
+   * `LineCoreMove` 在 3D 里沿入场曲线从屏幕外侧斜着飞进来（`(−18.46,−9.4,0)` →
+   * `(−1.96,6.9,25.8)`），俯视投影后是一条横穿轨道、直奔画面外的斜线；`LineParticle`
+   * 子树的发射体是沿边线方向排布的 box（中心 `x=−6.87`，即轨道之外）。两者在 2D 都改成
+   * 「x 贴边线、沿轨道边 z 展开」：彗星按出生进度 `railT` 落在边线上，火花按出生点分布。
+   */
+  private railFlatPoint(
+    side: 'left' | 'right', s: Spark, p: { x: number; y: number; z: number },
+  ): { x: number; y: number; z: number } {
+    return flatRailPoint(side, this.flatRail!, s.railT ?? 0, {
+      x: p.x - s.x0, y: p.y - s.y0, z: p.z - s.z0,
+    });
+  }
+  /** fever 边线子树（LineParticle 及其 Particle / Closs 发射器）在 2D 要重排到边线上。 */
+  private isLineSubtree(live: Live): boolean {
+    return live.id === 'feverLineLeft' || live.id === 'feverLineRight';
+  }
+  /**
+   * 粒子的绘制位置：3D 用世界坐标（含 World 模拟空间烘进去的出生偏移）；2D 走
+   * `flatParticlePoint`；fever 边线层（LineCoreMove 彗星）在 2D 改贴轨道边。
+   * 传入 `at` 时用于拖尾历史点（历史点已是世界坐标，不再叠加出生偏移）。
+   */
+  private sparkPoint(
+    live: Live, s: Spark, at?: { x: number; y: number; z: number },
+  ): { x: number; y: number; z: number } {
+    const railMapped = this.flat && this.flatRail && live.coreSide && s.railT !== undefined;
+    if (at) {
+      return railMapped && live.coreSide && this.flatRail
+        ? this.railFlatPoint(live.coreSide, s, at)
+        : this.flatPoint(s, at);
+    }
+    if (railMapped && live.coreSide && this.flatRail) {
+      // 2D 彗星：只用粒子自身的漂移，**不叠加**入场曲线（那是 3D 的屏幕外斜线轨迹）。
+      return this.railFlatPoint(live.coreSide, s, { x: s.x, y: s.y, z: s.z });
+    }
+    const entrance = live.coreSide ? feverEntrance(live.age) : undefined;
+    const offset = entrance ? (live.coreSide === 'left' ? entrance.leftCore : entrance.rightCore) : [0, 0, 0];
+    // World 模拟空间：粒子在出生瞬间记录世界位置，之后不随发射器移动。
+    return this.flatPoint(s, {
+      x: s.x + (s.off ? s.off[0] : offset[0]),
+      y: s.y + (s.off ? s.off[1] : offset[1]),
+      z: s.z + (s.off ? s.off[2] : offset[2]),
+    });
   }
   private scaleLaneVertices(positions: Float32Array, from: number, to: number, scale = this.laneWidthScale): void {
     if (scale === 1) return;
@@ -479,7 +585,10 @@ export class HitFx {
     const [rdx, rdy, rdz] = qrot(spec.qx, spec.qy, spec.qz, spec.qw, dx, dy, dz);
     return { ox: rx, oy: ry, oz: rz, dx: rdx, dy: rdy, dz: rdz };
   }
-  private burst(live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number, offOverride?: [number, number, number]) {
+  private burst(
+    live: Live, spec: Spec, burstCount?: FxMM, countOverride?: number,
+    offOverride?: [number, number, number], railTOverride?: number,
+  ) {
     const random = live.rnd;
     const sized = this.sized(spec, live.width, random(), burstCount);
     const count = countOverride ?? sized.count;
@@ -496,9 +605,22 @@ export class HitFx {
       })()
       : [0, 0, 0];
     const pitchLocal = spec.align === 2 && isPitchLocal(spec.qx, spec.qy, spec.qz, spec.qw);
+    // 2D：fever 边线层的出生位置改贴轨道边（彗星按进度、火花按发射体分布）。
+    const rail = this.flat ? this.flatRail : null;
     for (let i = 0; i < count && this.total() < MAX_SPARKS; i++) {
       const rnd = random(), rnd2 = random();
       const sh = this.emitShape(spec, sized, rnd, rnd2, random);
+      if (rail && this.isLineSubtree(live)) {
+        // 原包发射体是沿边线方向排布的 box（`sy` 22–23、`rotz` −45.4°/−32°），中心在
+        // `x=−6.87`（轨道之外）：俯视下会摊成一条横穿轨道的斜带。2D 改为贴住边线，
+        // 沿轨道边（z）分布，横向抖动沿用原包 `shape.sx`（0.5）。
+        const dir = live.id === 'feverLineRight' ? 1 : -1;
+        sh.ox = dir * rail.railX + (random() - 0.5) * Math.max(0.2, sized.shapeSx);
+        sh.oy = 0;
+        // 只撒在 `LineMask` 已揭示的那一段（3D 里遮罩把它们挡在揭示范围之外）。
+        const revealed = Math.min(1, Math.max(0, rail.reveal ?? 1));
+        sh.oz = rail.zNear + random() * (rail.zFar - rail.zNear) * revealed;
+      }
       const speed = sample(spec.speed, rnd);
       const grad = spec.grad;
       const gradMin = spec.gradTwo ? spec.gradMin : undefined;
@@ -510,20 +632,26 @@ export class HitFx {
       // 坐标，此后不再跟随节点 ⇒ 沿路径留下拖尾，这才是可见的「行进高光」。
       // 若每帧都叠加当前位置（Local 行为），粒子会全部堆在节点上，只会看到一个亮点。
       const birth = live.coreSide && spec.world ? feverEntrance(live.age) : null;
-      const birthOff = offOverride ?? (birth
+      // 2D：彗星不注入 3D 入场曲线（俯视下会横穿轨道），改记「沿轨道边的出生进度」。
+      const railT = rail && live.coreSide
+        ? railTOverride ?? Math.min(1, Math.max(0, live.age / CORE_MOVE_END))
+        : undefined;
+      const birthOff = railT !== undefined ? null : offOverride ?? (birth
         ? (live.coreSide === 'left' ? birth.leftCore : birth.rightCore) as [number, number, number]
         : null);
+      const px = (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox;
+      const py = (live.abs ? 0 : Y) + spec.offset[1] + sh.oy;
+      const pz = (live.abs ? 0 : BORDER) + spec.offset[2] + sh.oz;
       const spark: Spark = {
-        x: (live.abs ? 0 : live.x) + spec.offset[0] + sh.ox,
-        y: (live.abs ? 0 : Y) + spec.offset[1] + sh.oy,
-        z: (live.abs ? 0 : BORDER) + spec.offset[2] + sh.oz,
+        x: px, y: py, z: pz,
+        x0: px, y0: py, z0: pz,
         vx: sh.dx * speed + spec.velocity[0], vy: sh.dy * speed + spec.velocity[1], vz: sh.dz * speed + spec.velocity[2],
         age: 0, life: Math.max(0.016, sample(spec.life, rnd)),
         sx: sized.drawX, sy: sized.drawY, sliceSize: sized.sliceSize,
         r: spec.col[0], g: spec.col[1], b: spec.col[2], a: spec.col[3], grav: spec.grav,
         align: spec.align, mesh: spec.mesh, slice: spec.slice, tex: spec.tex,
         pitchLocal, spin: sample(spec.rot, rnd), followHead: spec.followHead,
-        off: birthOff ?? undefined,
+        off: birthOff ?? undefined, railT,
         grad, gradMin, gradBlend, sizeOl: spec.sizeOl, sizeOlY: spec.sizeOlY, sizeSep: spec.sizeSep,
         limitEn: spec.limitEn, limitDamp: spec.limitDamp, limitSpeed: sample(spec.limitSpeed, rnd),
         forceEn: spec.forceEn, forceX: force[0], forceY: force[1], forceZ: force[2],
@@ -582,12 +710,17 @@ export class HitFx {
           const stop = CORE_MOVE_END;
           const t0 = Math.min(prevAge, stop);
           const t1 = Math.min(age, stop);
+          const railCore = this.flat && this.flatRail;
           for (let k = 0; k < n; k++) {
             const birthTime = t1 > t0 ? t0 + ((k + 1) / n) * (t1 - t0) : t1;
             const e = feverEntrance(birthTime);
-            const off = (live.coreSide === 'left' ? e.leftCore : e.rightCore) as [number, number, number];
+            // 2D：不注入 3D 入场曲线，改传「沿轨道边的出生进度」。
+            const off = railCore
+              ? undefined
+              : (live.coreSide === 'left' ? e.leftCore : e.rightCore) as [number, number, number];
+            const railT = railCore ? Math.min(1, Math.max(0, birthTime / CORE_MOVE_END)) : undefined;
             const first = live.sparks.length;
-            this.burst(live, spec, undefined, 1, off);
+            this.burst(live, spec, undefined, 1, off, railT);
             for (let i = first; i < live.sparks.length; i++) {
               live.sparks[i].firstStep = Math.max(0, age - birthTime);
             }
@@ -625,13 +758,16 @@ export class HitFx {
         if (absT >= windowEnd - eps) break;
         if (absT > prevAge && absT <= age) {
           const first = live.sparks.length;
-          const off = live.coreSide && advancing
+          const railCore = this.flat && this.flatRail && live.coreSide && advancing;
+          const off = live.coreSide && advancing && !railCore
             ? (() => {
                 const e = feverEntrance(absT);
                 return (live.coreSide === 'left' ? e.leftCore : e.rightCore) as [number, number, number];
               })()
             : undefined;
-          this.burst(live, spec, b.count, undefined, off);
+          // 2D：出生进度按绝对出生时刻算，补发时也落在正确的边线位置。
+          const railT = railCore ? Math.min(1, Math.max(0, absT / CORE_MOVE_END)) : undefined;
+          this.burst(live, spec, b.count, undefined, off, railT);
           if (live.fever && advancing) for (let i = first; i < live.sparks.length; i++) {
             // 必须用**绝对**出生时刻 absT 反推存活时长。此处若用周期相对量，
             // 一旦 dur<1 使周期重启（如彗星层 dur=0.1），补发粒子会按错误时长被立即判死。
@@ -671,11 +807,16 @@ export class HitFx {
       if (!live || coreAge === 0) continue;
       live.age = coreAge;
       live.sparks = [];
-      // 中途进入 Fever：补发从 0 到 coreAge 的批次，距离同样按入场曲线积分。
+      // 中途进入 Fever：补发从 0 到 coreAge 的批次，距离同样按入场曲线积分
+      // （2D 走可见轨道边，按边线全长比例放大，见 `step`）。
       const e0 = feverEntrance(0), e1 = feverEntrance(coreAge);
       const a0 = live.coreSide === 'left' ? e0.leftCore : e0.rightCore;
       const a1 = live.coreSide === 'left' ? e1.leftCore : e1.rightCore;
-      const dist = Math.hypot(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]);
+      let dist = Math.hypot(a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]);
+      const rail = this.flatRail;
+      if (this.flat && rail && rail.zFar > rail.zNear) {
+        dist *= FEVER_EDGE_LENGTH / (rail.zFar - rail.zNear);
+      }
       for (const spec of live.specs) this.emitDue(live, spec, -1e-6, coreAge, dist);
     }
     if (coreAge > 0) this.step(0);
@@ -783,6 +924,12 @@ export class HitFx {
         const c0 = live.coreSide === 'left' ? a0.leftCore : a0.rightCore;
         const c1 = live.coreSide === 'left' ? a1.leftCore : a1.rightCore;
         dist = Math.hypot(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]);
+        // 2D 彗星走的是可见轨道边（比原包 34.7 单位的边线短），按比例放大距离，
+        // 否则 `rateOverDistance=5/单位` 的拖尾密度会跟着变稀。
+        const rail = this.flatRail;
+        if (this.flat && rail && rail.zFar > rail.zNear) {
+          dist *= FEVER_EDGE_LENGTH / (rail.zFar - rail.zNear);
+        }
       }
       for (const spec of live.specs) {
         if (live.loop && spec.loop) this.emitDue(live, spec, prev, live.age, dist);
@@ -852,18 +999,18 @@ export class HitFx {
         : mulX;
       const sx = Math.max(0.001, s.sx * mulX), sy = Math.max(0.001, s.sy * mulY);
       const color = [s.r * g[0], s.g * g[1], s.b * g[2], s.a * g[3]];
-      const entrance = live.coreSide ? feverEntrance(live.age) : undefined;
-      const offset = entrance ? (live.coreSide === 'left' ? entrance.leftCore : entrance.rightCore) : [0, 0, 0];
-      // World 模拟空间：粒子在出生瞬间记录世界位置，之后不随发射器移动。
-      const wx = s.x + (s.off ? s.off[0] : offset[0]);
-      const wy = s.y + (s.off ? s.off[1] : offset[1]);
-      const wz = s.z + (s.off ? s.off[2] : offset[2]);
-      const x = wx, y = wy, z = wz;
+      // 2D：竖直位移折到轨道面上（见 flatPoint），否则粒子朝相机飞、顺音符下落方向漂；
+      // fever 边线层（LineCoreMove 彗星）在 2D 还要改贴轨道边（见 railFlatPoint）。
+      const { x, y, z } = this.sparkPoint(live, s);
       const before = batch.n;
-      if (s.mesh === 2) {
+      if (s.mesh === 2 && !this.flat) {
         // PlaneEffectModel01: local upright, bottom pivot (impact light column).
         batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color, PLANE_UV, true);
-      } else if (s.align === 2 && !s.pitchLocal) {
+      } else if (s.mesh === 2) {
+        // 2D：平铺后仍要保留 PlaneEffectModel01 的贴图子矩形与底部对齐，
+        // 否则整张图集（内容在下缘）被拉满四边形，击中光条 / flick 箭头会缩在下面、看着朝下。
+        batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, z, sx, sy, color, 1, 1, s.spin, PLANE_UV, true);
+      } else if (s.align === 2 && !s.pitchLocal && !this.flat) {
         // Local + identity ancestors → world-axis quad (Core / Coredirection).
         batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color);
       } else {
@@ -926,7 +1073,7 @@ export class HitFx {
         const before = batch.n;
         batch.n = pushTrailSegment(
           batch.pos, batch.uv, batch.col, batch.n, batch.cap,
-          a, b, widthAt(tailPhase), tailColor,
+          this.sparkPoint(live, s, a), this.sparkPoint(live, s, b), widthAt(tailPhase), tailColor,
           widthAt(headPhase), headColor,
         );
         this.scaleLaneVertices(batch.pos, before, batch.n, this.laneScaleFor(live));
