@@ -319,6 +319,8 @@ progress::-webkit-progress-value { background:var(--shell-accent); transition:wi
   .view-toolbar { gap:4px; }
   .stage-heading h2 { max-width:none; }
   .inspector-toggle,.record-toggle,.focus-toggle { min-height:36px; }
+  #play-mode > span { display:none; }
+  #play-mode { min-width:32px; padding-inline:6px; }
 }
 @media (max-width:640px) {
   :root { --gutter:12px; }
@@ -351,8 +353,9 @@ progress::-webkit-progress-value { background:var(--shell-accent); transition:wi
   #play { grid-column:2/4; grid-row:2; min-width:110px; min-height:42px; }
   #export-video { grid-column:4; grid-row:2; min-height:42px; }
   #fullscreen { grid-column:5; grid-row:2; min-height:42px; }
-  /* SVG 导出独占一行：窄屏只留图标会分不清两个导出按钮。 */
-  #export-svg { grid-column:1/6; grid-row:3; min-height:42px; }
+  /* 窄屏第 3 行放游玩开关与 SVG 导出：游玩靠左、只留图标，导出保留文字（两个导出只留图标会分不清）。 */
+  #play-mode { grid-column:1; grid-row:3; min-height:42px; min-width:32px; }
+  #export-svg { grid-column:2/6; grid-row:3; min-height:42px; }
   #export-svg > span { display:inline; }
   .viewer-status { max-height:40px; overflow-y:auto; padding-inline:10px; font-size:9px; }
   #preview-inspector,.now-playing { bottom:123px; }

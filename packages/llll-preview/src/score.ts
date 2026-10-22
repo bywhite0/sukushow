@@ -38,6 +38,49 @@ export const DEFAULT_SCORE_RANK_VALUES: readonly [number, number, number, number
 export const DEFAULT_TOTAL_APPEAL = 350_000;
 /** 曲目熟练度等级（マスタリー / MusicMasteryLevel）；公式里按 ×0.01 加成。 */
 export const DEFAULT_MUSIC_MASTERY_LEVEL = 0;
+/**
+ * 预览默认 TotalMental（原版是牌组属性 `IRhythmGameArguments.TotalMental`，谱面里没有）。
+ * HUD 的 MENTAL 框按它显示上限。
+ */
+export const DEFAULT_TOTAL_MENTAL = 1000;
+
+/** MentalResolver 的四档扣量。 */
+export interface MentalMinus {
+  bad: number;
+  miss: number;
+  holdMid: number;
+  trace: number;
+}
+
+/**
+ * `MentalResolver..ctor` @0x499786C：`minus = trunc(TotalMental × k) + 常数`，
+ * k 分别是 0.03（Bad）/ 0.05（Miss）/ 0.02（Hold 中间航点、Trace Miss），常数 30 / 50 / 20 / 20。
+ */
+export function mentalMinus(totalMental: number): MentalMinus {
+  const t = Number.isFinite(totalMental) ? Math.max(0, Math.trunc(totalMental)) : 0;
+  return {
+    bad: Math.trunc(t * 0.03) + 30,
+    miss: Math.trunc(t * 0.05) + 50,
+    holdMid: Math.trunc(t * 0.02) + 20,
+    trace: Math.trunc(t * 0.02) + 20,
+  };
+}
+
+/** `Reduce*`：`Math.Max(value - minus, 0)`，扣到 0 不会失败。 */
+export function reduceMental(value: number, minus: number): number {
+  return Math.max(value - minus, 0);
+}
+
+/** `Add`：`value == 0` 时直接不动（技能回血不能从 0 复活）；否则 `Math.Max(value + n, 1)`。 */
+export function addMental(value: number, add: number): number {
+  if (value === 0) return 0;
+  return Math.max(value + add, 1);
+}
+
+/** 血条切红的阈值：`value ≤ ceil(max × 0.2)`（ParamViewResolver.InitializeMental）。 */
+export function mentalRed(value: number, max: number): boolean {
+  return value <= Math.ceil(max * 0.2);
+}
 
 
 export function halfwayScore(

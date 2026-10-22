@@ -8,6 +8,7 @@ import {
 } from '@sukushow/llll-preview/arcView';
 import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '@sukushow/llll-preview/rgOptions';
 import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
+import { DEFAULT_PLAY_KEY_LAYOUT, sanitizePlayKeyLayout, type PlayKeyLayout } from './playKeys';
 
 export const SETTINGS_STORAGE_KEY = 'llll-preview-web:settings:v1';
 
@@ -15,6 +16,10 @@ export type PreviewSettings = {
   /** ConfigResolver.Speed (= noteSpeed×0.1), range 1..20 */
   speed: number;
   offsetMs: number;
+  /** 游玩模式的判定偏移（毫秒）：负值 = 判定提前，只影响手动判定的触摸时刻。 */
+  playOffsetMs: number;
+  /** 游玩模式的键盘键位：分区键与 Air 键（见 `playKeys.ts`）。 */
+  playKeys: PlayKeyLayout;
   /** VolumeMusic 0..1 */
   volume: number;
   volumeNoteTap: number;
@@ -64,6 +69,8 @@ export type PreviewSettings = {
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   speed: RG_OPTION_DEFAULTS.speed,
   offsetMs: 0,
+  playOffsetMs: 0,
+  playKeys: DEFAULT_PLAY_KEY_LAYOUT,
   volume: 0.7,
   volumeNoteTap: 1,
   volumeSe: 1,
@@ -128,6 +135,8 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
   return {
     speed: clamp(speedRaw, 1, 20),
     offsetMs: clamp(num('offsetMs', d.offsetMs), -10_000, 10_000),
+    playOffsetMs: clamp(Math.trunc(num('playOffsetMs', d.playOffsetMs)), -200, 200),
+    playKeys: sanitizePlayKeyLayout(o.playKeys),
     volume: clamp(num('volume', d.volume), 0, 1),
     volumeNoteTap: clamp(num('volumeNoteTap', d.volumeNoteTap), 0, 1),
     volumeSe: clamp(num('volumeSe', d.volumeSe), 0, 1),

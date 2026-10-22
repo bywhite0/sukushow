@@ -901,14 +901,18 @@ export class HitFx {
     this.sparks = 0;
     this.feverOn = false;
   }
-  /** playing=false 时时间变化一律按跳转处理（暂停中拖动不推进、不生成粒子）。 */
-  sync(chart: Chart, time: number, mirror: boolean, playing = true) {
+  /**
+   * 推进特效。`playing=false` 时时间变化一律按跳转处理（暂停中拖动不推进、不生成粒子）。
+   * `autoSpawn=false`（手动判定模式）不按音符时刻生成打击特效，也不在跳转后按时间补 Hold 循环特效：
+   * 打击特效由 `hit()` 按判定事件驱动，循环特效由渲染器按判定状态 `ensureLoop` / `stopLoop`；清场与步进逻辑不变。
+   */
+  sync(chart: Chart, time: number, mirror: boolean, playing = true, autoSpawn = true) {
     if (!Number.isFinite(this.last)) { this.last = time; return; }
     const dt = time - this.last;
     if (dt < -1e-4 || dt > SEEK || (!playing && dt !== 0)) {
       this.clear();
       this.last = time;
-      this.respawnHoldLoops(chart, time, mirror);
+      if (autoSpawn) this.respawnHoldLoops(chart, time, mirror);
       return;
     }
     if (this.mode === 'off' && !this.feverOn) {
@@ -920,7 +924,7 @@ export class HitFx {
       this.live = this.live.filter(fx => fx.fever);
     }
     if (dt > 0) this.step(dt);
-    if (this.mode !== 'off') for (const root of chart.roots) {
+    if (this.mode !== 'off' && autoSpawn) for (const root of chart.roots) {
       if (this.last < root.time && time >= root.time) {
         const [l, r] = edges(root, 0, mirror);
         const x = worldX((l + r) / 2), w = r - l + 1;
@@ -1026,6 +1030,18 @@ export class HitFx {
         if (spark.followHead) spark.x += dx;
       }
     }
+  }
+  /** 手动判定：结束某个 Hold 的循环特效。 */
+  stopLoop(uid: number) {
+    if (!this.hasLoop(uid)) return;
+    this.live = this.live.filter(fx => !(fx.loop && fx.uid === uid));
+  }
+  hasLoop(uid: number) {
+    return this.live.some(fx => fx.loop && fx.uid === uid);
+  }
+  /** 手动判定：确保某个 Hold 的循环特效在场（已在场则不重启，保留粒子与周期）。 */
+  ensureLoop(uid: number, x: number, width: number) {
+    if (!this.hasLoop(uid)) this.spawn('holdLoop', x, width, true, uid);
   }
   draw() {
     for (const batch of this.batches.values()) batch.reset();

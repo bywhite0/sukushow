@@ -14,6 +14,8 @@ import {
 import { gridLaneCount } from './rgOptions';
 import { flushDynamicGeometry } from './dynamicBuffer';
 import { HitFx } from './fx';
+import type { JudgeEvent, NoteViewState } from './judge';
+import { laneFromArcAngle, laneFromFlatX, laneFromProjectedX } from './screenLane';
 import { FeverLayers } from './feverLayers';
 import { FEVER_MOVE_EMIT_X } from './fever';
 import { feverEntrance } from './feverAnimation';
@@ -131,6 +133,50 @@ const FEVER_REVEAL_SPAN = 68;
 export type CameraMode = '3d' | '2d' | 'sif';
 /** 3D 游戏机位。 */
 const CAMERA_3D_Y = 9, CAMERA_3D_Z = 8.65;
+/** 手动判定下未判定 / 漏判音符越过判定线后继续下落的时长（秒）：原版会停留一段再消失。 */
+const MISSED_CUTOFF = -0.45;
+
+/**
+ * 手动判定下非 Hold 音符（Single / Flick / Trace）的绘制分支。
+ *
+ * 判定窗口跨过判定线（Single 迟到 0.125 s 内、Flick 起手后等划动）时音符还没结算，
+ * 要继续越线下落，漏判后沿同一条下落轨迹画到 `MISSED_CUTOFF`，中间不断档。
+ * 已判定离场、跳转时视为已结算的音符不画；没有判定状态（AutoPlay）按时间画到判定线为止。
+ */
+export type SpriteDraw = 'skip' | 'normal' | 'past-line';
+
+export function spriteDraw(state: NoteViewState | undefined): SpriteDraw {
+  if (!state) return 'normal';
+  if (state.finished) return state.missed ? 'past-line' : 'skip';
+  return 'past-line';
+}
+
+/**
+ * 手动判定下 Hold 的绘制分支。
+ *
+ * 4.12.0 `ManualHoldNotePolicy.ProcessTouch` 每帧先调 `HoldMeshView.ProcessView(_firstUnit, currentTime, touched)`
+ * 重建「链头 → 链尾」整条 ribbon；`touched = _holdStatus.index != -1 && _touchPhase != Canceled` 只切动态 / 静态配色，
+ * 网格只在音符进漏判池时由 `ProcessMissed` 调 `Clear()`。所以断链、漏头都不收 ribbon，
+ * 只有尾判成功 / 尾判 Miss 离场才停画；尾判 Miss 离场后头部图标按尾段时刻继续下落
+ * （`ProcessMissed` 用 `GetWorldZ(currentTime - _endTime)` 移动头部图标，`_endTime = 尾段 LastTime - Duration`）。
+ */
+export type HoldDraw = 'skip' | 'ribbon' | 'falling-head';
+
+export function holdDraw(state: NoteViewState | undefined, time: number, spawn: number, tailEnd: number): HoldDraw {
+  if (state?.finished) return state.missed ? 'falling-head' : 'skip';
+  if (time < spawn || time >= tailEnd) return 'skip';
+  return 'ribbon';
+}
+
+/**
+ * 手动判定下 Hold 循环特效是否在场（4.12.0 `ManualHoldNotePolicy`）：起判时取得 `_loopEffectView`
+ * （头判命中 `FireHold`、漏头 `GetHold`，ProcessTouch @0x4AF3684 / 0x4AF39C4），`ProcessView` 每帧
+ * `SetActive(_touched)`（@0x4AF2D08），尾判成功或尾 Miss 时 `ReleaseHold`。所以就是 `NoteViewState.holding`：
+ * 中间采样 Miss 不影响，Canceled 熄灭。没有判定状态（AutoPlay）返回 null，交给 `fx.sync` 按时间处理。
+ */
+export function holdLoopWanted(state: NoteViewState | undefined): boolean | null {
+  return state ? state.holding : null;
+}
 
 export class PreviewRenderer {
   readonly gl: THREE.WebGLRenderer;
@@ -194,6 +240,10 @@ export class PreviewRenderer {
   private feverOn = false;
   private feverStart = 0;
   private phase = new Map<number, number>();
+  /** 判定驱动模式：auto 按时间放特效（默认），manual 由 `hit()` / `setNoteStates()` 驱动。 */
+  private judgeMode: 'auto' | 'manual' = 'auto';
+  /** 手动模式的单音符状态来源（判定引擎的 `noteState`）；null = 现有自动行为。 */
+  private noteStates: ((uid: number) => NoteViewState | undefined) | null = null;
   /** 走带是否在播放：暂停时粒子与 hold 呼吸光冻结。 */
   private playing = true;
   private lastFieldTime = NaN;
@@ -866,6 +916,72 @@ export class PreviewRenderer {
     };
   }
 
+  /** 判定驱动模式：auto（默认，按时间放特效）/ manual（`hit()` + `setNoteStates()` 驱动）。 */
+  setJudgeMode(mode: 'auto' | 'manual'): void {
+    this.judgeMode = mode;
+  }
+
+  /** 手动模式的单音符状态来源（判定引擎的 `noteState`）；传 null 恢复自动行为。 */
+  setNoteStates(source: ((uid: number) => NoteViewState | undefined) | null): void {
+    this.noteStates = source;
+  }
+
+  /**
+   * 屏幕 CSS 坐标 → 轨道 lane（可越界，不 clamp）。与音符实际绘制位置同一口径：
+   *
+   * - 3D：把判定线处（Three z = −BORDER，音符判定点的实际位置）相邻两 lane 投影到屏幕，
+   *   按每 lane 的屏幕像素宽换算；
+   * - 2D：`frame.scale × lanePitch`（俯视下世界 → 屏幕等比）；
+   * - SIF：把触点相对判定弧圆心（世界 (0, Y, −frame.centerZ)）的角度折成 lane，
+   *   角度夹在 ±π/2。
+   */
+  screenToLane(cssX: number, cssY: number): number {
+    if (!this.viewW || !this.viewH) return Number.NaN;
+    if (this.cameraMode === '3d') {
+      return laneFromProjectedX(cssX, this.viewW, this.judgeScreenX(29.5), this.judgeScreenX(30.5));
+    }
+    if (this.cameraMode === '2d') {
+      const frame = this.currentFrame();
+      if (!frame) return Number.NaN;
+      return laneFromFlatX(cssX, this.viewW, frame.scale * lanePitch(this.laneWidthOpt));
+    }
+    const arc = this.currentArc();
+    if (!arc) return Number.NaN;
+    const center = new THREE.Vector3(0, Y, -arc.centerZ).project(this.camera);
+    const cx = ((center.x + 1) / 2) * this.viewW;
+    const cy = ((1 - center.y) / 2) * this.viewH;
+    return laneFromArcAngle(Math.atan2(cssX - cx, cssY - cy));
+  }
+
+  /** 判定线处（Three z = −BORDER，音符判定点的实际位置）某个 lane 的屏幕 x（CSS px）。 */
+  private judgeScreenX(lane: number): number {
+    const p = new THREE.Vector3(worldX(lane, this.laneWidthOpt), Y, -BORDER).project(this.camera);
+    return ((p.x + 1) / 2) * this.viewW;
+  }
+
+  /**
+   * 手动模式：按判定事件放一次性打击特效（x / width 与 `fx.sync` 的自动生成同一口径）。
+   * Hold 的循环特效不在这里启停，由 `render` 按 `holdLoopWanted` 逐帧维护。自动模式忽略，避免与 `fx.sync` 重复。
+   */
+  hit(event: JudgeEvent): void {
+    if (this.judgeMode !== 'manual') return;
+    const fx = this.fx;
+    // Miss 与空点不放打击特效。
+    if (!fx || event.kind === 'empty' || event.type === 0) return;
+    const x = worldX(event.lane, this.laneWidthOpt), w = event.width;
+    if (event.noteType === 2) {
+      if (event.head) fx.spawn('flick', x, w);
+      return;
+    }
+    if (event.noteType === 1) {
+      // 头判命中：`FireHold` 的起手爆发（漏头走 `GetHold`，没有爆发）；尾判成功：`FireHoldEnd`。
+      if (event.holdIndex === 0) fx.spawn('holdStart', x, w);
+      if (event.holdEnd) fx.spawn('holdEnd', x, w);
+      return;
+    }
+    fx.spawn(event.noteType === 3 ? 'trace' : 'tap', x, w);
+  }
+
   /**
    * 测试 / 调试：2D 下判定线贴图与轨道的实际屏幕尺寸（CSS px），以及判定点投影高度。
    * `linePx` 应当比 `planePx` / `trackPx` 宽 `LINE_OVERHANG` 倍（两端出轨道）；
@@ -1173,16 +1289,28 @@ export class PreviewRenderer {
     this.drawWorldLaneEdges(slope.spawn, nearZ, time);
     this.lines.reset();
     this.paintFeverOutline(time);
-    this.fx?.sync(chart, time, mirror, this.playing);
+    this.fx?.sync(chart, time, mirror, this.playing, this.judgeMode !== 'manual');
     const advance = this.playing && time !== this.lastFieldTime;
     this.lastFieldTime = time;
     this.fx?.setFever(this.feverOn, time - this.feverStart);
     let visible = 0;
     for (const root of chart.roots) {
-      if (root.type !== 1) { visible += this.drawSprite(root, time, slope, mirror, lib); continue; }
+      const state = this.noteStates?.(root.uid);
+      if (root.type !== 1) {
+        const draw = spriteDraw(state);
+        if (draw !== 'skip') visible += this.drawSprite(root, time, slope, mirror, lib, draw === 'past-line');
+        continue;
+      }
       let tail = root; while (tail.next) tail = tail.next;
-      if (time < root.time - slope.duration || time >= tail.end) continue;
-      const active = time >= root.time;
+      const draw = holdDraw(state, time, root.time - slope.duration, tail.end);
+      if (draw !== 'ribbon') {
+        this.fx?.stopLoop(root.uid);
+        if (draw === 'falling-head') visible += this.drawHoldFallingHead(tail, time, slope, mirror, lib);
+        continue;
+      }
+      // 动态配色看 `HoldStatus.index != -1`（原版 `_touched`），不是「音符过线」：未起判时是静态色，
+      // 起判后（含断链、漏头僵尸）一直是按住外观。
+      const active = state ? state.holding : time >= root.time;
       let phase = this.phase.get(root.uid) ?? PHASE_START;
       const alpha = holdAlpha(active, phase);
       // HoldNote 呼吸光按帧推进；暂停 / 时间不动时冻结。
@@ -1200,6 +1328,9 @@ export class PreviewRenderer {
       const [l, r] = edges(head, progress, mirror);
       const hx = worldX((l + r) / 2, this.laneWidthOpt);
       this.noteSprite(hx, Math.max(slope.zAt(head.time - time), BORDER), r - l + 1, 1, lib, time);
+      const loop = holdLoopWanted(state);
+      if (loop === true) this.fx?.ensureLoop(root.uid, worldX((l + r) / 2), r - l + 1);
+      else if (loop === false) this.fx?.stopLoop(root.uid);
       this.fx?.setLoop(root.uid, worldX((l + r) / 2));
       visible++;
       if (tail.end - time <= slope.duration && tail.end - time >= 0) {
@@ -1207,7 +1338,8 @@ export class PreviewRenderer {
         this.noteSprite(worldX((tl + tr) / 2, this.laneWidthOpt), slope.zAt(tail.end - time), tr - tl + 1, 1, lib, time);
       }
     }
-    if (simultaneous) for (const line of chart.lines) {
+    // 手动判定不画同时押线（判定线不需要）。
+    if (simultaneous && this.judgeMode !== 'manual') for (const line of chart.lines) {
       const z = slope.zAt(line.time - time); if (line.time < time || line.time - time > slope.duration) continue;
       const xs = line.points.map(p => { const [l, r] = edges(p.note, p.tail ? 1 : 0, mirror); return worldX((l + r) / 2, this.laneWidthOpt); });
       if (arc) { this.arcLine(arc, xs, z, slope.spawn); continue; }
@@ -1246,13 +1378,24 @@ export class PreviewRenderer {
     }
     return n;
   }
-  private drawSprite(n: Note, time: number, slope: ReturnType<typeof createSlope>, mirror: boolean, lib: RgLibrary) {
+  private drawSprite(n: Note, time: number, slope: ReturnType<typeof createSlope>, mirror: boolean, lib: RgLibrary, pastLine = false) {
     const remaining = n.time - time;
-    if (remaining < -.18 || remaining > slope.duration) return 0;
-    if (remaining >= 0) {
-      const [l, r] = edges(n, 0, mirror);
-      this.noteSprite(worldX((l + r) / 2, this.laneWidthOpt), slope.zAt(remaining), r - l + 1, n.type, lib, time);
-    }
+    // 手动判定的未判定 / 漏判音符越过判定线后继续下落（见 `spriteDraw`）；其余音符在判定点后 0.18 s 内不再绘制。
+    if (remaining < (pastLine ? MISSED_CUTOFF : -.18) || remaining > slope.duration) return 0;
+    if (remaining < 0 && !pastLine) return 1;
+    const [l, r] = edges(n, 0, mirror);
+    this.noteSprite(worldX((l + r) / 2, this.laneWidthOpt), slope.zAt(remaining), r - l + 1, n.type, lib, time);
+    return 1;
+  }
+  /**
+   * 尾判 Miss 离场后的 Hold 头部图标：按尾段时刻继续下落，越过判定线后最多再画 0.45 s
+   * （与漏判单键同一口径；原版 `ProcessMissed` 只移动头部图标，链尾图标与网格已清掉）。
+   */
+  private drawHoldFallingHead(tail: Note, time: number, slope: ReturnType<typeof createSlope>, mirror: boolean, lib: RgLibrary) {
+    const remaining = tail.end - time;
+    if (remaining < MISSED_CUTOFF) return 0;
+    const [l, r] = edges(tail, 1, mirror);
+    this.noteSprite(worldX((l + r) / 2, this.laneWidthOpt), slope.zAt(remaining), r - l + 1, 1, lib, time);
     return 1;
   }
   private sheet(name: string, order: number) {

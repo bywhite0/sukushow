@@ -1,6 +1,30 @@
+import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { flatParticlePoint } from '../src/fx';
+import { parseChart } from '@sukushow/chart/chart';
+import { flatParticlePoint, HitFx } from '../src/fx';
+import type { FxFile } from '../src/rgAssets';
 import { pushBillboard } from '../src/slice';
+
+const resource = JSON.parse(readFileSync(new URL('../../../apps/web/public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
+/** 只保留指定 prefab 的 HitFx：贴图用空 Texture 占位，测试只统计顶点数。 */
+function createFx(ids: string[]) {
+  const file = structuredClone(resource);
+  file.prefabs = file.prefabs.filter(prefab => ids.includes(prefab.id));
+  file.fever = [];
+  const texture = new THREE.Texture();
+  return { fx: new HitFx(file, Object.fromEntries(file.mats.map(mat => [mat.tex, texture]))), texture };
+}
+function vertexCount(fx: HitFx) {
+  fx.draw();
+  return fx.group.children.reduce((n, child) => n + (child as THREE.Mesh).geometry.drawRange.count, 0);
+}
+/** Flags 位域：l/r 头端点、l2/r2 尾端点（与 packages/chart 测试同一组装式）。 */
+const flags = (type: number, l: number, r: number) => (type & 15) | ((r & 63) << 4) | ((r & 63) << 10) | ((l & 63) << 16) | ((l & 63) << 22);
+const singleNote = parseChart({
+  Notes: [{ Uid: 1, just: '1', holds: [], Flags: flags(0, 29, 30) }],
+  Bpms: [{ Time: 0, Bpm: 120 }],
+});
 
 describe('fx billboard spin', () => {
   it('rotates corners in the billboard plane', () => {
@@ -61,5 +85,70 @@ describe('2D 粒子位移映射', () => {
     // 3D 里朝玩家（unity −z）的位移在 2D 被丢掉，粒子不会顺着音符一起往下漂
     const q = flatParticlePoint(spawn, true, { x: 0, y: 4.5, z: -4.632 - 2 });
     expect(q.z).toBeCloseTo(spawn.z0, 9);
+  });
+});
+
+/** 手动判定：`sync(..., autoSpawn=false)` 不按音符时刻生成特效，改由 `hit()` 驱动。 */
+describe('fx.sync 的 autoSpawn', () => {
+  const advance = (fx: HitFx, autoSpawn: boolean) => {
+    fx.sync(singleNote, 0, false);
+    for (const time of [0.4, 0.8, 1.05]) fx.sync(singleNote, time, false, true, autoSpawn);
+  };
+
+  it('auto（默认）：跨过音符时刻仍自动生成打击特效', () => {
+    const { fx, texture } = createFx(['tap']);
+    advance(fx, true);
+    expect(vertexCount(fx)).toBeGreaterThan(0);
+    fx.dispose(); texture.dispose();
+  });
+
+  it('manual：不自动生成打击特效', () => {
+    const { fx, texture } = createFx(['tap']);
+    advance(fx, false);
+    expect(vertexCount(fx)).toBe(0);
+    fx.dispose(); texture.dispose();
+  });
+});
+
+describe('fx.stopLoop', () => {
+  it('只结束指定 UID 的 Hold 循环特效', () => {
+    const { fx, texture } = createFx(['holdLoop']);
+    fx.spawn('holdLoop', 0, 4, true, 7);
+    expect(vertexCount(fx)).toBeGreaterThan(0);
+    fx.stopLoop(8);
+    expect(vertexCount(fx)).toBeGreaterThan(0);
+    fx.stopLoop(7);
+    expect(vertexCount(fx)).toBe(0);
+    fx.dispose(); texture.dispose();
+  });
+});
+
+describe('fx.ensureLoop', () => {
+  it('不在场时生成；已在场不重启（同一个实例）；stopLoop 后可再次生成', () => {
+    const { fx, texture } = createFx(['holdLoop']);
+    expect(fx.hasLoop(7)).toBe(false);
+    fx.ensureLoop(7, 0, 4);
+    expect(fx.hasLoop(7)).toBe(true);
+    const live = (fx as unknown as { live: unknown[] }).live;
+    const first = live.find((l) => (l as { uid: number }).uid === 7);
+    fx.ensureLoop(7, 1, 4);
+    const after = (fx as unknown as { live: unknown[] }).live.filter((l) => (l as { uid: number }).uid === 7);
+    expect(after).toEqual([first]);
+    fx.stopLoop(7);
+    expect(fx.hasLoop(7)).toBe(false);
+    fx.ensureLoop(7, 0, 4);
+    expect(fx.hasLoop(7)).toBe(true);
+    fx.dispose(); texture.dispose();
+  });
+
+  it('跳转：自动模式按时间补 Hold 循环特效，手动模式不补（交给判定状态）', () => {
+    const hold = parseChart({ Notes: [{ Uid: 3, just: '1', holds: ['3'], Flags: flags(1, 29, 30) }], Bpms: [{ Time: 0, Bpm: 120 }] });
+    for (const [autoSpawn, expected] of [[true, true], [false, false]] as const) {
+      const { fx, texture } = createFx(['holdLoop']);
+      fx.sync(hold, 0, false);
+      fx.sync(hold, 2, false, false, autoSpawn);
+      expect(fx.hasLoop(3)).toBe(expected);
+      fx.dispose(); texture.dispose();
+    }
   });
 });

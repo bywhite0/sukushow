@@ -21,6 +21,8 @@ const ICONS = [
   'pause',
   'skip-forward',
   'skip-back',
+  // 游玩模式
+  'gamepad-2',
   // 面板与视图
   'panel-left-open',
   'panel-left-close',

@@ -7,6 +7,7 @@ import { AudioPlayer } from '@sukushow/llll-preview/audio';
 import { MusicVideo } from '@sukushow/llll-preview/musicVideo';
 import { CapturingSeOutput, createWebAudioSeOutput, SeResolver } from '@sukushow/llll-preview/se';
 import { PreviewRenderer } from '@sukushow/llll-preview/renderer';
+import { JudgeEngine } from '@sukushow/llll-preview/judge';
 import { LiveHud } from '@sukushow/llll-preview/hud';
 import { imageFailed, imagesSettled, loadHudFonts, loadedImageRevision, preloadImages } from '@sukushow/llll-preview/canvasKit';
 import type { ExportFrameSource } from '@sukushow/export';
@@ -19,11 +20,13 @@ import { SE_RESOURCE_URLS, type SeLoadProgress } from '@sukushow/llll-preview/se
 import { COMBO_RESULT_TEXTURES } from '@sukushow/llll-preview/comboResultClip';
 import { fetchBytes } from '@sukushow/llll-preview/songAssets';
 import { createAspectPicker, bindStageAspect, DEFAULT_ASPECT, type AspectId } from './llll/aspectRatio';
+import { PlayInput, playJudgeTime } from './llll/playInput';
+import { createPlayKeysEditor } from './llll/playKeysEditor';
 import { buildChartSvg, openSvgInNewTab, releaseSvgUrls } from './llll/svgExport';
 import { createTrackHeader } from './trackHeader';
 import { bindViewChrome, stageToolbarMarkup, trackHeaderMarkup, transportMarkup } from './viewChrome';
 import { icon, setIconButton } from '../icons';
-import { controlOwnsSpace, releaseSpaceFocus } from '../keyboard';
+import { controlOwnsKey, controlOwnsSpace, releaseSpaceFocus } from '../keyboard';
 import type { SongSelectionStore, ResolvedSource } from '../songSelection';
 import { createSourceBinding, waitForSource } from '../sourceBinding';
 import type { createSourceFiles } from '../sourceFiles';
@@ -63,7 +66,7 @@ app.innerHTML=`
   </div>
  </div></div>
  <div id="message" class="viewer-status" role="status" aria-live="polite"></div>
- ${transportMarkup({ svgExport: true })}
+ ${transportMarkup({ svgExport: true, playMode: true })}
 </section>
 <aside id="preview-inspector" aria-label="预览设置" hidden>
  <div class="inspector-heading"><h2>预览设置</h2><button class="quiet" type="button" data-inspector-close aria-label="关闭预览设置">${icon('x', 16)}</button></div>
@@ -85,6 +88,8 @@ app.innerHTML=`
 <label class="setting" for="opt-grid"><span>轨道分割 GridCount</span><select id="opt-grid"><option value="0" selected>关闭</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option><option value="5">6</option></select></label>
 <label class="setting" for="opt-fps"><span>目标帧率</span><select id="opt-fps"><option value="0" selected>60</option><option value="1">120</option></select></label>
 <label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label>
+<label class="setting" for="play-offset"><span>游玩判定偏移 <small>毫秒</small></span><input id="play-offset" type="number" min="-200" max="200" step="5" value="0"><small>只影响游玩模式的触摸判定：负值判定提前，正值判定延后。</small></label>
+<div data-play-keys-mount></div>
 <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
 <label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label>
 </section>
@@ -105,7 +110,7 @@ app.innerHTML=`
 <label class="check"><input id="opt-skill-cutin" type="checkbox" checked>技能 Cut-in</label>
 <label class="check"><input id="opt-ap-continue" type="checkbox" checked>AP 继续提示</label>
 <label class="check"><input id="opt-start-anim" type="checkbox" checked>开场过场</label>
-<label class="setting" for="opt-combo-result"><span>曲终横幅 <small>GetResultIndex</small></span><select id="opt-combo-result"><option value="0" selected>AllPerfect</option><option value="1">FullCombo</option><option value="2">Clear</option><option value="3">Finish</option></select><small>自动演奏恒为 AP；其余档位仅供预览。</small></label>
+<label class="setting" for="opt-combo-result"><span>曲终横幅 <small>GetResultIndex</small></span><select id="opt-combo-result"><option value="0" selected>AllPerfect</option><option value="1">FullCombo</option><option value="2">Clear</option><option value="3">Finish</option></select><small>自动演奏恒为 AP；游玩模式按实际成绩取档，此处只影响自动演奏。</small></label>
 <label class="check"><input id="opt-mv" type="checkbox" checked>MV / MusicVideo</label>
 </section>
 <section class="panel" id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" tabindex="0" hidden>
@@ -131,6 +136,12 @@ const input=(id:string)=>el<HTMLInputElement>(id);
 const track=createTrackHeader(root);
 const unbindChrome=bindViewChrome(root);
 const message=(text:string,error=false)=>{el('message').textContent=text;el('message').classList.toggle('error',error);};
+/** 游玩键位：改动即时作用到输入捕获与判定引擎（是否等 Air 键），并持久化。 */
+const playKeysEditor=createPlayKeysEditor({
+ onChange:(layout)=>{playInput?.setKeyLayout(layout);judge?.setKeyboardAir(layout.air!==null);persistSettings();},
+ onMessage:message,
+});
+root.querySelector('[data-play-keys-mount]')!.replaceWith(playKeysEditor.element);
 el('panel-display').prepend(el('opt-hit-effect').closest('label')!);
 el('panel-score').prepend(el('tech-score').closest('label')!);
 const settingTabs=Array.from(root.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
@@ -159,6 +170,8 @@ function readSettings():PreviewSettings{
  return{
   speed:Number(input('speed').value),
   offsetMs:Number(input('offset').value),
+  playOffsetMs:Number(input('play-offset').value),
+  playKeys:playKeysEditor.value,
   volume:Number(input('volume').value),
   volumeNoteTap:Number(input('vol-tap').value),
   volumeSe:Number(input('vol-se').value),
@@ -200,6 +213,8 @@ function persistSettings(){savePreviewSettings(readSettings());}
 function applySettingsToForm(s:PreviewSettings){
  input('speed').value=String(s.speed);el('speed-value').textContent=s.speed.toFixed(1);
  input('offset').value=String(s.offsetMs);
+ input('play-offset').value=String(s.playOffsetMs);
+ playKeysEditor.value=s.playKeys;
  input('volume').value=String(s.volume);
  input('vol-tap').value=String(s.volumeNoteTap);
  input('vol-se').value=String(s.volumeSe);
@@ -289,10 +304,19 @@ const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((
  return sizes;
 });
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
+/** 游玩模式：手动判定引擎 + 输入捕获。AutoPlay 路径不受影响（关闭时全部归还）。 */
+let judge:JudgeEngine|null=null,playInput:PlayInput|null=null,playMode=false;
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
-function setChart(next:Chart){chart=next;input('timeline').disabled=false;el<HTMLButtonElement>('restart').disabled=false;el<HTMLButtonElement>('play').disabled=false;el<HTMLButtonElement>('export-video').disabled=false;el<HTMLButtonElement>('export-svg').disabled=false;}
+/** 手动判定引擎：空点音效只在屏幕上半区触发（原版 `y < Screen.height*0.5`）。 */
+const createJudge=(target:Chart)=>new JudgeEngine(target,{emptyTouch:(touch)=>touch.y!==undefined&&touch.y<stage.clientHeight*0.5,keyboardAir:playKeysEditor.value.air!==null});
+function setChart(next:Chart){
+ chart=next;
+ if(playMode){judge=createJudge(next);renderer?.setNoteStates((uid)=>judge!.noteState(uid));}
+ input('timeline').disabled=false;el<HTMLButtonElement>('restart').disabled=false;el<HTMLButtonElement>('play').disabled=false;el<HTMLButtonElement>('export-video').disabled=false;el<HTMLButtonElement>('export-svg').disabled=false;
+}
 function clearChart(){
+ if(playMode)setPlayMode(false);
  chart=null;player?.clear();
  input('timeline').disabled=true;input('timeline').value='0';input('timeline').max='0';
  el<HTMLButtonElement>('restart').disabled=true;
@@ -339,7 +363,7 @@ function applyIntro(){
  if(!player)return;
  const tr=player.transport,atStart=tr.time<=tr.start+1e-6;
  tr.setStart(input('opt-start-anim').checked?-START_CLIP_DURATION:0);
- if(atStart&&!tr.playing)player.seek(tr.start);
+ if(atStart&&!tr.playing){player.seek(tr.start);restartPlay(tr.start);}
  metadata();
 }
 /** 从 time 开播时补放开场 SE：过场中按已走过的秒数接着放；无过场时仅从头开播才放。 */
@@ -351,6 +375,8 @@ function kickStartSe(){
 function seekTo(t:number){
  if(!player||!chart||exporting)return;
  player.seek(t);se?.clear();se?.stopAll();
+ // 游玩模式跳转 = 从该时刻重开一局（不重放玩家输入）。
+ restartPlay(t);
  if(player.transport.playing)kickStartSe();
 }
 async function toggle(){
@@ -374,7 +400,8 @@ input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();}
 input('volume').oninput=()=>{player?.setVolume(Number(input('volume').value));persistSettings();};
 input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}songSelection.updateMetadata({offsetMs:Number(input('offset').value)});persistSettings();};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
-const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if(e.code==='Space'){if(controlOwnsSpace(e.target))return;e.preventDefault();releaseSpaceFocus();void toggle();return;}if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
+// 游玩模式下绑定为游玩键位的键（含 Air 默认的空格）让给游玩输入，不触发播放 / 跳转快捷键。
+const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if(playMode&&playInput?.bindsKey(e.code))return;if(e.code==='Space'){if(controlOwnsSpace(e.target))return;e.preventDefault();releaseSpaceFocus();void toggle();return;}if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
 document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
 void (async()=>{
@@ -477,7 +504,8 @@ input('opt-fs-y').oninput=()=>{el('opt-fs-y-value').textContent=input('opt-fs-y'
 input('opt-fever').onchange=applyHudOptions;
 input('opt-ap-continue').onchange=applyHudOptions;
 input('opt-start-anim').onchange=()=>{applyIntro();persistSettings();};
-el<HTMLSelectElement>('opt-combo-result').onchange=()=>{comboResult.setKind(readSettings().comboResult);persistSettings();};
+// 曲终横幅设置只给 AutoPlay 预览用：游玩模式下档位按实际成绩算，退出时再恢复设置值。
+el<HTMLSelectElement>('opt-combo-result').onchange=()=>{if(!playMode)comboResult.setKind(readSettings().comboResult);persistSettings();};
 input('opt-mv').onchange=()=>{musicVideo.setEnabled(input('opt-mv').checked);persistSettings();};
 input('opt-skill-view').onchange=()=>persistSettings();
 input('opt-skill-cutin').onchange=()=>persistSettings();
@@ -539,11 +567,97 @@ const applyScoreCfg=()=>{
   totalAppeal:Number.isFinite(appeal)&&appeal>0?appeal:350000,
   musicMasteryLevel:Number.isFinite(mastery)&&mastery>=0?Math.min(50,Math.trunc(mastery)):0,
  });
+ // 手动模式下改计分配置 = 按当前时刻重开一局，判定状态跟着 HUD 一起重建。
+ restartPlay(player?.transport.time??0);
  persistSettings();
 };
 el<HTMLInputElement>('opt-appeal').onchange=applyScoreCfg;
 el<HTMLInputElement>('opt-mastery').onchange=applyScoreCfg;
 applyScoreCfg();
+
+/* ── 游玩模式：手动判定状态机（4.12.0 NoteResolver 口径） ── */
+/** 歌曲时间 → 判定时钟（叠加游玩判定偏移）；引擎的推进、跳转与重开都按它。 */
+function judgeClock(t:number){return playJudgeTime(t,playInput?.getOffsetMs()??0);}
+/**
+ * 游玩模式唯一的重开入口：HUD 与判定引擎在同一时刻一起重开。
+ * 跳转、改计分配置、改判定偏移、改开场设置都由视图发起，所以由视图显式调用；HUD 不按时间差猜跳转，
+ * 卡顿或后台恢复造成的大步前进照常推进，跳过的音符由判定引擎按漏判结算。
+ */
+function restartPlay(t:number){
+ if(!playMode)return;
+ hud.resetManual(t);
+ judge?.reset(judgeClock(t));
+}
+/**
+ * 每帧判定推进：触摸事件 → 判定引擎 → HUD 结算 / 舞台特效 → 按住中的 Hold 数。
+ * 调用点在 `renderLiveChart` 的 `hud.sync` 之前（HUD 手动分支只维护 SE 帧窗）。
+ */
+function processPlay(t:number){
+ if(!playMode||!judge||!playInput)return;
+ // 引擎时钟与触摸同为「歌曲时间 + 判定偏移」；按住的指针每帧补 Stationary（Hold 采样依赖它）。
+ const {time,touches}=playInput.frame(t);
+ const events=judge.process(time,touches);
+ for(const event of events){hud.applyJudgement(event);renderer?.hit(event);}
+ hud.setHoldingHolds(judge.holdingCount());
+}
+/** 曲终横幅按玩家实际成绩取档位：AllPerfect / FullCombo / Clear / Finish（GetResultIndex）。 */
+function manualResultKind():ResultKind{
+ if(!chart)return 2;
+ const flags=hud.liveComboFlags;
+ if(flags&1)return 0;
+ if(flags&2)return 1;
+ // GetResultIndex：mental < 1 → Finish；否则 Clear。Mental 扣完不失败，只影响档位。
+ return hud.liveMental<1?3:2;
+}
+/**
+ * 进入 / 退出游玩模式。
+ *
+ * 进入：新建判定引擎与输入捕获，舞台切到 manual（不自动生成判定特效、不画同时押线），
+ * 从谱面起点重开一局并自动开播。退出：拆掉输入与引擎，渲染与 HUD 回到 AutoPlay 重放路径。
+ */
+function setPlayMode(on:boolean){
+ if(on===playMode)return;
+ if(on&&(!chart||!player||!renderer||exporting)){message('请先加载谱面再进入游玩模式。',true);return;}
+ playMode=on;
+ const button=root.querySelector<HTMLButtonElement>('#play-mode');
+ if(button){
+  button.classList.toggle('is-active',on);
+  button.setAttribute('aria-pressed',String(on));
+  button.setAttribute('aria-label',on?'退出游玩模式':'进入游玩模式');
+  const label=button.querySelector('span');if(label)label.textContent=on?'退出游玩':'游玩';
+ }
+ renderer?.setJudgeMode(on?'manual':'auto');
+ hud.setManualPlay(on);
+ if(on){
+  judge=createJudge(chart!);
+  playInput=new PlayInput(stage,{
+   clock:()=>player!.transport.time,
+   toLane:(x,y)=>renderer!.screenToLane(x,y),
+   getSize:()=>({width:stage.clientWidth,height:stage.clientHeight}),
+   keyboardTarget:document,
+   keyLayout:playKeysEditor.value,
+   controlOwnsKey,
+  });
+  playInput.setOffsetMs(Number(input('play-offset').value));
+  playInput.attach();
+  renderer?.setNoteStates((uid)=>judge!.noteState(uid));
+  // 手动模式从走带起点开播：开场过场照常播完，判定只在 0 秒之后生效。
+  seekTo(player!.transport.start);
+  if(!player!.transport.playing)void toggle();
+ }else{
+  playInput?.detach();playInput=null;judge=null;
+  renderer?.setNoteStates(null);
+  comboResult.setKind(readSettings().comboResult);
+ }
+}
+root.querySelector<HTMLButtonElement>('#play-mode')!.onclick=()=>setPlayMode(!playMode);
+input('play-offset').onchange=()=>{
+ const value=Number(input('play-offset').value);
+ if(!input('play-offset').checkValidity()||!Number.isFinite(value)){message('游玩判定偏移需在 −200 至 200 毫秒之间。',true);return;}
+ playInput?.setOffsetMs(value);persistSettings();
+ // 游玩中改偏移会让判定时钟整体平移（负向即倒退）：与改计分配置一样，从当前时刻重开一局。
+ if(player)restartPlay(player.transport.time);
+};
 
 let frame=0;
 let comboLastT=0;
@@ -577,6 +691,8 @@ function composeStage(view:StageView,t:number,video:HTMLVideoElement|null=musicV
  */
 function syncComboResult(t:number,playing:boolean){
  if(finishTime===null||t<finishTime){if(comboResult.visible)comboResult.hide();comboLastT=t;return;}
+ // 游玩模式：横幅档位按玩家实际成绩（AP / FC / Clear）在越过曲终时定一次。
+ if(playMode&&comboLastT<finishTime)comboResult.setKind(manualResultKind());
  if(playing&&comboLastT<finishTime&&t-finishTime<0.25)se?.playFinish(comboResult.resultKind);
  comboResult.render(t-finishTime);
  comboLastT=t;
@@ -586,7 +702,7 @@ function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;st
  const previous=lastLiveFrame;
  const changed=!previous||previous.time!==t||previous.chart!==chart||previous.playing!==playing||previous.revision!==next.revision||previous.image!==next.image||previous.hudTexture!==next.hudTexture||previous.resultTexture!==next.resultTexture||previous.width!==next.width||previous.height!==next.height||previous.dpr!==next.dpr||previous.mode!==next.mode;
  if(!playing&&!changed)return;
- musicVideo.sync(t,playing,tr.rate);hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;setIconButton(el('play'),skip?'skip-forward':playing?'pause':'play',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
+ musicVideo.sync(t,playing,tr.rate);if(playing)processPlay(t);else playInput?.drain();hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;setIconButton(el('play'),skip?'skip-forward':playing?'pause':'play',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
 }
 function animate(){
  const current=chart;
@@ -627,6 +743,8 @@ function createExportSource(opts:{intro:boolean},chart:Chart):ExportFrameSource{
   canvas,
   async begin(width,height,startSec){
    if(!player||!renderer||!se||!seOut)throw new Error('预览未初始化');
+   // 导出走 AutoPlay 重放路径：先退出手动模式，避免手动分数混进导出 HUD。
+   if(playMode)setPlayMode(false);
    exporting=true;began=true;
    cancelAnimationFrame(frame);frame=0;
    const tr=player.transport;resumeAt=tr.time;
@@ -741,11 +859,13 @@ el<HTMLButtonElement>('export-svg').onclick=()=>void exportChartSvg();
 (window as unknown as {__LPW__:unknown}).__LPW__={
  hud,startAnim,comboResult,compositor,musicVideo,exportDialog,
  get renderer(){return renderer;},get player(){return player;},
+ get judge(){return judge;},get playMode(){return playMode;},get chart(){return chart;},
  probeExportConfigs:probeAllConfigs,
+ get finishTime(){return finishTime;},
 };
 let disposed=false;
 let unsubscribeSongSelection=()=>{};
-const dispose=()=>{if(disposed)return;disposed=true;generation++;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;el('export-svg').onclick=null;releaseSvgUrls();cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;playInput?.detach();playInput=null;judge=null;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;el('export-svg').onclick=null;releaseSvgUrls();cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
 window.addEventListener('pagehide',dispose,{once:true});
 
 const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0],ResolvedSource>({

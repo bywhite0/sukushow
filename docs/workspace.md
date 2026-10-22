@@ -51,6 +51,7 @@ pnpm render:svg          # SVG CLI
 
 - 播放快捷键（`Space` 播放 / 暂停、`←` `→` 跳转 5 秒）挂在 `document` 上；文本框、下拉框、滑块与打开着的对话框 / 浮层自己消费按键。焦点归属由 `apps/web/src/keyboard.ts` 判定。
 - 鼠标点过的按钮虽然还留着焦点，`Space` 仍归页面；键盘（Tab）聚焦的控件保留原生 `Space` 激活，键盘用户不会因此失去按钮操作。
+- LLLL 游玩模式另外用键盘打谱：60 轨等分成若干分区、每区一个键，外加一个 Air 键（默认九区 `A` `S` `D` `F` `G` `H` `J` `K` `L` + 空格），短时间内一起按下的相邻分区键算同一只手（同按合并），在侧栏「游玩键位」自定义（`apps/web/src/views/llll/playKeys.ts` / `playKeysEditor.ts`）。输入由 `playInput.ts` 挂在 `document` 上；焦点归属走 `keyboard.ts` 的 `controlOwnsKey`：文本框、下拉框、对话框照常消费按键，按钮只留 Enter 与（键盘聚焦时的）Space，所以点过的按钮不挡游玩键。游玩模式下绑定为游玩键位的键不触发播放 / 跳转快捷键。
 
 ## 来源状态与资源所有权
 

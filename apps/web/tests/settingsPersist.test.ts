@@ -100,3 +100,13 @@ describe('comboResult 配置项', () => {
     expect(sanitizePreviewSettings({ comboResult: 7 }).comboResult).toBe(0);
   });
 });
+
+describe('playKeys', () => {
+  it('缺省与损坏时取默认键位；合法自定义原样往返', () => {
+    expect(sanitizePreviewSettings({}).playKeys).toEqual(DEFAULT_PREVIEW_SETTINGS.playKeys);
+    expect(sanitizePreviewSettings({ playKeys: { zones: ['KeyA', 'KeyA'], air: null } }).playKeys)
+      .toEqual(DEFAULT_PREVIEW_SETTINGS.playKeys);
+    const custom = { zones: ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'], air: 'ShiftLeft', chordMs: 50 };
+    expect(sanitizePreviewSettings({ playKeys: custom }).playKeys).toEqual(custom);
+  });
+});

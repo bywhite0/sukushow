@@ -1,7 +1,7 @@
 /**
  * 由 `apps/web/scripts/generate-ui-icons.mjs` 生成；图形清单与生成逻辑都在该脚本里。
  *
- * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 27 个。
+ * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 28 个。
  * 网格 24×24，纯描边；颜色与线宽由 `icons.ts` 的包装层控制。
  */
 
@@ -10,6 +10,7 @@ export const iconNames = [
   'pause',
   'skip-forward',
   'skip-back',
+  'gamepad-2',
   'panel-left-open',
   'panel-left-close',
   'panel-right-open',
@@ -42,6 +43,7 @@ export const iconBodies: Record<IconName, string> = {
   'pause': '<g><rect width="5" height="18" x="14" y="3" rx="1"/><rect width="5" height="18" x="5" y="3" rx="1"/></g>',
   'skip-forward': '<path d="M21 4v16M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/>',
   'skip-back': '<path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432zM3 20V4"/>',
+  'gamepad-2': '<path d="M6 11h4M8 9v4m7-1h.01M18 10h.01m-.69-5H6.68a4 4 0 0 0-3.978 3.59l-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258q-.01-.075-.017-.151A4 4 0 0 0 17.32 5"/>',
   'panel-left-open': '<g><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18m5-12l3 3l-3 3"/></g>',
   'panel-left-close': '<g><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18m7-6l-3-3l3-3"/></g>',
   'panel-right-open': '<g><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18m-5-6l-3-3l3-3"/></g>',

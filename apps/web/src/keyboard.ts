@@ -50,6 +50,32 @@ export function controlOwnsSpace(target: EventTarget | null): boolean {
   return control !== null && !pointerFocus
 }
 
+/** 不带文本输入的 input 类型：字母键在它们上面没有原生行为。 */
+const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image'])
+
+/**
+ * 任意按键是否由当前焦点控件自己消费（游玩键位用）。Space 沿用 `controlOwnsSpace`；
+ * 其余键：对话框 / 浮层、文本框、下拉框、可编辑内容消费；按钮与链接原生只吃 Enter，
+ * 别的键（字母、符号）回到页面——否则点过「游玩」按钮后焦点留在按钮上，键盘就打不了。
+ */
+export function controlOwnsKey(target: EventTarget | null, code: string): boolean {
+  if (code === 'Space') return controlOwnsSpace(target)
+  const element = target instanceof HTMLElement ? target : null
+  if (!element) return false
+  if (element.closest('dialog, [popover]')) return true
+  if (element.closest('textarea, select, [contenteditable]:not([contenteditable="false"])')) return true
+  const input = element.closest<HTMLInputElement>('input')
+  if (input) {
+    // 滑块与单选框用方向键改值。
+    if (code.startsWith('Arrow') && (input.type === 'range' || input.type === 'radio')) return true
+    return !NON_TEXT_INPUTS.has(input.type)
+  }
+  if (code === 'Enter' || code === 'NumpadEnter') {
+    return element.closest('button, a[href], summary, [role="button"], [tabindex]:not([tabindex="-1"])') !== null
+  }
+  return false
+}
+
 /** 鼠标点过的控件把 Space 让给页面后，焦点也还给页面：不再冒焦点框，下一次 Space 仍归页面。 */
 export function releaseSpaceFocus(): void {
   const active = document.activeElement

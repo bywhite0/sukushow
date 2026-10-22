@@ -11,7 +11,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @sukushow/web dev
 ```
 
-打开统一前端的本地地址，在导航中选择 LLLL 舞台；舞台右上角可切换 3D / 2D / SIF 三档相机角度。默认打开フォーチュンムービー（`103103`）的最高可用难度；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。
+打开统一前端的本地地址，在导航中选择 LLLL 舞台；舞台右上角可切换 3D / 2D / SIF 三档相机角度。默认打开フォーチュンムービー（`103103`）的最高可用难度；选择本地 JSON 或已解密的 raw-deflate `.bytes`，可另选浏览器支持的音频文件。文件不上传。走带条的「游玩」把预览切成可打的手动判定模式（见下文「游玩模式」）。
 
 此包属于 `sukushow` 根工作区；LLLL 的三档相机模式（3D、2D 俯视、SIF 半圆）共用同一套 WebGL 场景与批量几何，切换时同时调整相机、贴图朝向与下落曲线（见下节）。PJSK 渲染与 SVG 图片导出分别由 `packages/pjsk-preview`、`packages/chart-svg` 提供。目录、许可边界和运行时资源见 [工作区说明](../../docs/workspace.md)。
 
@@ -108,6 +108,18 @@ pnpm preview
 
 约定路径：`apps/web/public/rg/sprites/<name>.png`、`apps/web/public/rg/fx/fx.json`、`apps/web/public/rg/fx/tex/<texture>.png`、`apps/web/public/rg/sprite_meta.json`、`apps/web/public/rg/fonts/<file>.otf`。
 
+## 游玩模式（手动判定）
+
+走带条上的「游玩」把预览从 AutoPlay 重放切到可打的状态机（4.12.0 `NoteResolver` / `Manual*NotePolicy` 口径，依据见 [实现依据与限制](../../docs/evidence.md)）：
+
+- **输入**：画布上的指针（鼠标 / 触摸，可多指）与键盘。原版只有触摸（`TapPositionResolveBase` 把触点 x 折成 lane），屏幕坐标由 `renderer.screenToLane(cssX, cssY)` 按当前相机反投影到 lane。键盘是预览的替代输入：60 轨等分成 N 个分区（默认九区 `A S D F G H J K L`），按键触碰整个分区（判定引擎的 `JudgeTouch.span`）；Flick 起手后 0.075 s 内按 Air 键（默认空格，类 Chunithm 抬手上滑，`JudgeTouch.air`）完成划动；同一只手一起压下的相邻分区键（`JudgeTouch.chord`）合起来只按一个音符（同时押除外），避免多出来的键去抢后面的音符。分区数、各区键位、Air 键与同按合并窗口在侧栏「游玩键位」自定义并持久化。
+- **判定**：Single / Hold / Flick / Trace 四类的窗口、Fast/Slow、Hold 采样与尾判、Flick 两阶段（起手 + 划动 25 px）、空点音效都按原版状态机实现；判定事件驱动 HUD 计分、combo、AP 率、技术分、等级、判定字与 SE，曲终横幅按实际成绩取 AP / FC / Clear / Finish。
+- **Mental**：开局满血（预览默认 TotalMental 1000），Bad / Miss / Hold 中间航点 / Trace Miss 分别扣 `trunc(TotalMental×k)+常数`，HUD 血条按比例填充、低于两成转红。**扣到 0 不失败**：对局继续，只是此后判定不再加分、技术分归零、曲终横幅取 Finish。
+- **渲染**：`renderer.setJudgeMode('manual')` 关闭 AutoPlay 的自动判定特效生成与同时押线，`setNoteStates` 提供每个音符的判定态——未判定（迟按窗口内）与漏判的音符越过判定线后沿同一轨迹继续下落，直到出屏（`renderer.spriteDraw`）；Hold 的 ribbon 与循环特效只跟原版 `_touched`（`HoldStatus.index != -1` 且最近的触摸不是 Canceled）走，松手 / 漏头 / 中间采样 Miss 都不收，直到尾判成功或尾判 Miss 离场（`renderer.holdDraw` / `renderer.holdLoopWanted`）。
+- **开播**：进入游玩模式等于从走带起点重开一局——开场过场照常播完，判定只在 0 秒之后生效。
+- **跳转**：手动模式下任何跳转（回拖、前跳、重开）都是从该时刻重开一局，不重放玩家输入；重开由视图显式调用 `hud.resetManual` 并重置判定引擎，HUD 不按时间差推断跳转，卡顿或后台恢复造成的时间大步前进照常推进、跳过的音符按漏判结算；判定偏移在侧栏「游玩判定偏移」调整并持久化，平移的是整条判定时钟（触摸时刻与超时结算一起，`playJudgeTime`），游玩中修改等于从当前时刻重开。
+- **未实现**：角色技能与语音；Mental 上限固定为预览默认值（原版取牌组 TotalMental）。
+
 ## 依据与限制
 
 参见 [实现依据与限制](../../docs/evidence.md)。行为以客户端二进制与场景序列化为准；重建工程仅辅助定位逻辑。不转换为 SUS，也不经过 WASM 渲染。
@@ -123,11 +135,11 @@ pnpm preview
 - 谱面解析与曲目时间（Fever、曲终）来自 `@sukushow/chart`。
 - `src/geometry.ts`：空间数学；`src/flatView.ts`：2D 俯视取景与线性下落曲线；`src/arcView.ts`：SIF 半圆取景与径向下落曲线。
 - `src/slice.ts`、`src/shaders.ts`、`src/rgAssets.ts`、`src/fx.ts`：9-slice、着色器、资源加载、hit FX。
-- `src/hud.ts`：SafeArea 覆盖层。
+- `src/hud.ts`：SafeArea 覆盖层；`src/judge.ts`：手动判定状态机；`src/screenLane.ts`：屏幕坐标 → 轨道 lane 反投影。
 - `src/transport.ts`、`src/audio.ts`、`src/se.ts`：播放时基、本地音乐与局内音效。
 - `src/score.ts`、`src/fever.ts`、`src/hudFxMath.ts`：计分、Fever 边线颜色与 HUD 动画曲线。
 - `src/renderer.ts`：WebGL 批量几何。
-- `src/rgOptions.ts`：游戏选项默认值；工作台和页面设置位于 `apps/web/src/views/llll/`。
+- `src/rgOptions.ts`：游戏选项默认值；工作台、页面设置与游玩输入捕获位于 `apps/web/src/views/llll/`。
 - `tests/`、`scripts/`：回归测试与本地语料校验。
 
 ## 许可与免责声明

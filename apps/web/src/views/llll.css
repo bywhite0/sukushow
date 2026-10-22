@@ -26,4 +26,17 @@
 }
 .stage-mode-switch button:hover{background:color-mix(in oklab,var(--shell-raised) 80%,transparent);color:var(--shell-text)}
 .stage-mode-switch button.is-active{background:var(--shell-accent);color:var(--shell-ink)}
+/* 游玩模式开关：与舞台模式按钮同一套强调色，按下即表示手动判定生效。 */
+#play-mode.is-active{background:var(--shell-accent);color:var(--shell-ink)}
+/* 游玩键盘提示：字号与 .setting small 一致，键位沿用全局 kbd 样式。 */
+.play-settings-hint{margin:0 0 22px;color:var(--shell-muted);font-size:10px;line-height:1.6}
+/* 游玩键位编辑器：分区键从左到右排成一行（窄栏自动折行），录入中的键位用强调色。 */
+.play-keys-zones{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:4px;margin:-12px 0 16px}
+.play-keys-air{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;font-size:12px}
+.play-keys-air>span{flex:1 1 auto}
+.play-keys-air small{color:var(--shell-muted);font-size:10px}
+.play-key{min-width:36px;min-height:32px;padding:0 6px;border:1px solid var(--shell-line);border-radius:4px;background:var(--shell-bg);color:var(--shell-text);font:12px var(--mono)}
+.play-key:hover{background:color-mix(in oklab,var(--shell-raised) 80%,transparent)}
+.play-key[aria-pressed="true"]{border-color:var(--shell-accent);background:var(--shell-accent);color:var(--shell-ink)}
+.play-keys-reset{margin:-12px 0 22px}
 @media (max-width:560px){.stage-mode-switch{top:var(--space-2);right:var(--space-2)}}

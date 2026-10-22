@@ -75,7 +75,11 @@ import { isFeverAt, type FeverWindow } from '@sukushow/chart/fever';
 import { noteJudgementTimes } from '@sukushow/chart/chart';
 import {
   DEFAULT_SCORE_CONFIG,
+  DEFAULT_TOTAL_MENTAL,
   ScoreEngine,
+  mentalMinus,
+  mentalRed,
+  reduceMental,
   scoreRankDisplay,
   technicalPercent,
   type ScoreEngineConfig,
@@ -103,6 +107,7 @@ import {
   dispatchAutoPlaySe,
   SeResolver,
 } from './se';
+import type { JudgeEvent } from './judge';
 
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
@@ -307,6 +312,18 @@ export class LiveHud {
     first: new Map(),
     second: new Map(),
   };
+  /** 手动游玩：HUD 只吃 `applyJudgement` 送来的判定事件，`sync` 不再按时间重放 AutoPlay 判定。 */
+  private manualPlay = false;
+  /** 本帧按住中的 Hold 数（视图每帧 `setHoldingHolds`；手动模式的持续音按它 AddHold）。 */
+  private holdingHolds = 0;
+  /**
+   * Mental（`IMentalResolver`）：开局满血，判定按 `ReduceBad/Miss/HoldMid/TraceMiss` 扣，
+   * 扣到 0 不失败——只是此后判定不再加分（`ScoreResolver.Add` 在 `Value < 1` 时跳过加分块），
+   * 技术分显示归零，曲终横幅取 Finish 档。
+   */
+  private mentalMax = DEFAULT_TOTAL_MENTAL;
+  private mental = DEFAULT_TOTAL_MENTAL;
+  private mentalMinusValues = mentalMinus(DEFAULT_TOTAL_MENTAL);
   private comboBounceAt = -1;
   private comboFlashAt = -1;
   /**
@@ -416,6 +433,115 @@ export class LiveHud {
   }
 
   /**
+   * 切换手动游玩模式。
+   *
+   * 打开：清空并进入手动态——此后 `sync` 只处理换谱与 SE 帧窗，跳转重开由调用方 `resetManual`；
+   * 分数、combo、AP、判定字全部由 `applyJudgement` 逐条驱动，不再按时间重放 AutoPlay 判定。
+   * 关闭：按当前时刻重建 AutoPlay 累计状态，避免把手动分数带进自动路径。
+   */
+  setManualPlay(on: boolean): void {
+    if (this.manualPlay === on) return;
+    this.manualPlay = on;
+    if (on) {
+      this.resetManual(this.previousTime);
+      return;
+    }
+    if (this.chart) {
+      this.se?.clear();
+      this.rebuildTo(this.chart, this.previousTime);
+    }
+  }
+
+  /**
+   * 手动模式重开：分数 / combo / AP / 等级 / 判定字 / FAST-SLOW / AP 継続 / Mental 全部归零，
+   * `previousTime` 落到 `time`，并按该时刻的 Fever 口径重置计分器；SE 清空（含 Hold 持续音）。
+   */
+  resetManual(time: number): void {
+    this.resetLive(time);
+    this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
+    this.holdingHolds = 0;
+    this.se?.clear();
+  }
+
+  /**
+   * 手动判定的唯一入口：一条 `JudgeEvent` 对应一次 HUD 结算。
+   *
+   * 顺序：AP 継続 → Mental → 计分 → AP / 技术分 / 等级 → 判定字 → FAST-SLOW → combo 弹跳 → SE。
+   * 判定刻的 Fever 按事件时刻取（与 `rebuildTo` 的逐判定刻口径一致），不依赖视图的调用顺序。
+   * SE 规则（4.12.0 手动策略）：Miss 不发声；Hold 中间航点不发声，只保留头判（判定档位音）与
+   * 尾判（Perfect 音）；Flick 走 AddFlick，Trace 与 Single 一样走 AddSingle。
+   */
+  applyJudgement(event: JudgeEvent): void {
+    if (event.kind === 'empty') {
+      this.se?.addEmptyTouch();
+      return;
+    }
+    const prevCombo = this.combo;
+    // AP 継続：`isApContinue &= (type & 0xFE) == 4`（ScoreResolver.Add @0x49A1460）。
+    this.isApContinue = apContinueAfterHit(this.isApContinue, event.type);
+    // Mental 先扣再计分：`ScoreResolver.Add` 在 `Value < 1` 时整块跳过加分（@0x49A1538）。
+    this.applyMental(event);
+    const mentalAlive = this.mental > 0;
+    this.scoreEngine.setFever(isFeverAt(event.time, this.feverWindow));
+    this.scoreEngine.add(event.type, mentalAlive);
+    this.combo = this.scoreEngine.combo;
+    this.apRate = this.scoreEngine.apRate;
+    this.paintApRate();
+    this.triggerAddScore(this.scoreEngine.lastAdd, event.time);
+    this.paintApVoltage();
+    this.paintTechnicalFromEngine();
+    if (!this.rankManual) {
+      this.setRank(scoreRankDisplay(this.scoreEngine.rank, this.scoreEngine.score));
+    }
+    if (shouldShowJudgement(event.type, this.judgementOutput)) {
+      this.applyJudgeSprite(event.type);
+      this.judgeAt = event.time;
+    }
+    if (shouldShowFastSlow(event.type, this.fastSlowThreshold)) {
+      this.applyConditionSprite(event.condition);
+      this.conditionAt = event.time;
+    }
+    if (this.combo >= 10) this.comboBounceAt = event.time;
+    this.onComboAdvanced(prevCombo, event.time);
+    this.dispatchJudgementSe(event);
+  }
+
+  /**
+   * Mental 扣减（`IMentalResolver`）：Bad → `ReduceBad`；Miss → `ReduceMiss`，
+   * 但 Hold 中间航点走 `ReduceHoldMid`、Trace 走 `ReduceTraceMiss`。
+   * 扣量见 `score.mentalMinus`（`MentalResolver..ctor` @0x499786C）。扣到 0 不失败。
+   */
+  private applyMental(event: JudgeEvent): void {
+    const m = this.mentalMinusValues;
+    let minus = 0;
+    if (event.type === 0) {
+      if (event.noteType === 3) minus = m.trace;
+      else if (event.noteType === 1 && event.hold && !event.head && !event.holdEnd) minus = m.holdMid;
+      else minus = m.miss;
+    } else if (event.type === 1) {
+      minus = m.bad;
+    }
+    if (minus > 0) this.mental = reduceMental(this.mental, minus);
+  }
+
+  /** 手动判定的 SE 派发；Hold 中间航点只计分，持续音由 `setHoldingHolds` + `sync` 维护。 */
+  private dispatchJudgementSe(event: JudgeEvent): void {
+    if (!this.se || event.type === 0) return;
+    if (event.hold && !event.head && !event.holdEnd) return;
+    if (event.flick) {
+      this.se.addFlick(event.lineHash);
+      return;
+    }
+    // Hold 尾判固定 Perfect 音（4.12.0 ManualHoldNotePolicy）；零长 Hold 头尾同点，按判定档位取音。
+    this.se.addSingle(event.holdEnd && !event.head ? 4 : event.type, event.lineHash);
+  }
+
+  /** 本帧按住中的 Hold 数（视图每帧调用）；手动模式据此维护 AddHold / ApplyHold 的持续音。 */
+  setHoldingHolds(n: number): void {
+    this.holdingHolds = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+  }
+
+  /**
    * playing=false（暂停）时任何时间变化都按跳转处理：不派发 SE、不触发新判定，
    * 直接按目标时刻重建 HUD 状态。播放中小步前进（< SEEK_GAP）才逐帧累计判定。
    */
@@ -424,8 +550,15 @@ export class LiveHud {
     if (chart !== this.chart) {
       this.chart = chart;
       this.seHashes = buildLineHashTables(chart);
-      this.se?.clear();
-      this.rebuildTo(chart, time);
+      if (this.manualPlay) {
+        // 手动模式换谱：重建 SE 线哈希后按目标时刻重开（resetManual 内含 se.clear()）。
+        this.resetManual(time);
+      } else {
+        this.se?.clear();
+        this.rebuildTo(chart, time);
+      }
+    } else if (this.manualPlay) {
+      this.syncManual(time, playing);
     } else {
       const previousTime = this.previousTime;
       const continuous = playing && time >= previousTime && time - previousTime < SEEK_GAP;
@@ -460,6 +593,27 @@ export class LiveHud {
     this.paintApVoltageFx(time);
   }
 
+  /**
+   * 手动模式的逐帧推进：只维护 SE 帧窗与 Hold 持续音，不累计任何 AutoPlay 判定。
+   *
+   * 不按时间差推断跳转：卡顿 / 后台恢复造成的大步前进与拖动跳转在时间轴上无法区分，
+   * 而判定引擎要对同一事件做同样处理。重开由发起跳转的调用方显式 `resetManual`，
+   * 这里只跟随时间——前进时推进 SE 帧窗，暂停或时间未前进时只记下时刻。
+   */
+  private syncManual(time: number, playing: boolean): void {
+    if (!playing || time <= this.previousTime) {
+      this.previousTime = time;
+      return;
+    }
+    this.previousTime = time;
+    this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
+    if (!this.se) return;
+    // 帧头 Process（三帧音量窗），随后按视图给的按住数 AddHold，帧尾 ApplyHold。
+    this.se.process();
+    for (let i = 0; i < this.holdingHolds; i++) this.se.addHold();
+    this.se.applyHold();
+  }
+
   dispose(): void {
     this.apRateBurstSparks = [];
   }
@@ -475,6 +629,11 @@ export class LiveHud {
   /** TotalAppeal / mastery / rank thresholds for halfwayScore + GetScoreRank. */
   setScoreConfig(partial: Partial<ScoreEngineConfig>): void {
     this.scoreEngine.configure(partial);
+    if (this.manualPlay) {
+      // 手动模式没有判定历史可重算：改配置等于重开一局。
+      this.resetManual(this.previousTime);
+      return;
+    }
     if (this.chart) {
       // 配置变更后按当前时刻重算，不清零。
       this.rebuildTo(this.chart, this.previousTime);
@@ -488,7 +647,8 @@ export class LiveHud {
 
   private paintTechnicalFromEngine(): void {
     if (this.techDisplayMode === 0) return;
-    const push = this.scoreEngine.technicalPush(this.techDisplayMode);
+    // Mental 归零后技术分归零（`MentalResolver.UpdateMentalView` 在 value==0 时调 UpdateTechnicalScore(0)）。
+    const push = this.scoreEngine.technicalPush(this.techDisplayMode, this.mental > 0);
     this.techText = formatTechnicalScore(technicalPercent(push));
   }
 
@@ -569,6 +729,7 @@ export class LiveHud {
   private resetLive(time: number): void {
     this.previousTime = time;
     this.scoreEngine.reset(this.chart);
+    this.mental = this.mentalMax;
     this.combo = 0;
     this.apRate = 0;
     this.judgeAt = -1;
@@ -983,6 +1144,24 @@ export class LiveHud {
 
   get feverActive(): boolean {
     return this.scoreEngine.feverActive;
+  }
+
+  /** 手动模式的当前 Mental（曲终横幅判定用：`GetResultIndex` 取 `mental ≥ 1` 才是 Clear）。 */
+  get liveMental(): number {
+    return this.mental;
+  }
+
+  /**
+   * `ComboFlags`（`ScoreResolver.GetComboFlags` @0x49A1060）：
+   * bit0 AllPerfect = 全部判定都是 Perfect / Perfect+（`<GetComboFlags>b__80_0` @0x49A5234 的 `(type & 0xFE) == 4`），
+   * bit1 FullCombo = 最大 combo == 判定总数（`[x19+0x12c] == [x19+0x130]`，中途没断过）。
+   * 全部 Perfect 时原版直接返回 3；一条判定都没有时 `0 == 0` 也算 AP。
+   */
+  get liveComboFlags(): number {
+    const j = this.scoreEngine.judgements;
+    const total = j.reduce((sum, n) => sum + n, 0);
+    if ((j[4] ?? 0) + (j[5] ?? 0) === total) return 3;
+    return this.scoreEngine.userCombo === total ? 2 : 0;
   }
 
   get feverVisible(): boolean {
@@ -1527,7 +1706,10 @@ export class LiveHud {
     }
   }
 
-  /** MENTAL 框：满血常驻（预览不扣血）。 */
+  /**
+   * MENTAL 框（`ParamViewResolver.UpdateMental` @0x499E7A4）：数值文本 + Slider 填充。
+   * 填充比例 = value / max；`value ≤ ceil(max × 0.2)` 时切红色渐变（GradientColor 的 isRedColor）。
+   */
   private drawMental(ctx: Ctx): void {
     fillRoundRect(ctx, 0, 0, 400, 80, 40, 'rgba(0,0,0,.302)');
     insetRing(ctx, 0, 0, 400, 80, 40, 2, '#1debc7');
@@ -1537,19 +1719,22 @@ export class LiveHud {
     scaleAbout(ctx, lb.x + lb.w / 2, lb.y + lb.h / 2, 0.92);
     drawOutlinedText(ctx, 'MENTAL', { size: 24, weight: 700 }, { color: TEAL, width: 2.4 }, '#fff', lb.x, lb.y, lb.w, lb.h);
     ctx.restore();
-    const full = '1000';
     const now = box(-16, 88), sep = box(41, 32), max = box(80, 80);
-    drawText(ctx, full, { size: 24, weight: 700, color: '#fff', align: 'right' }, now.x, now.y, now.w, now.h);
+    drawText(ctx, String(this.mental), { size: 24, weight: 700, color: '#fff', align: 'right' }, now.x, now.y, now.w, now.h);
     drawText(ctx, '/', { size: 24, weight: 700, color: '#fff' }, sep.x, sep.y, sep.w, sep.h);
-    drawText(ctx, full, { size: 24, weight: 700, color: '#fff', align: 'right' }, max.x, max.y, max.w, max.h);
+    drawText(ctx, String(this.mentalMax), { size: 24, weight: 700, color: '#fff', align: 'right' }, max.x, max.y, max.w, max.h);
     const tr = placeRect(400, 80, 0.5, 0.5, 0, 0.5, -160, -16, 280, 16);
     outerRing(ctx, tr.x, tr.y, tr.w, tr.h, 8, 2, 'rgb(78,68,75)');
     fillRoundRect(ctx, tr.x, tr.y, tr.w, tr.h, 8, 'rgb(25,20,24)');
-    // GradientColor level56 #1546 × white Fill（满血）
-    const grad = ctx.createLinearGradient(tr.x, 0, tr.x + tr.w, 0);
-    grad.addColorStop(0, 'rgb(29,235,199)');
-    grad.addColorStop(1, 'rgb(118,240,224)');
-    fillRoundRect(ctx, tr.x, tr.y, tr.w, tr.h, 8, grad);
+    const ratio = this.mentalMax > 0 ? Math.max(0, Math.min(1, this.mental / this.mentalMax)) : 0;
+    if (ratio <= 0) return;
+    const fill = { x: tr.x, y: tr.y, w: tr.w * ratio, h: tr.h };
+    const red = mentalRed(this.mental, this.mentalMax);
+    // GradientColor level56 #1546 × white Fill：正常青渐变 / 低于两成转红。
+    const grad = ctx.createLinearGradient(fill.x, 0, tr.x + tr.w, 0);
+    grad.addColorStop(0, red ? 'rgb(235,37,78)' : 'rgb(29,235,199)');
+    grad.addColorStop(1, red ? 'rgb(255,114,143)' : 'rgb(118,240,224)');
+    fillRoundRect(ctx, fill.x, fill.y, fill.w, fill.h, 8, grad);
   }
 
   /** 暂停按钮（SafeArea 右上，120×120）。 */
@@ -1691,6 +1876,7 @@ export class LiveHud {
       ap: { text: this.apText, voltage: this.voltageText, apFill: this.apFill, voltageFill: this.voltageFill },
       rank: this.rank,
       tech: this.techDisplayMode === 0 ? null : `${this.techText.whole}${this.techText.frac}`,
+      mental: { value: this.mental, max: this.mentalMax, red: mentalRed(this.mental, this.mentalMax) },
     };
   }
 }

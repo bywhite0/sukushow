@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SCORE_RANK_VALUES,
   ScoreEngine,
+  addMental,
   calcAdd,
   getScoreRank,
   halfwayScore,
+  mentalMinus,
+  mentalRed,
+  reduceMental,
   scoreGaugeFill,
   scoreRankDisplay,
   scoreRankLetter,
@@ -136,5 +140,42 @@ describe('ApResolver / Voltage', () => {
     expect(eng.lastAdd).toBe(one * 3);
     eng.add(0);
     expect(eng.lastAdd).toBe(0);
+  });
+});
+
+describe('Mental', () => {
+  it('扣量 = trunc(TotalMental × k) + 常数（Bad 0.03/30、Miss 0.05/50、Hold 中间 0.02/20、Trace 0.02/20）', () => {
+    expect(mentalMinus(1000)).toEqual({ bad: 60, miss: 100, holdMid: 40, trace: 40 });
+    // 1000×0.03 = 30.000000000000004 → 仍截断到 30；取整用的是 double 乘法后截断。
+    expect(mentalMinus(2000)).toEqual({ bad: 90, miss: 150, holdMid: 60, trace: 60 });
+    expect(mentalMinus(0)).toEqual({ bad: 30, miss: 50, holdMid: 20, trace: 20 });
+  });
+
+  it('Reduce* 扣到 0 为止；Add 在 0 上不动，否则最低 1', () => {
+    expect(reduceMental(1000, 100)).toBe(900);
+    expect(reduceMental(50, 100)).toBe(0);
+    expect(reduceMental(0, 100)).toBe(0);
+    expect(addMental(0, 500)).toBe(0);
+    expect(addMental(100, 500)).toBe(600);
+    expect(addMental(100, -200)).toBe(1);
+  });
+
+  it('血条红色阈值 = ceil(max × 0.2)', () => {
+    expect(mentalRed(201, 1000)).toBe(false);
+    expect(mentalRed(200, 1000)).toBe(true);
+    expect(mentalRed(0, 1000)).toBe(true);
+  });
+
+  it('Mental 归零后判定不再加分，但 combo 仍累计；技术分归零', () => {
+    const eng = new ScoreEngine();
+    eng.reset(null);
+    eng.add(4, true);
+    expect(eng.score).toBeGreaterThan(0);
+    const frozen = eng.score;
+    eng.add(4, false);
+    expect(eng.score).toBe(frozen);
+    expect(eng.lastAdd).toBe(0);
+    expect(eng.combo).toBe(2);
+    expect(technicalPushValue(eng.judgements, eng.allNoteSize, 1, false)).toBe(0);
   });
 });
