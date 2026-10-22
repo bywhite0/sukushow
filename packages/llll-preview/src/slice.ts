@@ -4,6 +4,11 @@
  */
 
 export const PITCH = 33.2 * Math.PI / 180;
+/**
+ * 弧形细分的弧长步长（世界单位）：弧形音符 9-slice、弧形贴图块、弧形带子共用同一口径，
+ * 单段弧长不超过它（段数另设上限 24）。
+ */
+export const ARC_SEG_WORLD = 0.2;
 
 /** HoldMeshView.cctor xmmword_1B001D0 / xmmword_1B00700 (HOLD_MESH.md). */
 export const HOLD_CENTER: readonly [number, number, number] = [46 / 255, 198 / 255, 1];
@@ -128,7 +133,12 @@ function billboardCorners(
   ];
 }
 
-/** Horizontal 3-patch slice, camera-facing. `x`/`unityZ` are lane coordinates. */
+/**
+ * Horizontal 3-patch slice, camera-facing. `x`/`unityZ` are lane coordinates.
+ *
+ * 俯视（2D / SIF）下 billboard 的俯角是 π/2，四角自动落到 y 平面上；SIF 的音符朝向由
+ * `pushArcNote` 按极坐标铺，不再需要平面内旋转。
+ */
 export function pushSlicedNote(
   pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
   x: number, y: number, unityZ: number, worldW: number, worldH: number,
@@ -144,6 +154,134 @@ export function pushSlicedNote(
     if (p.x1 - p.x0 <= 1e-6) continue;
     const c = billboardCorners(x, y, unityZ, p.x0, p.x1, -worldH / 2, worldH / 2);
     n = pushQuad(pos, uv, col, n, cap, c, [[p.u0, 0], [p.u1, 0], [p.u1, 1], [p.u0, 1]], color);
+  }
+  return n;
+}
+
+/**
+ * 弧形 9-slice 音符（SIF 半圆）：把贴图沿**切线方向弯成圆弧段**，宽音符（多 lane、判定弧上
+ * 可达几十度）不会画成一条横切扇形的直弦。
+ *
+ * 参数口径与 `pushSlicedNote(rot)` 一致（`worldW` / `worldH` 已含径向比例 `u`），位置改用极
+ * 坐标：`angle` = 车道角、`radius` = 判定弧世界半径、`centerZ` = 扇形圆心、`u` = 径向比例
+ * （0 圆心 → 1 判定弧）。贴图竖轴 `v = 0` 在外侧（朝判定弧），与平铺版一致；横向按弧长分段，
+ * 每段 ≤ 0.2 世界单位（判定弧处弦高 ≈ 0.4 px @1080p / 半径 38%，肉眼看是平滑的）。
+ */
+export function pushArcNote(
+  pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
+  y: number, angle: number, u: number, radius: number, centerZ: number,
+  worldW: number, worldH: number,
+  meta: SpriteMeta | undefined, color: number[] = [1, 1, 1, 1], scaleX = 0.75,
+) {
+  const r = u * radius;
+  if (r <= 1e-4 || worldW <= 1e-6) return n;
+  const { left, right, uL, uR } = sliceCaps(meta, worldW, scaleX);
+  const patches = [
+    { x0: -worldW / 2, x1: -worldW / 2 + left, u0: 0, u1: uL },
+    { x0: -worldW / 2 + left, x1: worldW / 2 - right, u0: uL, u1: 1 - uR },
+    { x0: worldW / 2 - right, x1: worldW / 2, u0: 1 - uR, u1: 1 },
+  ];
+  const rIn = Math.max(0, r - worldH / 2), rOut = r + worldH / 2;
+  const at = (da: number, rr: number): number[] => {
+    const a = angle + da;
+    return [Math.sin(a) * rr, y, -(centerZ - Math.cos(a) * rr)];
+  };
+  for (const p of patches) {
+    const w = p.x1 - p.x0;
+    if (w <= 1e-6) continue;
+    const seg = Math.max(1, Math.min(24, Math.ceil(w / ARC_SEG_WORLD)));
+    for (let i = 0; i < seg; i++) {
+      const t0 = i / seg, t1 = (i + 1) / seg;
+      const u0 = p.u0 + (p.u1 - p.u0) * t0, u1 = p.u0 + (p.u1 - p.u0) * t1;
+      n = pushQuad(
+        pos, uv, col, n, cap,
+        [at((p.x0 + w * t0) / r, rOut), at((p.x0 + w * t1) / r, rOut), at((p.x0 + w * t1) / r, rIn), at((p.x0 + w * t0) / r, rIn)],
+        [[u0, 0], [u1, 0], [u1, 1], [u0, 1]],
+        color,
+      );
+    }
+  }
+  return n;
+}
+
+/**
+ * 弧形贴图块（SIF 半圆）：单张 UV 矩形沿切线方向弯成弧段，用于 flick 箭头 / 图标 / 标记 / 特效
+ * 精灵这类「和音符一样宽」的贴图——宽音符在判定弧上可达几十度，直条会横切扇形。
+ *
+ * 参数口径同 `pushArcNote`：`worldW` / `worldH` 已含径向比例 `u`，`uvRect` = [u0, v0, u1, v1]。
+ * `rot` 是贴图自身的平面旋转（绕锚点，例如粒子 spin）；`rot = 0` 时宽沿切线、高沿半径。
+ */
+export function pushArcQuad(
+  pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
+  y: number, angle: number, u: number, radius: number, centerZ: number,
+  worldW: number, worldH: number,
+  uvRect: readonly number[] = [0, 0, 1, 1], color: number[] = [1, 1, 1, 1], rot = 0,
+) {
+  const r = u * radius;
+  if (r <= 1e-4 || worldW <= 1e-6) return n;
+  const [u0, v0, u1, v1] = uvRect;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  // 局部坐标：s = 切向（弧长）、t = 径向（+ 朝外），先绕锚点转 rot 再映射到极坐标。
+  const at = (s: number, t: number): number[] => {
+    const rs = s * cos - t * sin, rt = s * sin + t * cos;
+    const rr = Math.max(1e-4, r + rt);
+    // 宽度按**锚点**半径折算角度（与音符同一口径：车道 → 角度），内外缘角宽一致。
+    const a = angle + rs / r;
+    return [Math.sin(a) * rr, y, -(centerZ - Math.cos(a) * rr)];
+  };
+  const seg = Math.max(1, Math.min(24, Math.ceil(worldW / ARC_SEG_WORLD)));
+  for (let i = 0; i < seg; i++) {
+    const t0 = i / seg, t1 = (i + 1) / seg;
+    const s0 = -worldW / 2 + worldW * t0, s1 = -worldW / 2 + worldW * t1;
+    const vv0 = u0 + (u1 - u0) * t0, vv1 = u0 + (u1 - u0) * t1;
+    n = pushQuad(
+      pos, uv, col, n, cap,
+      [at(s0, worldH / 2), at(s1, worldH / 2), at(s1, -worldH / 2), at(s0, -worldH / 2)],
+      [[vv0, v0], [vv1, v0], [vv1, v1], [vv0, v1]],
+      color,
+    );
+  }
+  return n;
+}
+
+/**
+ * 弧形「底对齐」带（SIF 半圆）：`pushBillboard(..., pivotBottom = true)` 的弯版，用于击中光条 /
+ * flick 箭头这类**带状**特效——它们平铺时从锚点朝屏幕上方伸出，在扇形里就该沿半径指向圆心。
+ *
+ * 口径同 `pushBillboard`：`worldW` 沿切线、`worldH` 沿半径；锚点固定在带子的外缘（贴住音符，
+ * `v0` 在外缘），带子朝圆心方向伸 `worldH`。居中的弧形贴图块用 `pushArcQuad`。
+ * `rot` 是粒子自身的平面旋转（绕锚点）。`uvRect` = [u0, v0, u1, v1]。
+ */
+export function pushArcBand(
+  pos: Float32Array, uv: Float32Array, col: Float32Array, n: number, cap: number,
+  y: number, angle: number, r: number, centerZ: number,
+  worldW: number, worldH: number,
+  uvRect: readonly number[] = [0, 0, 1, 1], color: number[] = [1, 1, 1, 1],
+  rot = 0,
+) {
+  if (r <= 1e-4 || worldW <= 1e-6) return n;
+  const [u0, v0, u1, v1] = uvRect;
+  // 局部坐标：s = 切向（弧长）、t = 径向（+ 朝外）；锚点在外缘（t = 0）。
+  const tOuter = 0, tInner = -worldH;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const corner = (s: number, t: number): number[] => {
+    const rs = s * cos - t * sin, rt = s * sin + t * cos;
+    const rr = Math.max(1e-4, r + rt);
+    // 宽度按**锚点**半径折算角度（与音符同一口径：车道 → 角度），内外缘角宽一致。
+    const a = angle + rs / r;
+    return [Math.sin(a) * rr, y, -(centerZ - Math.cos(a) * rr)];
+  };
+  const seg = Math.max(1, Math.min(24, Math.ceil(worldW / ARC_SEG_WORLD)));
+  for (let i = 0; i < seg; i++) {
+    const t0 = i / seg, t1 = (i + 1) / seg;
+    const s0 = -worldW / 2 + worldW * t0, s1 = -worldW / 2 + worldW * t1;
+    const uu0 = u0 + (u1 - u0) * t0, uu1 = u0 + (u1 - u0) * t1;
+    n = pushQuad(
+      pos, uv, col, n, cap,
+      [corner(s0, tOuter), corner(s1, tOuter), corner(s1, tInner), corner(s0, tInner)],
+      [[uu0, v0], [uu1, v0], [uu1, v1], [uu0, v1]],
+      color,
+    );
   }
   return n;
 }

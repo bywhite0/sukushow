@@ -51,6 +51,7 @@ app.innerHTML=`
   <div class="stage-mode-switch" role="group" aria-label="谱面显示模式">
    <button type="button" data-stage-mode="3d" aria-pressed="true">3D</button>
    <button type="button" data-stage-mode="2d" aria-pressed="false">2D</button>
+   <button type="button" data-stage-mode="sif" aria-pressed="false">SIF</button>
   </div>
   <div class="resource-loading" data-resource-loading role="status" aria-live="polite">
    <div class="resource-loading-card">
@@ -79,6 +80,8 @@ app.innerHTML=`
 <label class="setting" for="opt-lane-width"><span>轨道宽度 LaneWidth<output id="opt-lane-width-value">100</output></span><input id="opt-lane-width" type="range" min="80" max="120" step="1" value="100"></label>
 <label class="setting" for="opt-flat-track"><span>2D 轨道宽度 <small>占屏宽 %</small><output id="opt-flat-track-value">60</output></span><input id="opt-flat-track" type="range" min="30" max="90" step="1" value="60"><small>俯视（2D）模式的轨道宽度，等价于调 2D 相机距离；越大越近、读谱窗口越短。</small></label>
 <label class="setting" for="opt-flat-judge"><span>2D 判定线位置 <small>占屏高 %</small><output id="opt-flat-judge-value">73</output></span><input id="opt-flat-judge" type="range" min="55" max="90" step="1" value="73"><small>俯视（2D）模式下判定线的高度：上下移动时轨道上的判定线、判定线贴图、边线近端与下落窗口一起跟随。</small></label>
+<label class="setting" for="opt-sif-radius"><span>SIF 轨道半径 <small>占取景基准 %</small><output id="opt-sif-radius-value">38</output></span><input id="opt-sif-radius" type="range" min="26" max="44" step="1" value="38"><small>SIF（半圆）模式的判定弧半径，取 min(舞台宽, 16:9×舞台高) 的百分比；越大越近、判定弧越长。半径过大时按画布剩余空间收窄，判定弧不会跑出画面。</small></label>
+<label class="setting" for="opt-sif-center"><span>SIF 圆心高度 <small>占屏高 %</small><output id="opt-sif-center-value">25</output></span><input id="opt-sif-center" type="range" min="12" max="40" step="1" value="25"><small>SIF（半圆）模式的圆心高度：上下移动时圆心与判定弧一起跟随。SIF 固定 180° 扇形，LaneWidth 在此模式不生效。</small></label>
 <label class="setting" for="opt-grid"><span>轨道分割 GridCount</span><select id="opt-grid"><option value="0" selected>关闭</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option><option value="5">6</option></select></label>
 <label class="setting" for="opt-fps"><span>目标帧率</span><select id="opt-fps"><option value="0" selected>60</option><option value="1">120</option></select></label>
 <label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label>
@@ -166,6 +169,8 @@ function readSettings():PreviewSettings{
   laneWidth:Number(input('opt-lane-width').value),
   flatTrackWidth:Number(input('opt-flat-track').value),
   flatJudgeLine:Number(input('opt-flat-judge').value),
+  sifRadius:Number(input('opt-sif-radius').value),
+  sifCenterY:Number(input('opt-sif-center').value),
   laneDarkness:Number(input('opt-lane-dark').value),
   backgroundDarkness:Number(input('opt-bg-dark').value),
   gridCount:Number(el<HTMLSelectElement>('opt-grid').value),
@@ -204,6 +209,8 @@ function applySettingsToForm(s:PreviewSettings){
  input('opt-lane-width').value=String(s.laneWidth);el('opt-lane-width-value').textContent=String(s.laneWidth);
  input('opt-flat-track').value=String(s.flatTrackWidth);el('opt-flat-track-value').textContent=String(s.flatTrackWidth);
  input('opt-flat-judge').value=String(s.flatJudgeLine);el('opt-flat-judge-value').textContent=String(s.flatJudgeLine);
+ input('opt-sif-radius').value=String(s.sifRadius);el('opt-sif-radius-value').textContent=String(s.sifRadius);
+ input('opt-sif-center').value=String(s.sifCenterY);el('opt-sif-center-value').textContent=String(s.sifCenterY);
  input('opt-lane-dark').value=String(s.laneDarkness);el('opt-lane-dark-value').textContent=String(s.laneDarkness);
  input('opt-bg-dark').value=String(s.backgroundDarkness);el('opt-bg-dark-value').textContent=String(s.backgroundDarkness);
  el<HTMLSelectElement>('opt-grid').value=String(s.gridCount);
@@ -304,8 +311,9 @@ const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
 const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
-type LlllStageMode='3d'|'2d';
+type LlllStageMode='3d'|'2d'|'sif';
 const stageModeButtons=Array.from(root.querySelectorAll<HTMLButtonElement>('.stage-mode-switch button[data-stage-mode]'));
+const stageModeOf=(value:string|undefined):LlllStageMode=>value==='2d'?'2d':value==='sif'?'sif':'3d';
 function setStageMode(mode:LlllStageMode){
  stage.dataset.stageMode=mode;
  renderer?.setCameraMode(mode);
@@ -316,7 +324,7 @@ function setStageMode(mode:LlllStageMode){
  }
 }
 for(const button of stageModeButtons){
- button.onclick=()=>setStageMode(button.dataset.stageMode==='2d'?'2d':'3d');
+ button.onclick=()=>setStageMode(stageModeOf(button.dataset.stageMode));
 }
 setStageMode('3d');
 comboResult.setKind(readSettings().comboResult);
@@ -488,6 +496,8 @@ const applyVisualOptions=()=>{
  const laneWidth=Number(input('opt-lane-width').value);
  const flatTrackWidth=Number(input('opt-flat-track').value);
  const flatJudgeLine=Number(input('opt-flat-judge').value);
+ const sifRadius=Number(input('opt-sif-radius').value);
+ const sifCenterY=Number(input('opt-sif-center').value);
  const gridCount=Number(el<HTMLSelectElement>('opt-grid').value);
  const laneDarkness=Number(input('opt-lane-dark').value);
  const backgroundDarkness=Number(input('opt-bg-dark').value);
@@ -495,9 +505,11 @@ const applyVisualOptions=()=>{
  el('opt-lane-width-value').textContent=String(laneWidth);
  el('opt-flat-track-value').textContent=String(flatTrackWidth);
  el('opt-flat-judge-value').textContent=String(flatJudgeLine);
+ el('opt-sif-radius-value').textContent=String(sifRadius);
+ el('opt-sif-center-value').textContent=String(sifCenterY);
  el('opt-lane-dark-value').textContent=String(laneDarkness);
  el('opt-bg-dark-value').textContent=String(backgroundDarkness);
- renderer?.setVisualOptions({noteStartZ,laneWidth,flatTrackWidth,flatJudgeLine,gridCount,laneDarkness});
+ renderer?.setVisualOptions({noteStartZ,laneWidth,flatTrackWidth,flatJudgeLine,sifRadius,sifCenterY,gridCount,laneDarkness});
  // ChangeBackgroundAlpha: Dim _Color.a = BackgroundDarkness/100（只盖舞台背景，不盖 3D / HUD）
  compositor.setBackgroundDim(backgroundDarkness/100);el('stage-canvas').dataset.bgDim=String(compositor.backgroundDim);
  persistSettings();
@@ -506,6 +518,8 @@ input('opt-start-z').oninput=applyVisualOptions;
 input('opt-lane-width').oninput=applyVisualOptions;
 input('opt-flat-track').oninput=applyVisualOptions;
 input('opt-flat-judge').oninput=applyVisualOptions;
+input('opt-sif-radius').oninput=applyVisualOptions;
+input('opt-sif-center').oninput=applyVisualOptions;
 input('opt-lane-dark').oninput=applyVisualOptions;
 input('opt-bg-dark').oninput=applyVisualOptions;
 el<HTMLSelectElement>('opt-grid').onchange=applyVisualOptions;
@@ -536,7 +550,7 @@ let comboLastT=0;
 let lastLiveFrame: { time: number; chart: Chart | null; playing: boolean; revision: number; image: number; hudTexture: number; resultTexture: boolean; width: number; height: number; dpr: number; mode: string } | null = null;
 clearChart();
 const invalidatePreview=()=>{visualRevision++;};
-const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-flat-track','opt-flat-judge','opt-grid','opt-lane-dark','opt-bg-dark',
+const visualInputs=['speed','mirror','lines','opt-start-z','opt-lane-width','opt-flat-track','opt-flat-judge','opt-sif-radius','opt-sif-center','opt-grid','opt-lane-dark','opt-bg-dark',
  'opt-judge-y','opt-fs-y','opt-perfect-plus','opt-judgement-output','opt-fast-slow','opt-fever',
  'opt-ap-continue','opt-start-anim','opt-combo-result','opt-hit-effect','rank-preview','tech-score','opt-appeal','opt-mastery'];
 for(const id of visualInputs){

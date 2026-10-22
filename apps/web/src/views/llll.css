@@ -11,7 +11,8 @@
 .view-llll .stage #chart-canvas{opacity:1}
 .view-llll .stage #stage-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:2}
 
-/* 舞台内的 3D / 2D 切换：浮在画面上，所以用半透明底；配色与其余控件同源（accent + 圆角变量）。 */
+/* 舞台内的 3D / 2D / SIF 切换：浮在画面上，所以用半透明底；配色与其余控件同源（accent + 圆角变量）。
+   三档按钮等宽（SIF 比 3D / 2D 多一个字符），窄屏下只收紧间距、不换行。 */
 .stage-mode-switch{
   position:absolute;top:var(--space-3);right:var(--space-3);z-index:5;
   display:inline-flex;align-items:center;gap:2px;padding:2px;
@@ -20,8 +21,8 @@
   box-shadow:0 6px 18px oklch(0% 0 0 / .28);
 }
 .stage-mode-switch button{
-  min-width:34px;height:26px;padding:0 var(--space-2);border:0;border-radius:var(--radius-xs);
-  background:transparent;color:var(--shell-muted);font:700 var(--text-micro)/1 "Segoe UI",sans-serif;cursor:pointer;
+  min-width:38px;height:26px;padding:0 var(--space-2);border:0;border-radius:var(--radius-xs);
+  background:transparent;color:var(--shell-muted);font:700 var(--text-micro)/1 "Segoe UI",sans-serif;cursor:pointer;white-space:nowrap;
 }
 .stage-mode-switch button:hover{background:color-mix(in oklab,var(--shell-raised) 80%,transparent);color:var(--shell-text)}
 .stage-mode-switch button.is-active{background:var(--shell-accent);color:var(--shell-ink)}

@@ -44,6 +44,13 @@ export const FLAT_TRACK_FRACTION = FLAT_TRACK_DEFAULT / 100;
 export const LINE_OVERHANG = 1.12;
 /** 判定线贴图（`sc2_ingame_tap_line`）在 UI 设计坐标里的宽度，见 renderer.buildUi。 */
 export const TAP_LINE_WIDTH = 1612;
+/**
+ * 判定线贴图的图集尺寸（px）与两端端帽宽度（px）：`meta` 缺失时的兜底，也是 SIF 判定弧
+ * 贴图带厚度（`ARC_JUDGE_BAND`）的换算基准 —— 图集 168×54、端帽各 81。
+ */
+export const TAP_LINE_ATLAS_W = 168;
+export const TAP_LINE_ATLAS_H = 54;
+export const TAP_LINE_CAP_PX = 81;
 /** 判定线贴图中心相对舞台中心的 y 偏移（UI 设计坐标，屏幕向下为正）。3D 固定用它。 */
 export const JUDGE_LINE_OFFSET = 253;
 /**

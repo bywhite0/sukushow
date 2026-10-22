@@ -22,7 +22,7 @@
 
 ## 入口
 
-`apps/web` 是唯一产品入口，按 `?view=llll|pjsk` 加载两个模式；LLLL 舞台内置 2D/3D 相机切换，导航位于视图容器之外。
+`apps/web` 是唯一产品入口，按 `?view=llll|pjsk` 加载两个模式；LLLL 舞台内置 3D / 2D 俯视 / SIF 半圆三档相机切换（SIF 为参考 School Idol Festival 的 180° 判定弧预览），导航位于视图容器之外。
 
 ```text
 pnpm dev                 # http://127.0.0.1:5170

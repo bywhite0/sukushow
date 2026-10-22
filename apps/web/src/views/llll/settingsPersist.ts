@@ -3,6 +3,9 @@
 import {
   FLAT_JUDGE_DEFAULT, FLAT_JUDGE_MAX, FLAT_JUDGE_MIN, FLAT_TRACK_DEFAULT, FLAT_TRACK_MAX, FLAT_TRACK_MIN,
 } from '@sukushow/llll-preview/flatView';
+import {
+  ARC_CENTER_DEFAULT, ARC_CENTER_MAX, ARC_CENTER_MIN, ARC_RADIUS_DEFAULT, ARC_RADIUS_MAX, ARC_RADIUS_MIN,
+} from '@sukushow/llll-preview/arcView';
 import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '@sukushow/llll-preview/rgOptions';
 import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
 
@@ -52,6 +55,10 @@ export type PreviewSettings = {
   flatTrackWidth: number;
   /** 2D 判定线位置（舞台高的百分比）；判定线贴图 / 边线近端 / 下落窗口一起移动。 */
   flatJudgeLine: number;
+  /** SIF 半圆模式的判定弧半径（占 min(舞台宽, 16:9×舞台高) 的百分比）。 */
+  sifRadius: number;
+  /** SIF 半圆模式的圆心高度（舞台高的百分比）；圆心上下移动时相机跟着走。 */
+  sifCenterY: number;
 };
 
 export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
@@ -90,6 +97,8 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   aspectRatio: DEFAULT_ASPECT,
   flatTrackWidth: FLAT_TRACK_DEFAULT,
   flatJudgeLine: FLAT_JUDGE_DEFAULT,
+  sifRadius: ARC_RADIUS_DEFAULT,
+  sifCenterY: ARC_CENTER_DEFAULT,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -154,6 +163,8 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     aspectRatio: isAspectId(o.aspectRatio) ? o.aspectRatio : d.aspectRatio,
     flatTrackWidth: clamp(Math.trunc(num('flatTrackWidth', d.flatTrackWidth)), FLAT_TRACK_MIN, FLAT_TRACK_MAX),
     flatJudgeLine: clamp(Math.trunc(num('flatJudgeLine', d.flatJudgeLine)), FLAT_JUDGE_MIN, FLAT_JUDGE_MAX),
+    sifRadius: clamp(Math.trunc(num('sifRadius', d.sifRadius)), ARC_RADIUS_MIN, ARC_RADIUS_MAX),
+    sifCenterY: clamp(Math.trunc(num('sifCenterY', d.sifCenterY)), ARC_CENTER_MIN, ARC_CENTER_MAX),
   };
 }
 

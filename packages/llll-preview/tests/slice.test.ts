@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  pushArcBand,
+  pushArcNote,
+  pushArcQuad,
   pushSlicedNote,
   pushTrailSegment,
   sliceCaps,
@@ -151,5 +154,87 @@ describe('水平 9-slice', () => {
     const caps = sliceCaps(tapLine, worldWidthOf(12, 80), 0.75 * scale);
     expect(caps.left).toBeCloseTo((81 / 100) * 0.75 * scale);
     expect(caps.right).toBeCloseTo((81 / 100) * 0.75 * scale);
+  });
+});
+
+/** SIF 弧形几何：把 three 坐标（z 已取反）折回极坐标，便于断言「贴着弧」。 */
+function arcPolar(pos: Float32Array, i: number, centerZ: number) {
+  const x = pos[i * 3], z = -pos[i * 3 + 2];
+  return { a: Math.atan2(x, centerZ - z), r: Math.hypot(x, centerZ - z) };
+}
+
+describe('SIF 弧形音符（弯开的 9-slice）', () => {
+  const R = 9 / Math.PI;
+  const centerZ = 5;
+  const u = 0.8, r = u * R, h = 0.45 * u, w = worldWidthOf(13, 100) * u;
+
+  it('所有顶点都落在 [r − h/2, r + h/2]，角宽 = 世界宽 / r（不是直弦）', () => {
+    const b = buffers(256);
+    const n = pushArcNote(b.pos, b.uv, b.col, 0, b.cap, 4.5, 0.3, u, R, centerZ, w, h, tapLine, [1, 1, 1, 1], 0.75);
+    expect(n).toBeGreaterThan(12);
+    let rMin = Infinity, rMax = 0, aMin = Infinity, aMax = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const p = arcPolar(b.pos, i, centerZ);
+      rMin = Math.min(rMin, p.r); rMax = Math.max(rMax, p.r);
+      aMin = Math.min(aMin, p.a); aMax = Math.max(aMax, p.a);
+    }
+    expect(rMin).toBeGreaterThanOrEqual(r - h / 2 - 1e-6);
+    expect(rMax).toBeLessThanOrEqual(r + h / 2 + 1e-6);
+    // 直弦的话角点半径会比外缘大 (半宽)²/(2r)；弯开后角宽严格 = 弧长 / 半径。
+    expect(aMax - aMin).toBeCloseTo(w / r, 6);
+  });
+
+  it('uv 横轴铺满整张贴图（左帽 / 中段 / 右帽），v 轴 0→1', () => {
+    const b = buffers(256);
+    const n = pushArcNote(b.pos, b.uv, b.col, 0, b.cap, 4.5, 0, u, R, centerZ, w, h, tapLine, [1, 1, 1, 1], 0.75);
+    let uMin = 1, uMax = 0, vMin = 1, vMax = 0;
+    for (let i = 0; i < n; i++) {
+      uMin = Math.min(uMin, b.uv[i * 2]); uMax = Math.max(uMax, b.uv[i * 2]);
+      vMin = Math.min(vMin, b.uv[i * 2 + 1]); vMax = Math.max(vMax, b.uv[i * 2 + 1]);
+    }
+    expect(uMin).toBeCloseTo(0, 6);
+    expect(uMax).toBeCloseTo(1, 6);
+    expect(vMin).toBeCloseTo(0, 6);
+    expect(vMax).toBeCloseTo(1, 6);
+  });
+
+  it('pushArcQuad 按给定 uvRect 铺一段', () => {
+    const b = buffers(256);
+    const n = pushArcQuad(b.pos, b.uv, b.col, 0, b.cap, 4.5, 0, u, R, centerZ, w, h, [0.375, 0, 0.625, 0.25]);
+    let uMin = 1, uMax = 0, vMax = 0;
+    for (let i = 0; i < n; i++) {
+      uMin = Math.min(uMin, b.uv[i * 2]); uMax = Math.max(uMax, b.uv[i * 2]);
+      vMax = Math.max(vMax, b.uv[i * 2 + 1]);
+    }
+    expect(uMin).toBeCloseTo(0.375, 6);
+    expect(uMax).toBeCloseTo(0.625, 6);
+    expect(vMax).toBeCloseTo(0.25, 6);
+  });
+});
+
+describe('SIF 弧形带（击中光条 / flick 箭头）', () => {
+  const R = 9 / Math.PI;
+  const centerZ = 5;
+
+  it('底对齐：顶点落在 [r − h, r]，角宽 = w / r，v0 在外缘', () => {
+    const b = buffers(512);
+    const w = 1.2, h = 0.6;
+    const n = pushArcBand(b.pos, b.uv, b.col, 0, b.cap, 4.5, 0, R, centerZ, w, h, [0.375, 0, 0.625, 0.25], [1, 1, 1, 1]);
+    expect(n).toBe(6 * Math.ceil(w / 0.2));
+    let rMin = Infinity, rMax = 0, aMin = Infinity, aMax = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const p = arcPolar(b.pos, i, centerZ);
+      rMin = Math.min(rMin, p.r); rMax = Math.max(rMax, p.r);
+      aMin = Math.min(aMin, p.a); aMax = Math.max(aMax, p.a);
+    }
+    // 平铺 billboard 的 up 方向 = 朝圆心 ⇒ 带子从锚点向内伸 h。
+    expect(rMax).toBeCloseTo(R, 6);
+    expect(rMin).toBeCloseTo(R - h, 6);
+    expect(aMax - aMin).toBeCloseTo(w / R, 6);
+    // 外缘（锚点）那一圈取 uvRect 的 v0。
+    for (let i = 0; i < n; i++) {
+      if (Math.abs(arcPolar(b.pos, i, centerZ).r - R) < 1e-6) expect(b.uv[i * 2 + 1]).toBeCloseTo(0, 6);
+      else expect(b.uv[i * 2 + 1]).toBeCloseTo(0.25, 6);
+    }
   });
 });

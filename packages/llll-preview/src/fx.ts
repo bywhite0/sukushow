@@ -10,7 +10,7 @@ import { BORDER, Y, edges, worldX } from './geometry';
 import type { FxFile, FxGrad, FxMM, FxNode, FxPrefab, FxMat } from './rgAssets';
 import { fxMaterial } from './shaders';
 import { fnv1a, lcg, mixSeed } from './rng';
-import { PITCH, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
+import { PITCH, pushArcBand, pushArcQuad, pushBillboard, pushLocalQuad, pushTrailSegment } from './slice';
 
 const MAX_SPARKS = 2400;
 const SEEK = 0.5;
@@ -291,6 +291,19 @@ export class HitFx {
    * `zNear`/`zFar` = 判定线到轨道远端（可见轨道长度）。由 renderer 每帧喂入。
    */
   private flatRail: FlatRail | null = null;
+  /**
+   * SIF 半圆：把粒子位置从直角轨道投影到半圆盘（`renderer` 每帧喂入；null = 不投影）。
+   *
+   * 投影发生在 `sparkPoint` 的最后一步，所以精灵、拖尾历史点、fever 边线彗星都一起跟着弯；
+   * 平面位移折算（`flatParticlePoint`）先把竖直位移折到轨道面，再由这里把 (x, z) 映射成
+   * 极坐标位置，于是打击粒子仍然贴着音符、并沿半径方向散开。
+   */
+  private arcProject: ((p: { x: number; y: number; z: number }) => { x: number; y: number; z: number }) | null = null;
+  /**
+   * SIF 的扇形取景（圆心 z + 判定弧世界半径）：击中光条 / flick 箭头这类**带状**粒子
+   * （`PlaneEffectModel01`）靠它把平铺直条弯成弧段（见 `pushArcBand`）。
+   */
+  private arcFrame: { radius: number; centerZ: number } | null = null;
   /** 粒子保持默认轨道坐标，绘制时统一应用轨道宽度的 X 缩放。 */
   private laneWidthScale = 1;
   private specs = new Map<string, Spec[]>();
@@ -315,6 +328,19 @@ export class HitFx {
   /** 2D：fever 边线层（LineCoreMove / LineParticle 子树）要贴住的轨道边几何。 */
   setFlatRail(rail: FlatRail | null): void {
     this.flatRail = rail;
+  }
+  /**
+   * SIF 半圆：把粒子位置投影到半圆盘（见 `arcProject`）。
+   *
+   * 传入 `frame` 后，粒子按所在位置的车道角铺开（普通精灵走 `pushArcQuad`、带状粒子走
+   * `pushArcBand`），否则在扇形上只是一堆轴向方块。
+   */
+  setArc(
+    project: ((p: { x: number; y: number; z: number }) => { x: number; y: number; z: number }) | null,
+    frame: { radius: number; centerZ: number } | null = null,
+  ): void {
+    this.arcProject = project;
+    this.arcFrame = frame;
   }
   /** 2D 俯视的粒子位置：把「相对出生点的 3D 位移」折到轨道面上（见 flatParticlePoint）。 */
   private flatPoint(s: Spark, p: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
@@ -343,8 +369,16 @@ export class HitFx {
    * 粒子的绘制位置：3D 用世界坐标（含 World 模拟空间烘进去的出生偏移）；2D 走
    * `flatParticlePoint`；fever 边线层（LineCoreMove 彗星）在 2D 改贴轨道边。
    * 传入 `at` 时用于拖尾历史点（历史点已是世界坐标，不再叠加出生偏移）。
+   *
+   * SIF 半圆模式在最后一步再套一层极坐标投影（见 `arcProject`）。
    */
   private sparkPoint(
+    live: Live, s: Spark, at?: { x: number; y: number; z: number },
+  ): { x: number; y: number; z: number } {
+    const p = this.sparkPointRaw(live, s, at);
+    return this.arcProject ? this.arcProject(p) : p;
+  }
+  private sparkPointRaw(
     live: Live, s: Spark, at?: { x: number; y: number; z: number },
   ): { x: number; y: number; z: number } {
     const railMapped = this.flat && this.flatRail && live.coreSide && s.railT !== undefined;
@@ -370,8 +404,15 @@ export class HitFx {
     if (scale === 1) return;
     for (let i = from * 3; i < to * 3; i += 3) positions[i] *= scale;
   }
-  /** 两侧入场爆发是固定在屏幕侧的大粒子，不随轨道边线宽度变换。 */
+  /**
+   * 粒子位置要不要按轨道宽度（LaneWidth）做 X 缩放。
+   *
+   * 两侧入场爆发是固定在屏幕侧的大粒子，不随轨道边线宽度变换；SIF 的扇形固定 180°、
+   * LaneWidth 不参与角度映射（与音符一致），所以整个 SIF 模式都不缩放 —— 否则粒子会
+   * 落在音符外侧（音符在基准宽度上，粒子被放大 1.2 倍就跑到弧外了）。
+   */
   private laneScaleFor(live: Live): number {
+    if (this.arcFrame) return 1;
     return live.id === 'feverLeft' || live.id === 'feverRight' ? 1 : this.laneWidthScale;
   }
   private batchFor(mat: FxMat | undefined, order: number): string | undefined {
@@ -1006,6 +1047,19 @@ export class HitFx {
       if (s.mesh === 2 && !this.flat) {
         // PlaneEffectModel01: local upright, bottom pivot (impact light column).
         batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color, PLANE_UV, true);
+      } else if (s.mesh === 2 && this.arcFrame) {
+        // SIF：击中光条 / flick 箭头是「带状」的，平铺直条在半圆上会横切扇形；
+        // 按所在车道角弯成弧段（底对齐 = 从音符位置沿半径指向圆心）。
+        // 朝向已由极坐标给出，所以这里只叠粒子自己的 `s.spin`，不能再加车道角。
+        const cz = this.arcFrame.centerZ;
+        const dx = x, dz = cz - z;
+        const r = Math.hypot(dx, dz);
+        if (r > 1e-4) {
+          batch.n = pushArcBand(
+            batch.pos, batch.uv, batch.col, batch.n, batch.cap,
+            y, Math.atan2(dx, dz), r, cz, sx, sy, PLANE_UV, color, s.spin,
+          );
+        }
       } else if (s.mesh === 2) {
         // 2D：平铺后仍要保留 PlaneEffectModel01 的贴图子矩形与底部对齐，
         // 否则整张图集（内容在下缘）被拉满四边形，击中光条 / flick 箭头会缩在下面、看着朝下。
@@ -1013,6 +1067,19 @@ export class HitFx {
       } else if (s.align === 2 && !s.pitchLocal && !this.flat) {
         // Local + identity ancestors → world-axis quad (Core / Coredirection).
         batch.n = pushLocalQuad(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, -z, sx, sy, color);
+      } else if (this.arcFrame) {
+        // SIF：普通精灵（hold 按住时的头部光晕、判定 / 连击特效的大块贴图）也沿弧弯开，
+        // 否则只是被转到车道角的一张方块。朝向由极坐标给定，所以只叠粒子自己的 `s.spin`。
+        const cz = this.arcFrame.centerZ;
+        const dx = x, dz = cz - z;
+        const r = Math.hypot(dx, dz);
+        if (r > 1e-4) {
+          batch.n = pushArcQuad(
+            batch.pos, batch.uv, batch.col, batch.n, batch.cap,
+            y, Math.atan2(dx, dz), r / this.arcFrame.radius, this.arcFrame.radius, cz,
+            sx, sy, [0, 0, 1, 1], color, s.spin,
+          );
+        }
       } else {
         // View billboard, or Local with Corehorizon pitch ≈ camera 33.2°.
         batch.n = pushBillboard(batch.pos, batch.uv, batch.col, batch.n, batch.cap, x, y, z, sx, sy, color, 1, 1, s.spin);

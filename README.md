@@ -1,6 +1,6 @@
 # sukushow
 
-LLLL 谱面预览工作区。统一前端提供 LLLL 舞台（3D/2D 相机切换）与 PJSK 渲染两种模式，另有静态 SVG 谱面导出（应用内直接查看与 CLI）。
+LLLL 谱面预览工作区。统一前端提供 LLLL 舞台（3D / 2D 俯视 / SIF 半圆三档相机切换；SIF 是参考 School Idol Festival 的 180° 判定弧预览）与 PJSK 渲染两种模式，另有静态 SVG 谱面导出（应用内直接查看与 CLI）。
 
 | 路径 | 用途 | 许可 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ LLLL 谱面预览工作区。统一前端提供 LLLL 舞台（3D/2D 相机切换
 
 ```powershell
 pnpm install
-pnpm dev                 # 统一前端，?view=llll|pjsk 切换模式；LLLL 舞台内切换 2D/3D
+pnpm dev                 # 统一前端，?view=llll|pjsk 切换模式；LLLL 舞台内切换 2D/3D/SIF
 pnpm preview             # 预览构建产物
 pnpm render:svg          # SVG CLI
 pnpm verify:shared-assets
