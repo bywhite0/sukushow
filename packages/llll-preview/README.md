@@ -112,7 +112,7 @@ pnpm preview
 
 走带条上的「游玩」把预览从 AutoPlay 重放切到可打的状态机（4.12.0 `NoteResolver` / `Manual*NotePolicy` 口径，依据见 [实现依据与限制](../../docs/evidence.md)）：
 
-- **输入**：画布上的指针（鼠标 / 触摸，可多指）与键盘。原版只有触摸（`TapPositionResolveBase` 把触点 x 折成 lane），屏幕坐标由 `renderer.screenToLane(cssX, cssY)` 按当前相机反投影到 lane。键盘是预览的替代输入：60 轨等分成 N 个分区（默认九区 `A S D F G H J K L`），按键触碰整个分区（判定引擎的 `JudgeTouch.span`）；Flick 起手后 0.075 s 内按 Air 键（默认空格，类 Chunithm 抬手上滑，`JudgeTouch.air`）完成划动；同一只手一起压下的相邻分区键（`JudgeTouch.chord`）合起来只按一个音符（同时押除外），避免多出来的键去抢后面的音符。分区数、各区键位、Air 键与同按合并窗口在侧栏「游玩键位」自定义并持久化。
+- **输入**：画布上的指针（鼠标 / 触摸，可多指）与键盘。原版只有触摸（`TapPositionResolveBase` 把触点 x 折成 lane），屏幕坐标由 `renderer.screenToLane(cssX, cssY)` 按当前相机反投影到 lane。键盘是预览的替代输入：60 轨等分成 N 个分区（默认九区 `A S D F G H J K L`），按键触碰整个分区（判定引擎的 `JudgeTouch.span`）；Flick 的抬手（Air 键，默认空格）参考 CHUNITHM「Air Up with Tap」的 Justice 窗口判定——相对 Flick 判定点 `[−83.3, +233.3] ms` 内、可以先于分区键（缓冲，顺序无关），一次抬手完成区间内全部键盘 Flick，档位仍按起手；同一只手一起压下的相邻分区键（`JudgeTouch.chord`）合起来只按一个音符（同时押除外），避免多出来的键去抢后面的音符。分区数、各区键位、Air 键与同按合并窗口在侧栏「游玩键位」自定义并持久化。
 - **判定保护**：键盘输入按 CHUNITHM「按键保护」语义近似处理——轨道相交、时间差小于保护范围（默认 0.25 s，侧栏可在 0–0.5 s 内调）的相邻 TAP 类音符（Single / Flick 头 / Hold 链头）判定窗口在时间差中点截断：低档窗口整体裁掉，顶层窗口只在按键压到轨道重叠区时一起裁；落在窗口外不判定也不消费。**Hold 头的按住补判**：被保护挡掉的按下一旦一直按住，进入保护窗口时用同一次按住补判头判（一次按下最多判一个音符）。指针仍按原版窗口，同按组保留，侧栏「手台判定保护」可整体关闭。见 [实现依据与限制](../../docs/evidence.md)。
 - **判定**：Single / Hold / Flick / Trace 四类的窗口、Fast/Slow、Hold 采样与尾判、Flick 两阶段（起手 + 划动 25 px）、空点音效都按原版状态机实现；判定事件驱动 HUD 计分、combo、AP 率、技术分、等级、判定字与 SE，曲终横幅按实际成绩取 AP / FC / Clear / Finish。
 - **Mental**：开局满血（预览默认 TotalMental 1000），Bad / Miss / Hold 中间航点 / Trace Miss 分别扣 `trunc(TotalMental×k)+常数`，HUD 血条按比例填充、低于两成转红。**扣到 0 不失败**：对局继续，只是此后判定不再加分、技术分归零、曲终横幅取 Finish。

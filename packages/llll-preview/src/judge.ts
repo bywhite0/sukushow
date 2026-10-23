@@ -131,6 +131,16 @@ export const FLICK_MAX_DIFF = 0.1;
 export const FLICK_DISTANCE = 625;
 /** `FlickValidTime`：起手后允许划动的时长。 */
 export const FLICK_VALID_TIME = 0.075;
+/**
+ * 键盘 Air（抬手）判定窗口（相对 Flick 判定点，秒），参考 CHUNITHM「Air Up with Tap」的 Justice 区间：
+ * Fast Justice −83.3..0、Justice Critical 0..+150、Late Justice +150..+233.3。
+ * 预览只把这段当作「抬手完成」窗口（档位仍取分区键起手），更外侧的 Fast / Late Attack 不算完成，
+ * 超时后按原版兜底判 Good；与原版起手后 `FLICK_VALID_TIME` 取并集，避免早起手时反而变严。
+ */
+export const AIR_JUSTICE_EARLY = -0.0833;
+export const AIR_JUSTICE_LATE = 0.2333;
+/** 超时兜底相对 `AIR_JUSTICE_LATE` 的额外容差：触摸事件自带的发生时刻可能比帧时间早最多一帧。 */
+const AIR_LATE_GRACE = 0.02;
 /** `JudgementTraceResolver`。 */
 export const TRACE_MIN_DIFF = 0.07;
 /** Hold 采样 / 尾判窗口（原版 0.0167 s）。 */
@@ -314,6 +324,8 @@ export class JudgeEngine {
    * Hold 头 Uid（-1 = 没有）。Hold 头的「按住补判」只补这一条被挡掉的 Hold。
    */
   private readonly keyboardPress = new Map<number, { at: number; free: boolean; blocked: number }>();
+  /** 最近收到的键盘 Air（抬手）时刻（秒）：抬手可以先于分区键，键盘 Flick 起手时回看这个缓冲。 */
+  private airTimes: number[] = [];
 
   constructor(private readonly chart: Chart, options: JudgeOptions = {}) {
     this.auto = options.autoPlay ?? false;
@@ -454,6 +466,7 @@ export class JudgeEngine {
     this.events = [];
     this.chordClaims.clear();
     this.keyboardPress.clear();
+    this.airTimes = [];
     for (const note of this.notes) {
       note.result = -1;
       note.lastDiff = 0;
@@ -580,14 +593,23 @@ export class JudgeEngine {
   private processFlickView(note: JudgeNote, now: number): void {
     if (note.finished) return;
     if (note.flickFirst >= 1) {
-      // 起手后 0.075 s 内没有划够距离 → 兜底 Good + Flick（松手不提前结算）。
-      if (!note.flicked && now > note.flickAt + FLICK_VALID_TIME) {
+      // 等划动超时 → 兜底 Good + Flick（松手不提前结算）。键盘 Air 的窗口比原版宽，截止时刻见 `flickDeadline`。
+      if (!note.flicked && now > this.flickDeadline(note)) {
         note.finished = true;
         this.emit(note, 2, 3, now, note.root.time, false, 0);
       }
       return;
     }
     if (now - note.root.time > FLICK_MAX_DIFF) this.miss(note, now, note.root.time, false, 0);
+  }
+
+  /**
+   * 等划动的截止时刻：指针仍是原版「起手后 0.075 s」；键盘 Air 参考 CHUNITHM AIR，等到 Late Justice
+   * 边界（`AIR_JUSTICE_LATE`）再加一帧容差——触摸事件自带发生时刻，可能比帧时间早最多一帧。
+   */
+  private flickDeadline(note: JudgeNote): number {
+    const base = note.flickAt + FLICK_VALID_TIME;
+    return note.flickKeyboard ? Math.max(base, note.root.time + AIR_JUSTICE_LATE + AIR_LATE_GRACE) : base;
   }
 
   private miss(note: JudgeNote, now: number, target: number, hold: boolean, holdIndex: number): void {
@@ -738,16 +760,30 @@ export class JudgeEngine {
   }
 
   /**
-   * 键盘 Air（预览自有，类 Chunithm 抬手上滑）：键盘起手、尚未划动完成且仍在 `FlickValidTime` 内的
-   * Flick 一律算划动完成（Air 不分位置，同一下可以完成多个）。指针起手的 Flick 仍要真的划动。
+   * 键盘 Air（预览自有，参考 CHUNITHM AIR）：抬手不是位置输入，一下完成所有仍在窗口内的键盘 Flick。
+   * 抬手可以先于分区键起手——时刻记进 `airTimes` 缓冲，键盘 Flick 起手时回看；完成窗口按
+   * `airCompletes`（CHUNITHM「Air Up with Tap」Justice 区间与起手后 0.075 s 取并集）。指针起手的 Flick
+   * 仍要真的划动。
    */
   private air(touch: JudgeTouch): void {
+    this.airTimes.push(touch.time);
+    if (this.airTimes.length > 16) this.airTimes.splice(0, this.airTimes.length - 16);
     for (const note of this.notes) {
       if (note.finished || note.type !== 2 || note.flickFirst < 1 || note.flicked || !note.flickKeyboard) continue;
-      if (touch.time > note.flickAt + FLICK_VALID_TIME) continue;
+      if (!this.airCompletes(note, touch.time)) continue;
       note.flicked = true;
       note.flickFinger = -1;
     }
+  }
+
+  /**
+   * 抬手时刻能否算作该键盘 Flick 的划动完成：原版「起手后 0.075 s 内」与 CHUNITHM「Air Up with Tap」
+   * 的 Justice 区间（相对判定点 −83.3..+233.3 ms）取并集。
+   */
+  private airCompletes(note: JudgeNote, airTime: number): boolean {
+    if (airTime >= note.flickAt && airTime <= note.flickAt + FLICK_VALID_TIME) return true;
+    const diff = airTime - note.root.time;
+    return diff >= AIR_JUSTICE_EARLY && diff <= AIR_JUSTICE_LATE;
   }
 
   private fingerFlick(note: JudgeNote, touch: JudgeTouch): boolean {
@@ -776,6 +812,11 @@ export class JudgeEngine {
     // 键盘起手：没有划动轨迹。开了 Air 就等 Air 键完成，否则起手即完成。
     note.flickKeyboard = touch.keyboard ?? false;
     if (touch.keyboard && !this.keyboardAir) note.flicked = true;
+    // 抬手先于分区键（或同帧先入队）：起手时回看 Air 缓冲，命中就直接算划动完成。
+    if (touch.keyboard && !note.flicked && this.airTimes.some((airTime) => this.airCompletes(note, airTime))) {
+      note.flicked = true;
+      note.flickFinger = -1;
+    }
     return true;
   }
 

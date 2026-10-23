@@ -475,11 +475,46 @@ describe('键盘分区与 Air', () => {
     expect(events.map((e) => [e.type, e.condition, e.flick])).toEqual([[5, 2, true]]);
   });
 
-  it('开 Air：起手后超过 0.075 s 才按 Air，按原版兜底判 Good', () => {
+  it('开 Air：抬手在 CHUNITHM Air Up with Tap 窗口内迟到也完成（按起手判定）', () => {
     const engine = new JudgeEngine(chartOf([note(1, '2', flags(2, 10, 12))]), { keyboardAir: true });
     engine.process(2, [key(1, [8, 14], 2)]);
-    const late = run(engine, 2 + FRAME, 2.2, (t) => (at(t, 2.1) ? [air(t)] : [])).flatMap((f) => judged(f.events));
-    expect(late.map((e) => [e.type, e.condition])).toEqual([[2, 3]]);
+    const events = judged(engine.process(2.1, [air(2.1)]));
+    expect(events.map((e) => [e.type, e.condition, e.flick])).toEqual([[5, 2, true]]);
+  });
+
+  it('开 Air：抬手超出 CHUNITHM Air Up with Tap 窗口 → 兜底 Good', () => {
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(2, 10, 12))]), { keyboardAir: true });
+    engine.process(2, [key(1, [8, 14], 2)]);
+    const events = run(engine, 2 + FRAME, 2.5, (t) => (at(t, 2.3) ? [air(t)] : [])).flatMap((f) => judged(f.events));
+    expect(events.map((e) => [e.type, e.condition])).toEqual([[2, 3]]);
+  });
+
+  it('开 Air：抬手可以先于分区键（同一次动作顺序无关）', () => {
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(2, 10, 12))]), { keyboardAir: true });
+    expect(engine.process(1.97, [air(1.97)])).toEqual([]);
+    const events = judged(engine.process(2, [key(1, [8, 14], 2)]));
+    expect(events.map((e) => [e.type, e.flick])).toEqual([[5, true]]);
+  });
+
+  it('开 Air：同一帧 Air 先入队也能完成', () => {
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(2, 10, 12))]), { keyboardAir: true });
+    const events = judged(engine.process(2, [air(2), key(1, [8, 14], 2)]));
+    expect(events.map((e) => [e.type, e.flick])).toEqual([[5, true]]);
+  });
+
+  it('开 Air：抬手太早（CHUNITHM 窗口外）不能完成', () => {
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(2, 10, 12))]), { keyboardAir: true });
+    expect(engine.process(1.8, [air(1.8)])).toEqual([]);
+    engine.process(2, [key(1, [8, 14], 2)]);
+    const events = run(engine, 2 + FRAME, 2.5, () => []).flatMap((f) => judged(f.events));
+    expect(events.map((e) => e.type)).toEqual([2]);
+  });
+
+  it('开 Air：一次抬手完成区间内多个键盘 Flick（含同帧刚起手的）', () => {
+    const chart = chartOf([note(1, '2', flags(2, 0, 3)), note(2, '2', flags(2, 40, 43))]);
+    const engine = new JudgeEngine(chart, { keyboardAir: true });
+    const events = judged(engine.process(2, [air(2), key(1, [0, 6], 2), key(2, [40, 46], 2)]));
+    expect(events.map((e) => e.uid).sort()).toEqual([chart.roots[0]!.uid, chart.roots[1]!.uid].sort());
   });
 
   it('Air 不完成指针起手的 Flick（指针仍要真的划动），也不算空点', () => {
