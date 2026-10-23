@@ -110,3 +110,18 @@ describe('playKeys', () => {
     expect(sanitizePreviewSettings({ playKeys: custom }).playKeys).toEqual(custom);
   });
 });
+
+describe('手台判定保护设置', () => {
+  it('默认开启、范围 250 ms；范围夹到 0–500，非数字回落默认', () => {
+    expect(DEFAULT_PREVIEW_SETTINGS.protectJudge).toBe(true);
+    expect(DEFAULT_PREVIEW_SETTINGS.protectRange).toBe(250);
+    expect(sanitizePreviewSettings({}).protectJudge).toBe(true);
+    expect(sanitizePreviewSettings({ protectJudge: false }).protectJudge).toBe(false);
+    expect(sanitizePreviewSettings({ protectJudge: 'yes' }).protectJudge).toBe(true);
+    expect(sanitizePreviewSettings({ protectRange: 120 }).protectRange).toBe(120);
+    expect(sanitizePreviewSettings({ protectRange: -5 }).protectRange).toBe(0);
+    expect(sanitizePreviewSettings({ protectRange: 900 }).protectRange).toBe(500);
+    expect(sanitizePreviewSettings({ protectRange: 47.8 }).protectRange).toBe(48);
+    expect(sanitizePreviewSettings({ protectRange: 'abc' }).protectRange).toBe(250);
+  });
+});

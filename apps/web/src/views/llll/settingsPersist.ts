@@ -7,6 +7,7 @@ import {
   ARC_CENTER_DEFAULT, ARC_CENTER_MAX, ARC_CENTER_MIN, ARC_RADIUS_DEFAULT, ARC_RADIUS_MAX, ARC_RADIUS_MIN,
 } from '@sukushow/llll-preview/arcView';
 import { RG_OPTION_DEFAULTS, RG_OPTION_RANGES } from '@sukushow/llll-preview/rgOptions';
+import { PROTECT_RANGE_DEFAULT, PROTECT_RANGE_MAX, PROTECT_RANGE_MIN } from '@sukushow/llll-preview/judge';
 import { DEFAULT_ASPECT, isAspectId, type AspectId } from './aspectRatio';
 import { DEFAULT_PLAY_KEY_LAYOUT, sanitizePlayKeyLayout, type PlayKeyLayout } from './playKeys';
 
@@ -20,6 +21,10 @@ export type PreviewSettings = {
   playOffsetMs: number;
   /** 游玩模式的键盘键位：分区键与 Air 键（见 `playKeys.ts`）。 */
   playKeys: PlayKeyLayout;
+  /** 开启手台判定保护（CHUNITHM 按键保护语义的近似，只作用于键盘）。 */
+  protectJudge: boolean;
+  /** 手台判定保护的相邻范围（毫秒，0 = 不保护；见 `judge.ts`）。 */
+  protectRange: number;
   /** VolumeMusic 0..1 */
   volume: number;
   volumeNoteTap: number;
@@ -71,6 +76,8 @@ export const DEFAULT_PREVIEW_SETTINGS: PreviewSettings = {
   offsetMs: 0,
   playOffsetMs: 0,
   playKeys: DEFAULT_PLAY_KEY_LAYOUT,
+  protectJudge: true,
+  protectRange: Math.round(PROTECT_RANGE_DEFAULT * 1000),
   volume: 0.7,
   volumeNoteTap: 1,
   volumeSe: 1,
@@ -137,6 +144,8 @@ export function sanitizePreviewSettings(raw: unknown): PreviewSettings {
     offsetMs: clamp(num('offsetMs', d.offsetMs), -10_000, 10_000),
     playOffsetMs: clamp(Math.trunc(num('playOffsetMs', d.playOffsetMs)), -200, 200),
     playKeys: sanitizePlayKeyLayout(o.playKeys),
+    protectJudge: bool('protectJudge', d.protectJudge),
+    protectRange: clamp(Math.round(num('protectRange', d.protectRange)), PROTECT_RANGE_MIN * 1000, PROTECT_RANGE_MAX * 1000),
     volume: clamp(num('volume', d.volume), 0, 1),
     volumeNoteTap: clamp(num('volumeNoteTap', d.volumeNoteTap), 0, 1),
     volumeSe: clamp(num('volumeSe', d.volumeSe), 0, 1),

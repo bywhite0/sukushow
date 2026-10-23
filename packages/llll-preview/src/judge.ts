@@ -16,6 +16,11 @@
  * - 触摸事件自带发生时刻（`touch.time`），原版在帧头统一取 `currentTime`。
  * - 键盘输入（原版没有）：分区按键带 `span` 按区间触碰；Air 键（`air`）完成键盘起手的 Flick；
  *   同一只手同时压下的相邻分区键（`chord`）合起来只按一个音符（同时押除外）。
+ * - 键盘判定保护（预览自有，CHUNITHM `按键保护` 语义的近似，可在侧栏开关 / 调范围）：轨道区间相交、
+ *   时间差小于保护范围（默认 0.25 s）的相邻 TAP 类音符（Single / Hold 头 / Flick），判定窗口在两者时间差的
+ *   中点处截断；顶层窗口（JC 对应）在按键没压到轨道重叠区时保留完整。键盘输入落在窗口外不判定、也不消费，
+ *   指针输入仍按原版窗口。Hold 头另有「按住补判」：被保护挡掉的按下一旦一直按住，进入保护窗口时补判头判
+ *   （见 `protectedHoldStart`）。见 `bindProtection` / `withinProtectedWindow`。
  * - 预览不还原对象池 / Version 复用，改为每张谱面一次性建表。
  * - 漏头后的 Hold 仍按原版逐航点 Miss（之后范围内的触摸照样能续上采样）；原版不认手指，松手不改判定状态，
  *   ribbon 与循环特效继续到离场（见 `renderer.holdDraw`）。
@@ -113,6 +118,7 @@ export interface NoteViewState {
 }
 
 /** 单指判定窗口：`JudgementSingleResolver`（4.12.0）。 */
+export const SINGLE_PERFECT_PLUS = 0.025;
 export const SINGLE_MIN_DIFF = 0.04;
 export const SINGLE_MAX_DIFF = 0.125;
 /** `JudgementHoldResolver`：没有 Perfect 档，PP 窗口更宽。 */
@@ -136,6 +142,15 @@ export const LANE_SUB_RANGE = 5.5;
 /** `DelayOrderNoteCollection.Add` 的 Just 容差（float32 `1e-4`）。 */
 const JUST_EPSILON = Math.fround(0.0001);
 
+/**
+ * 键盘判定保护（预览自有，CHUNITHM `按键保护` 的近似）的相邻范围（秒）：
+ * 默认 0.25，约等于 Single / Hold 判定窗口之和（0.125 × 2）；侧栏可在 0–0.5 s 内调。
+ * 超过这个时间差的两个音符窗口已经互不侵入，不需要保护。
+ */
+export const PROTECT_RANGE_DEFAULT = 0.25;
+export const PROTECT_RANGE_MIN = 0;
+export const PROTECT_RANGE_MAX = 0.5;
+
 /** C# `Math.Round(double, 3)` = 银行家舍入（ToEven）。 */
 export function round3(value: number): number {
   const scaled = value * 1000;
@@ -151,7 +166,7 @@ export function round3(value: number): number {
 /** `JudgementSingleResolver.Get`：`≤.025 PP / ≤.04 P / ≤.07 Great / ≤.1 Good / ≤.125 Bad / 其余 Miss`。 */
 export function judgementForSingle(diff: number): NoteJudgementType {
   const d = Math.abs(round3(diff));
-  if (d <= 0.025) return 5;
+  if (d <= SINGLE_PERFECT_PLUS) return 5;
   if (d <= 0.04) return 4;
   if (d <= 0.07) return 3;
   if (d <= 0.1) return 2;
@@ -207,6 +222,15 @@ export interface HoldSegment {
   r2: number;
 }
 
+/** 键盘判定保护的相邻音符：时间更早 / 更晚的 TAP 类音符与两者轨道区间的交集。 */
+interface ProtectNeighbor {
+  /** 相邻音符的判定点时刻。 */
+  time: number;
+  /** 两个音符轨道区间的交集（含端点）。 */
+  left: number;
+  right: number;
+}
+
 interface JudgeNote {
   root: Note;
   type: number;
@@ -222,6 +246,10 @@ interface JudgeNote {
   segments: HoldSegment[];
   /** Hold 游标所在段（`ctx.Unit`）。 */
   unit: number;
+  /** 键盘判定保护：时间更早的相邻 TAP 类音符（轨道区间相交、时间差小于保护范围）；无则 null。 */
+  protectPrev: ProtectNeighbor | null;
+  /** 键盘判定保护：时间更晚的相邻 TAP 类音符；无则 null。 */
+  protectNext: ProtectNeighbor | null;
   /** 待提交判定（`_result`），-1 = None。 */
   result: NoteJudgementType | -1;
   /** 头判 diff（`_diff`），Hold 中间采样沿用。 */
@@ -261,6 +289,10 @@ export interface JudgeOptions {
   emptyTouch?: (touch: JudgeTouch) => boolean;
   /** 键盘 Flick 是否要等 Air 键完成划动（默认 false：键盘起手即完成）。 */
   keyboardAir?: boolean;
+  /** 键盘判定保护（默认开启，只作用于键盘输入）；关闭后键盘按原版窗口判定。 */
+  protect?: boolean;
+  /** 键盘判定保护的相邻范围（秒，默认 `PROTECT_RANGE_DEFAULT`）；0 等于不寻找相邻音符。 */
+  protectRange?: number;
 }
 
 export class JudgeEngine {
@@ -270,19 +302,29 @@ export class JudgeEngine {
   private auto: boolean;
   private pp: boolean;
   private keyboardAir: boolean;
+  private protectOn: boolean;
+  private protectRange: number;
   private readonly emptyTouch: ((touch: JudgeTouch) => boolean) | undefined;
   private time = 0;
   private events: JudgeEvent[] = [];
   /** 键盘同按组 → 该组 Began 已消费的音符 Just 与消费时刻（见 `JudgeTouch.chord`）。 */
   private readonly chordClaims = new Map<number, { just: number; at: number }>();
+  /**
+   * 键盘按键 Began 的时刻、是否「干净」（没被其它音符消费、也没被同按组挡掉），以及被保护窗口挡掉的
+   * Hold 头 Uid（-1 = 没有）。Hold 头的「按住补判」只补这一条被挡掉的 Hold。
+   */
+  private readonly keyboardPress = new Map<number, { at: number; free: boolean; blocked: number }>();
 
   constructor(private readonly chart: Chart, options: JudgeOptions = {}) {
     this.auto = options.autoPlay ?? false;
     this.pp = options.perfectPlus ?? false;
     this.keyboardAir = options.keyboardAir ?? false;
+    this.protectOn = options.protect ?? true;
+    this.protectRange = clampProtectRange(options.protectRange ?? PROTECT_RANGE_DEFAULT);
     this.emptyTouch = options.emptyTouch;
     this.hashes = buildLineHashTables(chart);
     for (const root of chart.roots) this.notes.push(this.create(root));
+    this.bindProtection();
   }
 
   private create(root: Note): JudgeNote {
@@ -299,12 +341,82 @@ export class JudgeEngine {
     const note: JudgeNote = {
       root, type: root.type, waypoints, holds: waypoints.slice(1), tailEnd: tail.end, tailUid: tail.uid,
       segments, unit: 0, result: -1, lastDiff: 0, lastTouched: -1, touchPhase: 0, successEnd: false,
-      holdIndex: -1,
+      holdIndex: -1, protectPrev: null, protectNext: null,
       flickFirst: 0, flickAt: 0, flickFinger: -1, flickX: 0, flickY: 0, flicked: false, flickKeyboard: false,
       judged: 0, finished: false, missedEnd: false, headJudged: false, headMissed: false, broken: false,
     };
     this.state.set(root.uid, { phase: 'pending', holding: false, broken: false, judged: 0, finished: false, missed: false });
     return note;
+  }
+
+  /**
+   * 键盘判定保护（预览自有，CHUNITHM `按键保护` 语义的近似）：
+   * 给每个 TAP 类音符（Single / Hold 头 / Flick）找时间上最近、且轨道区间相交的前后相邻 TAP 类音符。
+   * 只有键盘输入在判定时用这份相邻关系；指针输入保持原版窗口（见 `withinProtectedWindow`）。
+   * Trace 与 Hold 中段 / 尾判不参与，同时刻（`SIMULTANEOUS_WINDOW` 内）的音符也不算相邻。
+   * 相邻范围取 `protectRange`，改范围时由 `setProtectRange` 重算。
+   */
+  private bindProtection(): void {
+    for (const note of this.notes) {
+      note.protectPrev = null;
+      note.protectNext = null;
+    }
+    const taps = this.notes.filter((note) => isTapNote(note)).sort((a, b) => a.root.time - b.root.time);
+    for (let i = 0; i < taps.length; i++) {
+      const note = taps[i]!;
+      for (let j = i - 1; j >= 0; j--) {
+        const other = taps[j]!;
+        const gap = note.root.time - other.root.time;
+        if (gap >= this.protectRange) break;
+        if (gap <= SIMULTANEOUS_WINDOW) continue;
+        const left = Math.max(note.root.l, other.root.l);
+        const right = Math.min(note.root.r, other.root.r);
+        if (left <= right) {
+          note.protectPrev = { time: other.root.time, left, right };
+          break;
+        }
+      }
+      for (let j = i + 1; j < taps.length; j++) {
+        const other = taps[j]!;
+        const gap = other.root.time - note.root.time;
+        if (gap >= this.protectRange) break;
+        if (gap <= SIMULTANEOUS_WINDOW) continue;
+        const left = Math.max(note.root.l, other.root.l);
+        const right = Math.min(note.root.r, other.root.r);
+        if (left <= right) {
+          note.protectNext = { time: other.root.time, left, right };
+          break;
+        }
+      }
+    }
+  }
+
+  /** 判定窗口半宽：Single / Hold 0.125，Flick 0.1；Trace 不参与保护，不会走到这里。 */
+  private protectedHalf(note: JudgeNote): number {
+    return note.type === 2 ? FLICK_MAX_DIFF : SINGLE_MAX_DIFF;
+  }
+
+  /**
+   * 键盘判定保护：把判定窗口在与相邻 TAP 类音符的时间差中点处截断，前后两个音符的窗口互不侵入。
+   * 低档窗口（Great / Good / Bad，对应 CHUNITHM 的 J / A）整体按中点裁掉；
+   * 顶层窗口（CHUNITHM 的 JC，即各 NoteType 的 Perfect+）只在按键区间压到该侧轨道重叠区时一起裁，
+   * 没压到时保留完整（对应「JC 在非重叠区域不缩减」）。
+   * 落在窗口外的键盘输入返回 false：不判定、也不消费，音符照常下落。
+   */
+  private withinProtectedWindow(note: JudgeNote, touch: JudgeTouch, diff: number): boolean {
+    if (!this.protectOn || !touch.keyboard) return true;
+    const prev = note.protectPrev;
+    const next = note.protectNext;
+    if (!prev && !next) return true;
+    const half = this.protectedHalf(note);
+    const min = Math.max(-half, prev ? (prev.time - note.root.time) / 2 : -half);
+    const max = Math.min(half, next ? (next.time - note.root.time) / 2 : half);
+    if (diff >= min - 1e-9 && diff <= max + 1e-9) return true;
+    // 顶层窗口（JC）在按键没有压到该侧轨道重叠区时保留完整。
+    const core = protectedCore(note);
+    if (diff < -core - 1e-9 || diff > core + 1e-9) return false;
+    if (diff < 0) return !prev || !touchesLanes(touch, prev.left, prev.right);
+    return !next || !touchesLanes(touch, next.left, next.right);
   }
 
   get autoPlay(): boolean { return this.auto; }
@@ -323,11 +435,25 @@ export class JudgeEngine {
     this.keyboardAir = on;
   }
 
+  /** 开关键盘判定保护（见 `JudgeOptions.protect`）；只影响之后的判定。 */
+  setProtect(on: boolean): void {
+    this.protectOn = on;
+  }
+
+  /** 改键盘判定保护的相邻范围（秒，夹到 `PROTECT_RANGE_MIN..MAX`），重算相邻音符；只影响之后的判定。 */
+  setProtectRange(seconds: number): void {
+    const next = clampProtectRange(seconds);
+    if (next === this.protectRange) return;
+    this.protectRange = next;
+    this.bindProtection();
+  }
+
   /** 回到起点；`time` 之前的判定点全部作废。 */
   reset(time = 0): void {
     this.time = time;
     this.events = [];
     this.chordClaims.clear();
+    this.keyboardPress.clear();
     for (const note of this.notes) {
       note.result = -1;
       note.lastDiff = 0;
@@ -488,6 +614,9 @@ export class JudgeEngine {
       this.air(touch);
       return false;
     }
+    // 键盘按下先记时刻与「干净」标记；Hold 头「按住补判」要靠它判断这次按住是不是被保护窗口挡掉的。
+    const pressed = touch.keyboard === true && touch.phase === 'began';
+    if (pressed) this.keyboardPress.set(touch.id, { at: touch.time, free: true, blocked: -1 });
     const candidates: { note: JudgeNote; just: number; distance: number }[] = [];
     for (const note of this.notes) {
       if (note.finished) continue;
@@ -523,7 +652,13 @@ export class JudgeEngine {
     }
     // 预览自有：Flick 起手记下的手指抬起后作废（浏览器会复用 pointerId）。
     if (touch.phase === 'ended' || touch.phase === 'canceled') {
+      this.keyboardPress.delete(touch.id);
       for (const note of this.notes) if (note.type === 2 && note.flickFinger === touch.id) note.flickFinger = -1;
+    }
+    // 这次按下被消费（含被同按组挡掉）就不能再用于 Hold 头的按住补判：一次按下最多判一个音符。
+    if (pressed) {
+      const entry = this.keyboardPress.get(touch.id);
+      if (entry) entry.free = !consumed;
     }
     return consumed;
   }
@@ -538,6 +673,7 @@ export class JudgeEngine {
     if (note.type === 0) {
       if (note.headJudged || touch.phase !== 'began') return false;
       note.lastDiff = touch.time - note.root.time;
+      if (!this.withinProtectedWindow(note, touch, note.lastDiff)) return false;
       const j = judgementForSingle(note.lastDiff);
       if (j < 1) return false;
       note.result = j;
@@ -568,12 +704,37 @@ export class JudgeEngine {
       }
       return false;
     }
-    if (touch.phase !== 'began') return false;
+    if (touch.phase !== 'began' && !this.protectedHoldStart(note, touch)) return false;
     note.lastDiff = touch.time - note.segments[note.unit]!.just;
+    if (!this.withinProtectedWindow(note, touch, note.lastDiff)) {
+      // 记下这次按下被保护挡掉的是哪个 Hold 头，按住补判只补这一条（一次按下最多判一个音符）。
+      if (touch.phase === 'began') {
+        const press = this.keyboardPress.get(touch.id);
+        if (press && press.blocked === -1) press.blocked = note.root.uid;
+      }
+      return false;
+    }
     const j = judgementForHold(note.lastDiff);
     if (j < 1) return false;
     note.result = j;
     return true;
+  }
+
+  /**
+   * Hold 头的「按住补判」（预览自有，键盘）：保护窗口会把一次本来落在正常窗口内的提前 / 迟到按下挡掉；
+   * 如果玩家一直按住这个键，进入保护窗口的那一帧用同一次按住补判头判——否则「按早了又按住」会直接 Miss，
+   * 而 Single / Flick 还能松手重按。
+   * 只补被保护挡掉的那一条 Hold 头；按下时在正常窗口外、或那次按下已经被别的音符 / 同按组用掉时不补。
+   */
+  private protectedHoldStart(note: JudgeNote, touch: JudgeTouch): boolean {
+    if (!this.protectOn || !touch.keyboard || note.type !== 1) return false;
+    if (note.headJudged || note.headMissed || note.finished) return false;
+    if (touch.phase !== 'stationary') return false;
+    const press = this.keyboardPress.get(touch.id);
+    if (!press || !press.free || press.blocked !== note.root.uid) return false;
+    const pressedDiff = press.at - note.root.time;
+    if (Math.abs(pressedDiff) > this.protectedHalf(note)) return false;
+    return this.withinProtectedWindow(note, touch, touch.time - note.root.time);
   }
 
   /**
@@ -604,6 +765,7 @@ export class JudgeEngine {
     }
     if (touch.phase !== 'began') return false;
     note.lastDiff = touch.time - note.root.time;
+    if (!this.withinProtectedWindow(note, touch, note.lastDiff)) return false;
     const j = judgementForFlick(note.lastDiff);
     if (j < 1) return false;
     note.flickFirst = j;
@@ -793,6 +955,12 @@ export class JudgeEngine {
   }
 }
 
+/** 触摸是否落在 lane 区间 `[left, right]` 内：键盘按 span 求交，指针按单点。 */
+function touchesLanes(touch: JudgeTouch, left: number, right: number): boolean {
+  if (touch.span) return touch.span[0] <= right && touch.span[1] >= left;
+  return touch.lane >= left && touch.lane <= right;
+}
+
 /** 触摸是否落在可点范围内：键盘分区按区间求交，指针按单点。 */
 function touchesRange(touch: JudgeTouch, range: { left: number; right: number }): boolean {
   if (touch.span) return touch.span[0] <= range.right && touch.span[1] >= range.left;
@@ -808,6 +976,22 @@ function touchDistance(touch: JudgeTouch, range: { middle: number }): number {
 /** 原版 `_touched`（`ManualHoldNotePolicy.ProcessTouch` 顶部）：Hold 已起判且最近路由来的触摸不是 Canceled。 */
 function touched(note: JudgeNote): boolean {
   return note.type === 1 && note.holdIndex !== -1 && note.touchPhase !== PHASE.canceled;
+}
+
+/** 键盘判定保护只作用于 TAP 类音符：Single / Hold 头 / Flick；Trace 与 Hold 中段、尾判不参与。 */
+function isTapNote(note: JudgeNote): boolean {
+  return note.type === 0 || note.type === 1 || note.type === 2;
+}
+
+/** 顶层判定半窗（CHUNITHM `JC` 的对应）：Single 0.025、Hold 0.04、Flick 0.07。 */
+function protectedCore(note: JudgeNote): number {
+  return note.type === 0 ? SINGLE_PERFECT_PLUS : note.type === 1 ? HOLD_MIN_DIFF : FLICK_MIN_DIFF;
+}
+
+/** 判定保护的相邻范围夹到 0–0.5 s；非有限值取默认。 */
+function clampProtectRange(seconds: number): number {
+  if (!Number.isFinite(seconds)) return PROTECT_RANGE_DEFAULT;
+  return Math.min(PROTECT_RANGE_MAX, Math.max(PROTECT_RANGE_MIN, seconds));
 }
 
 /** `DelayOrderNoteCollection.Add`：按 Just 升序、同刻按到区间中点的距离升序，单趟插入。 */

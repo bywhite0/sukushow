@@ -533,10 +533,10 @@ describe('键盘同按组', () => {
     expect(engine.noteState(chart.roots[1]!.uid).phase).toBe('pending');
   });
 
-  it('对照：不带 chord 时多余键会提前吃掉下一个音符（这正是要修的问题）', () => {
-    const chart = twoNotes();
+  it('对照：轨道不相交时（判定保护不生效）多余键会提前吃掉下一个音符', () => {
+    const chart = chartOf([note(1, '2', flags(0, 6, 12)), note(2, '2.1', flags(0, 30, 36))]);
     const engine = new JudgeEngine(chart);
-    const events = judged(engine.process(2, [key(1, [6, 12], 2), key(2, [12, 18], 2.003)]));
+    const events = judged(engine.process(2, [key(1, [4, 12], 2), key(2, [28, 36], 2.003)]));
     expect(events.map((e) => e.uid)).toEqual([chart.roots[0]!.uid, chart.roots[1]!.uid]);
   });
 
@@ -563,9 +563,9 @@ describe('键盘同按组', () => {
   });
 
   it('不同组互不限制；同组号过了 1 s 记录作废、可再次消费', () => {
-    const chart = twoNotes();
+    const chart = chartOf([note(1, '2', flags(0, 6, 12)), note(2, '2.1', flags(0, 30, 36))]);
     const engine = new JudgeEngine(chart);
-    const events = judged(engine.process(2, [key(1, [6, 12], 2, 1), key(2, [12, 18], 2.003, 2)]));
+    const events = judged(engine.process(2, [key(1, [4, 12], 2, 1), key(2, [28, 36], 2.003, 2)]));
     expect(events).toHaveLength(2);
     const reuse = new JudgeEngine(chartOf([note(1, '2', flags(0, 10, 14)), note(2, '3.5', flags(0, 10, 14))]));
     expect(judged(reuse.process(2, [key(1, [6, 12], 2, 5)]))).toHaveLength(1);
@@ -593,5 +593,190 @@ describe('键盘同按组', () => {
     const events = frames.flatMap((f) => judged(f.events));
     expect(events.every((e) => e.type !== 0)).toBe(true);
     expect(events.length).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * 键盘判定保护（预览自有，CHUNITHM「按键保护」语义的近似）：只对键盘输入生效；
+ * 轨道区间相交、时间差小于保护范围（默认 0.25 s）的相邻 TAP 类音符，判定窗口在两者时间差的中点截断，
+ * 指针仍按原版窗口。开关与范围见 `JudgeOptions.protect` / `protectRange` 与侧栏设置。
+ */
+describe('键盘判定保护', () => {
+  const key = (id: number, span: [number, number], time: number): JudgeTouch =>
+    ({ id, phase: 'began', lane: (span[0] + span[1]) / 2, span, time, keyboard: true });
+  const judged = (events: ReturnType<JudgeEngine['process']>) => events.filter((e) => e.kind === 'judge');
+  /** 2.0 s / 2.1 s，轨道都是 10..14：两个音符的中点裁切在 ±0.05 s。 */
+  const twoOverlap = () => chartOf([note(1, '2', flags(0, 10, 14)), note(2, '2.1', flags(0, 10, 14))]);
+
+  it('提前按到重叠的相邻音符：不判定也不消费；正点仍可判定', () => {
+    const engine = new JudgeEngine(twoOverlap());
+    expect(judged(engine.process(2, [key(1, [10, 14], 2)])).map((e) => e.uid)).toEqual([1]);
+    expect(judged(engine.process(2.04, [key(2, [10, 14], 2.04)]))).toEqual([]);
+    expect(engine.noteState(2).phase).toBe('pending');
+    expect(judged(engine.process(2.1, [key(3, [10, 14], 2.1)])).map((e) => [e.uid, e.type])).toEqual([[2, 5]]);
+  });
+
+  it('被截掉的输入落到前一个音符的迟到窗口（窗口互不侵入）', () => {
+    const engine = new JudgeEngine(twoOverlap());
+    // 2.04 对后一个音符早 0.06 s（超出中点 0.05 s），对前一个音符晚 0.04 s，落 Perfect。
+    const events = judged(engine.process(2.04, [key(1, [10, 14], 2.04)]));
+    expect(events.map((e) => [e.uid, e.type])).toEqual([[1, 4]]);
+  });
+
+  it('指针输入不受影响：同一时刻按到后一个音符照常判定', () => {
+    const engine = new JudgeEngine(twoOverlap());
+    engine.process(2, [began(1, 12, 2)]);
+    const events = judged(engine.process(2.04, [began(2, 12, 2.04)]));
+    expect(events.map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+  });
+
+  it('轨道不相交的相邻音符不触发保护', () => {
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(0, 6, 12)), note(2, '2.1', flags(0, 30, 36))]));
+    engine.process(2, [began(1, 9, 2)]);
+    const events = judged(engine.process(2.04, [key(2, [28, 36], 2.04)]));
+    expect(events.map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+  });
+
+  it('低档窗口在非重叠轨道区也被裁（对应 CHUNITHM 的 J / A 全部收紧）', () => {
+    // 轨道重叠区 6..10；span [11,16] 只覆盖后一个音符的独占轨道，但时间差 0.1 s 的中点裁切在 0.05 s，
+    // 0.06 s 的提前量超出低档窗口，不判定。
+    const engine = new JudgeEngine(chartOf([note(1, '2', flags(0, 0, 10)), note(2, '2.1', flags(0, 6, 16))]));
+    engine.process(2, [began(1, 5, 2)]);
+    expect(judged(engine.process(2.04, [key(2, [11, 16], 2.04)]))).toEqual([]);
+    expect(engine.noteState(2).phase).toBe('pending');
+  });
+
+  it('顶层窗口（JC 对应）在非重叠轨道区保留完整，压到重叠区时一起裁', () => {
+    // 2.0 / 2.04，轨道 [0,10] 与 [6,16]：中点裁切在 0.02 s，顶层窗口 0.025 s。
+    const chart = chartOf([note(1, '2', flags(0, 0, 10)), note(2, '2.04', flags(0, 6, 16))]);
+    // 独占轨道的按键（span [11,16] 不含重叠区 6..10）：0.023 s 提前仍落 Perfect+。
+    const free = new JudgeEngine(chart);
+    free.process(2, [began(1, 5, 2)]);
+    expect(judged(free.process(2.017, [key(2, [11, 16], 2.017)])).map((e) => [e.uid, e.type])).toEqual([[2, 5]]);
+    // 压到重叠区的按键（span [5,12]）：顶层窗口一起裁到中点 0.02 s，0.023 s 提前不判定。
+    const blocked = new JudgeEngine(chart);
+    blocked.process(2, [began(1, 5, 2)]);
+    expect(judged(blocked.process(2.017, [key(2, [5, 12], 2.017)]))).toEqual([]);
+  });
+
+  it('开关：关闭后键盘按原版窗口判定，setProtect 可随时切换', () => {
+    const off = new JudgeEngine(twoOverlap(), { protect: false });
+    off.process(2, [key(1, [10, 14], 2)]);
+    expect(judged(off.process(2.04, [key(2, [10, 14], 2.04)])).map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+    const engine = new JudgeEngine(twoOverlap());
+    engine.process(2, [key(1, [10, 14], 2)]);
+    engine.setProtect(false);
+    expect(judged(engine.process(2.04, [key(2, [10, 14], 2.04)])).map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+  });
+
+  it('范围：可调小到不再把两个音符当相邻，setProtectRange 重算相邻关系', () => {
+    const chart = twoOverlap();
+    const narrow = new JudgeEngine(chart, { protectRange: 0.05 });
+    narrow.process(2, [key(1, [10, 14], 2)]);
+    expect(judged(narrow.process(2.04, [key(2, [10, 14], 2.04)])).map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+    const engine = new JudgeEngine(chart);
+    engine.process(2, [key(1, [10, 14], 2)]);
+    engine.setProtectRange(0.05);
+    expect(judged(engine.process(2.04, [key(2, [10, 14], 2.04)])).map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+  });
+
+  it('Hold 头参与保护，链中段与尾判不参与', () => {
+    const chart = chartOf([
+      note(1, '2', flags(1, 10, 14, 10, 14), ['2.5']),
+      note(2, '2.1', flags(0, 10, 14)),
+    ]);
+    const engine = new JudgeEngine(chart);
+    engine.process(2, [key(1, [10, 14], 2)]);
+    expect(judged(engine.process(2.04, [key(2, [10, 14], 2.04)]))).toEqual([]);
+    expect(engine.noteState(2).phase).toBe('pending');
+  });
+
+  it('Trace 不参与保护：既不参与裁切，也不保护相邻的 TAP 类音符', () => {
+    const chart = chartOf([note(1, '2', flags(3, 10, 14)), note(2, '2.1', flags(0, 10, 14))]);
+    const engine = new JudgeEngine(chart);
+    engine.process(2, [{ id: 1, phase: 'moved', lane: 12, time: 2 }]);
+    expect(judged(engine.process(2.04, [key(2, [10, 14], 2.04)])).map((e) => [e.uid, e.type])).toEqual([[2, 3]]);
+  });
+
+  it('同时刻（0.004 s 内）不算相邻', () => {
+    const chart = chartOf([note(1, '2', flags(0, 10, 14)), note(2, '2.002', flags(0, 10, 14))]);
+    const engine = new JudgeEngine(chart);
+    expect(judged(engine.process(2, [key(1, [10, 14], 2)])).map((e) => e.uid)).toEqual([1]);
+    expect(judged(engine.process(2.001, [key(2, [10, 14], 2.001)])).map((e) => [e.uid, e.type])).toEqual([[2, 5]]);
+  });
+
+  it('超出保护范围（默认 0.25 s）的相邻音符不触发保护', () => {
+    const chart = chartOf([note(1, '2', flags(0, 10, 14)), note(2, '2.3', flags(0, 10, 14))]);
+    const engine = new JudgeEngine(chart);
+    engine.process(2, [began(1, 12, 2)]);
+    expect(judged(engine.process(2.2, [key(2, [10, 14], 2.2)])).map((e) => [e.uid, e.type])).toEqual([[2, 2]]);
+  });
+
+  /** 键盘按住：PlayInput 每帧给仍按住的键补 Stationary。 */
+  const holdTouch = (id: number, span: [number, number], time: number): JudgeTouch =>
+    ({ id, phase: 'stationary', lane: (span[0] + span[1]) / 2, span, time, keyboard: true });
+  const chordKey = (id: number, span: [number, number], time: number, chord: number): JudgeTouch =>
+    ({ ...key(id, span, time), chord });
+
+  it('Hold 头被保护挡掉后一直按住：进入保护窗口时用同一次按住补判头判', () => {
+    const chart = chartOf([
+      note(1, '1.9', flags(0, 10, 14)),
+      note(2, '2', flags(1, 10, 14, 10, 14), ['2.5']),
+    ]);
+    const engine = new JudgeEngine(chart);
+    // 1.9 的 Single 用另一把键判掉；保护中点 = 0.05 s。
+    engine.process(1.9, [key(1, [10, 14], 1.9)]);
+    expect(engine.noteState(1).phase).toBe('judged');
+    // 1.94 提前 0.06 s 按 Hold：超出保护窗口（−0.05 s），不判定；保持按住。
+    expect(judged(engine.process(1.94, [key(2, [10, 14], 1.94)]))).toEqual([]);
+    expect(engine.noteState(2).phase).toBe('pending');
+    // 1.95 进入保护窗口：同一次按住补判头判（Hold 分表 0.05 → Great）。
+    const events = judged(engine.process(1.95, [holdTouch(2, [10, 14], 1.95)]));
+    expect(events.map((e) => [e.uid, e.type, e.head])).toEqual([[2, 3, true]]);
+    expect(engine.noteState(2).phase).toBe('judged');
+    // 补判后按住继续走，整条 Hold 照常采样到尾判成功。
+    const tail = run(engine, 1.95 + FRAME, 2.6, (t) => [holdTouch(2, [10, 14], t)]).flatMap((f) => judged(f.events));
+    expect(tail.some((e) => e.uid === 2 && e.holdEnd && e.type === 5)).toBe(true);
+    expect(engine.noteState(2)).toMatchObject({ finished: true, missed: false });
+  });
+
+  it('按下时在正常窗口外：按住不补判', () => {
+    const chart = chartOf([
+      note(1, '1.8', flags(0, 10, 14)),
+      note(2, '2', flags(1, 10, 14, 10, 14), ['2.5']),
+    ]);
+    const engine = new JudgeEngine(chart);
+    engine.process(1.8, [key(1, [10, 14], 1.8)]);
+    // 1.86 提前 0.14 s（超过 Hold 正常窗口 0.125 s），按住到保护窗口内也不补。
+    engine.process(1.86, [key(2, [10, 14], 1.86)]);
+    const events = run(engine, 1.86 + FRAME, 2.3, (t) => [holdTouch(2, [10, 14], t)]).flatMap((f) => judged(f.events));
+    expect(events.filter((e) => e.uid === 2 && e.type !== 0)).toEqual([]);
+    expect(events.some((e) => e.uid === 2 && e.type === 0)).toBe(true);
+  });
+
+  it('那次按下已经判了别的音符：按住不补判（一次按下只判一个音符）', () => {
+    const chart = chartOf([
+      note(1, '1.95', flags(0, 10, 14)),
+      note(2, '2', flags(1, 10, 14, 10, 14), ['2.5']),
+    ]);
+    const engine = new JudgeEngine(chart);
+    // 1.96 按下先判掉 1.95 的 Single，并保持按住。
+    engine.process(1.96, [key(2, [10, 14], 1.96)]);
+    expect(engine.noteState(1).phase).toBe('judged');
+    const events = run(engine, 1.96 + FRAME, 2.3, (t) => [holdTouch(2, [10, 14], t)]).flatMap((f) => judged(f.events));
+    expect(events.filter((e) => e.uid === 2 && e.type !== 0)).toEqual([]);
+    expect(events.some((e) => e.uid === 2 && e.type === 0)).toBe(true);
+  });
+
+  it('被同按组挡掉的键按住也不补判', () => {
+    const chart = chartOf([
+      note(1, '1.9', flags(0, 10, 14)),
+      note(2, '2', flags(1, 10, 14, 10, 14), ['2.5']),
+    ]);
+    const engine = new JudgeEngine(chart);
+    engine.process(1.9, [chordKey(1, [10, 14], 1.9, 7)]);
+    expect(judged(engine.process(1.92, [chordKey(2, [10, 14], 1.92, 7)]))).toEqual([]);
+    const events = run(engine, 1.92 + FRAME, 2.3, (t) => [holdTouch(2, [10, 14], t)]).flatMap((f) => judged(f.events));
+    expect(events.filter((e) => e.uid === 2 && e.type !== 0)).toEqual([]);
   });
 });

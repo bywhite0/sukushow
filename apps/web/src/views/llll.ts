@@ -7,7 +7,7 @@ import { AudioPlayer } from '@sukushow/llll-preview/audio';
 import { MusicVideo } from '@sukushow/llll-preview/musicVideo';
 import { CapturingSeOutput, createWebAudioSeOutput, SeResolver } from '@sukushow/llll-preview/se';
 import { PreviewRenderer } from '@sukushow/llll-preview/renderer';
-import { JudgeEngine } from '@sukushow/llll-preview/judge';
+import { JudgeEngine, PROTECT_RANGE_DEFAULT, PROTECT_RANGE_MAX } from '@sukushow/llll-preview/judge';
 import { LiveHud } from '@sukushow/llll-preview/hud';
 import { imageFailed, imagesSettled, loadHudFonts, loadedImageRevision, preloadImages } from '@sukushow/llll-preview/canvasKit';
 import type { ExportFrameSource } from '@sukushow/export';
@@ -89,6 +89,8 @@ app.innerHTML=`
 <label class="setting" for="opt-fps"><span>目标帧率</span><select id="opt-fps"><option value="0" selected>60</option><option value="1">120</option></select></label>
 <label class="setting" for="offset"><span>音频偏移 <small>毫秒</small></span><input id="offset" type="number" min="-10000" max="10000" step="10" value="0"><small>正值让音频晚于谱面开始。</small></label>
 <label class="setting" for="play-offset"><span>游玩判定偏移 <small>毫秒</small></span><input id="play-offset" type="number" min="-200" max="200" step="5" value="0"><small>只影响游玩模式的触摸判定：负值判定提前，正值判定延后。</small></label>
+<label class="check"><input id="play-protect" type="checkbox" checked>手台判定保护</label>
+<label class="setting" for="play-protect-range"><span>判定保护范围 <small>毫秒</small></span><input id="play-protect-range" type="number" min="0" max="${Math.round(PROTECT_RANGE_MAX * 1000)}" step="5" value="${Math.round(PROTECT_RANGE_DEFAULT * 1000)}"><small>轨道相交、时间差小于该值的相邻 TAP 类音符（Single / Flick 头 / Hold 链头），判定窗口在时间差中点截断；只作用于键盘，0 为不保护。</small></label>
 <div data-play-keys-mount></div>
 <label class="check"><input id="mirror" type="checkbox">左右镜像</label>
 <label class="check"><input id="lines" type="checkbox" checked>显示同时押线</label>
@@ -166,12 +168,20 @@ for(const [index,tab] of settingTabs.entries()){
 
 
 let aspectId:AspectId=DEFAULT_ASPECT;
+/** 手台判定保护范围（秒）：输入框毫秒值；空值 / 越界 / 非数字回落默认。 */
+const protectRangeSeconds=()=>{
+ const control=input('play-protect-range');
+ const value=Number(control.value);
+ return control.value.trim()!==''&&control.checkValidity()&&Number.isFinite(value)?value/1000:PROTECT_RANGE_DEFAULT;
+};
 function readSettings():PreviewSettings{
  return{
   speed:Number(input('speed').value),
   offsetMs:Number(input('offset').value),
   playOffsetMs:Number(input('play-offset').value),
   playKeys:playKeysEditor.value,
+  protectJudge:input('play-protect').checked,
+  protectRange:Math.round(protectRangeSeconds()*1000),
   volume:Number(input('volume').value),
   volumeNoteTap:Number(input('vol-tap').value),
   volumeSe:Number(input('vol-se').value),
@@ -215,6 +225,8 @@ function applySettingsToForm(s:PreviewSettings){
  input('offset').value=String(s.offsetMs);
  input('play-offset').value=String(s.playOffsetMs);
  playKeysEditor.value=s.playKeys;
+ input('play-protect').checked=s.protectJudge;
+ input('play-protect-range').value=String(s.protectRange);
  input('volume').value=String(s.volume);
  input('vol-tap').value=String(s.volumeNoteTap);
  input('vol-se').value=String(s.volumeSe);
@@ -309,7 +321,7 @@ let judge:JudgeEngine|null=null,playInput:PlayInput|null=null,playMode=false;
 try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
 /** 手动判定引擎：空点音效只在屏幕上半区触发（原版 `y < Screen.height*0.5`）。 */
-const createJudge=(target:Chart)=>new JudgeEngine(target,{emptyTouch:(touch)=>touch.y!==undefined&&touch.y<stage.clientHeight*0.5,keyboardAir:playKeysEditor.value.air!==null});
+const createJudge=(target:Chart)=>new JudgeEngine(target,{emptyTouch:(touch)=>touch.y!==undefined&&touch.y<stage.clientHeight*0.5,keyboardAir:playKeysEditor.value.air!==null,protect:input('play-protect').checked,protectRange:protectRangeSeconds()});
 function setChart(next:Chart){
  chart=next;
  if(playMode){judge=createJudge(next);renderer?.setNoteStates((uid)=>judge!.noteState(uid));}
@@ -657,6 +669,20 @@ input('play-offset').onchange=()=>{
  playInput?.setOffsetMs(value);persistSettings();
  // 游玩中改偏移会让判定时钟整体平移（负向即倒退）：与改计分配置一样，从当前时刻重开一局。
  if(player)restartPlay(player.transport.time);
+};
+input('play-protect').onchange=()=>{
+ judge?.setProtect(input('play-protect').checked);
+ persistSettings();
+};
+input('play-protect-range').onchange=()=>{
+ const control=input('play-protect-range');
+ const value=Number(control.value);
+ if(control.value.trim()===''||!control.checkValidity()||!Number.isFinite(value)){
+  message(`判定保护范围需在 0 至 ${Math.round(PROTECT_RANGE_MAX * 1000)} 毫秒之间。`,true);
+  return;
+ }
+ judge?.setProtectRange(value/1000);
+ persistSettings();
 };
 
 let frame=0;

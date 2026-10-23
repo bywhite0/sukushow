@@ -104,6 +104,55 @@ test('同按合并窗口：改值即生效并在刷新后保留，越界给提�
   await expect(chord).toHaveValue('30');
 });
 
+test('手台判定保护：开关与范围改值即生效并在刷新后保留，越界给提示且不写回', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#play')).toBeEnabled();
+  await page.locator('[data-inspector-toggle]').click();
+  const protect = page.locator('#play-protect');
+  const range = page.locator('#play-protect-range');
+  await expect(protect).toBeChecked();
+  await expect(range).toHaveValue('250');
+
+  await protect.uncheck();
+  await range.fill('120');
+  await range.dispatchEvent('change');
+  await page.reload();
+  await expect(page.locator('#play')).toBeEnabled();
+  await page.locator('[data-inspector-toggle]').click();
+  await expect(protect).not.toBeChecked();
+  await expect(range).toHaveValue('120');
+
+  // 越界：提示范围，刷新后仍是上一次的有效值。
+  await range.fill('900');
+  await range.dispatchEvent('change');
+  await expect(page.locator('#message')).toHaveText(/判定保护范围需在 0 至 500 毫秒之间/);
+  await page.reload();
+  await expect(page.locator('#play')).toBeEnabled();
+  await page.locator('[data-inspector-toggle]').click();
+  await expect(range).toHaveValue('120');
+
+  await protect.check();
+  await expect(protect).toBeChecked();
+});
+
+test('游玩中改判定保护：开关与范围即时作用到当前判定引擎', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#play')).toBeEnabled();
+  await expect(page.locator('[data-resource-loading]')).toBeHidden();
+  await page.locator('#play-mode').click();
+  const state = () => page.evaluate(() => {
+    const judge = (window as unknown as { __LPW__: { judge: { protectOn: boolean; protectRange: number } } }).__LPW__.judge;
+    return { protect: judge.protectOn, range: judge.protectRange };
+  });
+  expect(await state()).toEqual({ protect: true, range: 0.25 });
+
+  await page.locator('[data-inspector-toggle]').click();
+  await page.locator('#play-protect').uncheck();
+  await page.locator('#play-protect-range').fill('120');
+  await page.locator('#play-protect-range').dispatchEvent('change');
+  expect(await state()).toEqual({ protect: false, range: 0.12 });
+});
+
 test('游玩键位自定义：改分区数、录入新键、占用互换、Esc 取消、刷新后保留、恢复默认', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#play')).toBeEnabled();
