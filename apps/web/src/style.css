@@ -124,9 +124,46 @@ kbd { display:inline-flex; align-items:center; justify-content:center; min-width
 .transport > input[type="range"]::-moz-range-progress { height:3px; background:var(--shell-accent); }
 .transport > input[type="range"]::-moz-range-thumb { width:11px; height:11px; border:0; border-radius:50%; background:var(--shell-text); }
 .transport > input:disabled { cursor:not-allowed; }
-.viewer:fullscreen { grid-template-columns:minmax(0,1fr); width:100vw; height:100dvh; }
+/* 全屏：舞台铺满视口，控制区学视频播放器——底部一条通栏控制栏（只在底部压一层淡黑渐变，控件浮在画面上），
+   从上到下依次是曲目名、进度条、按钮行，整条按视口宽度铺满（只留边距），静止后整条滑出（空闲状态由 viewChrome.ts 切换）。
+   全屏元素本身铺深色底，舞台没占满的地方（例如 PJSK 上下留边）也是深色。 */
+.viewer:fullscreen { --chrome-edge:16px; --chrome-title-h:46px; position:relative; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr); width:100vw; height:100dvh; background:var(--shell-bg); }
 .viewer:fullscreen > .now-playing { display:none; }
 .viewer:fullscreen > :not(.now-playing) { grid-column:1; }
+.viewer:fullscreen .stage-shell { grid-row:1; padding:0; }
+/* 底部控制栏：贴住视口底边，不铺面板底色也不做模糊，只在底部压一层淡黑渐变垫住控件。 */
+.viewer:fullscreen .transport { position:absolute; left:0; right:0; bottom:0; z-index:6; padding:calc(var(--chrome-title-h) + 8px) var(--chrome-edge) calc(10px + env(safe-area-inset-bottom,0px)); border:0; border-radius:0; background:linear-gradient(180deg,rgb(0 0 0 / 0) 0%,rgb(0 0 0 / .26) 46%,rgb(0 0 0 / .58) 100%); backdrop-filter:none; box-shadow:none; text-shadow:0 1px 6px rgb(0 0 0 / .55); transition:opacity 200ms var(--ease),transform 240ms var(--ease),visibility 0s; }
+/* 曲目名占用控制栏顶部预留的一行：同样只有文字，直接浮在画面上。 */
+.viewer:fullscreen .stage-toolbar { position:absolute; left:0; right:0; top:auto; bottom:calc(var(--transport-h,92px) - var(--chrome-title-h)); z-index:7; height:var(--chrome-title-h); padding:0 var(--chrome-edge); border:0; background:none; backdrop-filter:none; box-shadow:none; text-shadow:0 1px 6px rgb(0 0 0 / .55); transition:opacity 200ms var(--ease),transform 240ms var(--ease),visibility 0s; }
+/* 浮层底图不吃指针事件：游玩模式下只有真正的控件挡触摸，空白处的点击继续落到舞台上。 */
+.viewer:fullscreen .stage-toolbar,.viewer:fullscreen .transport { pointer-events:none; }
+.viewer:fullscreen .stage-toolbar button,.viewer:fullscreen .stage-toolbar a,.viewer:fullscreen .transport button,.viewer:fullscreen .transport input,.viewer:fullscreen .transport select,.viewer:fullscreen .transport label,.viewer:fullscreen .transport a { pointer-events:auto; }
+/* 滑块外圈用面板色垫住画面，控制栏没有底衬时也分得清。 */
+.viewer:fullscreen .transport > input[type="range"]::-webkit-slider-thumb { box-shadow:0 0 0 3px color-mix(in srgb,var(--shell-panel) 88%,transparent); }
+.viewer:fullscreen .transport > input[type="range"]::-moz-range-thumb { box-shadow:0 0 0 3px color-mix(in srgb,var(--shell-panel) 88%,transparent); }
+/* 控制栏不再有底衬，进度条轨道加一圈暗描边，亮画面上也分得清。 */
+.viewer:fullscreen .transport > input[type="range"]::-webkit-slider-runnable-track { box-shadow:0 0 0 1px rgb(0 0 0 / .38); }
+.viewer:fullscreen .transport > input[type="range"]::-moz-range-track { box-shadow:0 0 0 1px rgb(0 0 0 / .38); }
+/* 状态行浮在控制栏上方，右边缘与控制栏内容对齐。 */
+.viewer:fullscreen .viewer-status { position:absolute; left:auto; right:calc(var(--chrome-edge) + 8px); bottom:calc(var(--transport-h,92px) + 12px); z-index:6; max-width:min(560px,calc(100% - 2 * var(--chrome-edge) - 16px)); min-height:0; padding:6px 12px; border:1px solid color-mix(in srgb,var(--shell-line-strong) 30%,transparent); border-radius:var(--radius-pill); background:color-mix(in srgb,var(--shell-panel) 62%,transparent); color:var(--shell-secondary); box-shadow:0 10px 28px -14px var(--shell-shadow); backdrop-filter:blur(16px); pointer-events:none; transition:opacity 200ms var(--ease),transform 240ms var(--ease),visibility 0s; }
+.viewer:fullscreen .viewer-status:empty { display:none; }
+.viewer:fullscreen .viewer-status.error { color:var(--shell-error); }
+.viewer:fullscreen.is-chrome-idle { cursor:none; }
+.viewer:fullscreen.is-chrome-idle .stage-toolbar,.viewer:fullscreen.is-chrome-idle .transport,.viewer:fullscreen.is-chrome-idle .viewer-status { opacity:0; visibility:hidden; pointer-events:none; transition:opacity 200ms var(--ease),transform 240ms var(--ease),visibility 0s linear 240ms; }
+.viewer:fullscreen.is-chrome-idle .stage-toolbar { transform:translateY(var(--transport-h,92px)); }
+.viewer:fullscreen.is-chrome-idle .transport { transform:translateY(100%); }
+.viewer:fullscreen.is-chrome-idle .viewer-status { transform:translateY(8px); }
+/* 错误提示不跟着控制栏一起收起：游玩模式会自动锁定控制栏，否则出错时什么都看不到。 */
+.viewer:fullscreen.is-chrome-idle .viewer-status.error { opacity:1; visibility:visible; transform:none; }
+/* 锁定按钮常驻屏幕左侧中部（仅全屏出现）：控制栏收起后它是唯一入口，锁定后图标换成开锁。 */
+.chrome-lock { display:none; }
+.viewer:fullscreen .chrome-lock { display:inline-flex; position:absolute; top:50%; left:12px; translate:0 -50%; z-index:7; align-items:center; justify-content:center; width:38px; height:38px; padding:0; border:1px solid color-mix(in srgb,var(--shell-line-strong) 38%,transparent); border-radius:var(--radius-pill); background:color-mix(in srgb,var(--shell-panel) 60%,transparent); color:var(--shell-accent); box-shadow:0 10px 28px -14px var(--shell-shadow); backdrop-filter:blur(16px) saturate(1.15); transition:background-color var(--fast),border-color var(--fast),color var(--fast); }
+.viewer:fullscreen .chrome-lock:hover:not(:disabled) { color:var(--shell-accent-hover); background:color-mix(in srgb,var(--shell-panel) 78%,transparent); }
+/* 锁定后控制栏全部收起，按钮换成强调色的解锁入口。 */
+.viewer:fullscreen.is-chrome-locked .chrome-lock { border-color:color-mix(in srgb,var(--shell-accent) 58%,transparent); background:color-mix(in srgb,var(--shell-accent) 22%,color-mix(in srgb,var(--shell-panel) 70%,transparent)); color:var(--shell-text); box-shadow:0 10px 30px -12px color-mix(in srgb,var(--shell-accent) 55%,transparent); }
+.viewer:fullscreen.is-chrome-locked .chrome-lock:hover { background:color-mix(in srgb,var(--shell-accent) 34%,color-mix(in srgb,var(--shell-panel) 78%,transparent)); }
+/* 全屏时 3D / 2D / SIF 切换留在舞台右上角。 */
+.viewer:fullscreen .stage-mode-switch { top:12px; right:var(--chrome-edge); }
 .viewer:fullscreen .record-toggle,.viewer:fullscreen .inspector-toggle,.viewer:fullscreen .focus-toggle { display:none; }
 
 /* Settings float above the stage, keeping the renderer's geometry stable. */
@@ -346,6 +383,11 @@ progress::-webkit-progress-value { background:var(--shell-accent); transition:wi
   /* Keep the game HUD and scene in the same landscape frame on portrait phones. */
   #view-root.view-llll .stage:not([data-aspect]) { width:min(100cqw,calc(100cqh * 16 / 9)); height:auto; aspect-ratio:16/9; }
   .transport { padding:3px 12px 12px; }
+  /* 全屏控制栏在窄屏收紧边距，把宽度留给走带条。 */
+  .viewer:fullscreen { --chrome-edge:8px; --chrome-title-h:40px; }
+  .viewer:fullscreen .transport { padding:calc(var(--chrome-title-h) + 6px) 8px calc(8px + env(safe-area-inset-bottom,0px)); }
+  .viewer:fullscreen .stage-toolbar { padding:0 8px; }
+  .viewer:fullscreen .stage-mode-switch { top:10px; right:8px; }
   .transport-row { display:grid; grid-template-columns:28px auto minmax(0,1fr) auto auto; gap:8px; }
   #time { grid-column:1/4; grid-row:1; font-size:11px; }
   .rate-label { grid-column:4/6; grid-row:1; }

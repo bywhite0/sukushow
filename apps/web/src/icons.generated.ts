@@ -1,7 +1,7 @@
 /**
  * 由 `apps/web/scripts/generate-ui-icons.mjs` 生成；图形清单与生成逻辑都在该脚本里。
  *
- * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 28 个。
+ * 图标来自 Lucide 1.2.146（https://lucide.dev），ISC License，共 30 个。
  * 网格 24×24，纯描边；颜色与线宽由 `icons.ts` 的包装层控制。
  */
 
@@ -18,6 +18,8 @@ export const iconNames = [
   'focus',
   'maximize',
   'minimize',
+  'lock',
+  'lock-open',
   'search',
   'library-big',
   'list-music',
@@ -51,6 +53,8 @@ export const iconBodies: Record<IconName, string> = {
   'focus': '<g><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2m10 0h2a2 2 0 0 1 2 2v2m0 10v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></g>',
   'maximize': '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3"/>',
   'minimize': '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3m8 0v-3a2 2 0 0 1 2-2h3"/>',
+  'lock': '<g><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>',
+  'lock-open': '<g><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></g>',
   'search': '<g><path d="m21 21l-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g>',
   'library-big': '<g><rect width="8" height="18" x="3" y="3" rx="1"/><path d="M7 3v18m13.4-2.1c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"/></g>',
   'list-music': '<g><path d="M16 5H3m8 7H3m8 7H3m18-3V5"/><circle cx="18" cy="16" r="3"/></g>',

@@ -50,6 +50,11 @@ export function controlOwnsSpace(target: EventTarget | null): boolean {
   return control !== null && !pointerFocus
 }
 
+/** 当前焦点是否来自指针（鼠标 / 触摸）；全屏控制栏据此只保护键盘焦点。 */
+export function focusFromPointer(): boolean {
+  return pointerFocus
+}
+
 /** 不带文本输入的 input 类型：字母键在它们上面没有原生行为。 */
 const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'image'])
 

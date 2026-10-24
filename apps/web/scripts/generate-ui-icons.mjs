@@ -31,6 +31,9 @@ const ICONS = [
   'focus',
   'maximize',
   'minimize',
+  // 全屏控制栏
+  'lock',
+  'lock-open',
   // 操作
   'search',
   'library-big',

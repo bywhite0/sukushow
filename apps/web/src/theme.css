@@ -23,3 +23,20 @@
   --shell-backdrop:oklch(25% .008 300 / .25);
   --shell-shadow:oklch(20% .008 300 / .18);
 }
+
+/* 全屏整体固定深色：控制栏、曲目名、状态行、锁定按钮、舞台切换都按深色呈现，浅色主题下也不跟随。
+   全屏里打开的弹层是挂在 body 上的对话框（在 .viewer 之外），单独给同一套深色变量，否则浅色主题下会是一块亮面板。
+   中性色与上面的深色主题一致，强调色仍跟随用户选择。 */
+.viewer:fullscreen,
+body:has(.viewer:fullscreen) dialog {
+  color-scheme:dark; color:var(--shell-text);
+  --shell-bg:#141416; --shell-surface:#1b1b1e; --shell-raised:#252529;
+  --shell-panel:#202025; --shell-hover:#343039; --shell-canvas:#101012;
+  --shell-line:#303034; --shell-line-strong:#505057; --shell-line-subtle:#242427;
+  --shell-text:#efeee9; --shell-secondary:#c0bdc5; --shell-muted:#a09fa7;
+  --shell-track:#39383f; --shell-error:#f2a0ab;
+  --shell-accent-text:var(--shell-accent);
+  --shell-accent-soft:color-mix(in srgb,var(--shell-accent) 12%,transparent);
+  --shell-backdrop:oklch(10% .006 300 / .6);
+  --shell-shadow:oklch(5% .005 300 / .45);
+}

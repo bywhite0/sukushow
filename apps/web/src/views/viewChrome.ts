@@ -1,4 +1,16 @@
 import { icon, setIcon, setIconButton } from '../icons'
+import { focusFromPointer } from '../keyboard'
+
+/**
+ * 全屏时控制区学视频播放器：底部一条通栏控制栏，曲目名、进度条、按钮行从上到下排布，整条按视口宽度铺满；
+ * 控制栏只在底部压一层淡黑渐变，控件浮在画面上，配色固定深色（浅色主题下也不跟随），静止一段时间后自动隐藏。
+ * 指针移动、触摸、按键、焦点回到控制栏或出现状态提示时重新出现；指针停在控制栏上（含条上的空白处）、
+ * 焦点在控制栏内、曲库弹层打开时保持显示，避免操作中消失。
+ * 锁定后控制栏保持隐藏，判定输入与误触都不会把它叫出来；屏幕左侧中部的锁定按钮常驻，锁定时变成解锁入口。
+ */
+const CHROME_IDLE_DELAY = 2600
+const CHROME_IDLE_CLASS = 'is-chrome-idle'
+const CHROME_LOCK_CLASS = 'is-chrome-locked'
 
 /** Shared presentation only. Player state and all renderer controls stay in the views. */
 export const trackHeaderMarkup = `
@@ -21,14 +33,15 @@ export const trackHeaderMarkup = `
  </header>`
 
 export function stageToolbarMarkup() {
-  return `<div class="stage-toolbar">
+  return `<div class="stage-toolbar" id="stage-toolbar">
    <button class="quiet record-toggle" type="button" data-record-toggle aria-label="切换曲目面板" aria-expanded="true" aria-controls="record-panel">${icon('panel-left-close', 16)}<span>曲目 / 难度</span></button>
    <div class="stage-heading"><h2><button id="stage-track-name" type="button" data-library-open aria-haspopup="dialog" aria-controls="song-panel" aria-expanded="false">谱面预览</button></h2><span class="track-diff" id="stage-track-difficulty" hidden></span></div>
    <button class="quiet focus-toggle" type="button" data-focus-toggle aria-label="专注预览" aria-pressed="false">${icon('focus', 16)}<span>专注</span></button>
    <button class="quiet inspector-toggle" type="button" aria-label="切换预览设置" aria-expanded="false" aria-controls="preview-inspector" data-inspector-toggle>
     ${icon('panel-right-open', 16)}<span>设置</span>
    </button>
-  </div>`
+  </div>
+  <button class="quiet chrome-lock" type="button" data-chrome-lock aria-label="锁定控制栏" title="锁定控制栏：隐藏控制栏，避免误触唤出" aria-pressed="false" aria-controls="stage-toolbar transport">${icon('lock', 18)}</button>`
 }
 
 /**
@@ -38,7 +51,7 @@ export function stageToolbarMarkup() {
  */
 export function transportMarkup({ svgExport = false, playMode = false }: { svgExport?: boolean; playMode?: boolean } = {}) {
   return `
- <div class="transport">
+ <div class="transport" id="transport">
   <label class="sr-only" for="timeline">播放进度</label><input id="timeline" type="range" min="0" max="36" step="0.001" value="0">
   <div class="transport-row">
    <button id="restart" class="quiet" aria-label="回到开头" title="回到开头">${icon('skip-back', 18)}</button>
@@ -60,6 +73,7 @@ export function bindViewChrome(root: HTMLElement) {
   const record = root.querySelector<HTMLElement>('#record-panel')!
   const focusToggle = root.querySelector<HTMLButtonElement>('[data-focus-toggle]')!
   const main = root.querySelector('main')!
+  const viewer = root.querySelector<HTMLElement>('.viewer')!
   const workspace = root.closest('.workspace')
   let previousRecordOpen = !matchMedia('(max-width: 900px)').matches
 
@@ -123,10 +137,126 @@ export function bindViewChrome(root: HTMLElement) {
   // 全屏按钮是动作按钮：进入全屏后它的语义变成「退出全屏」，图标与文案一起换。
   // 浏览器自带的退出方式（Esc / 系统手势）不会经过 onclick，所以跟 fullscreenchange 同步。
   const fullscreen = root.querySelector<HTMLButtonElement>('#fullscreen')!
+  // 全屏时曲目名并进底部控制栏：静止后整条滑出，指针 / 键盘 / 状态提示都会把它们叫回来。
+  // 锁定后控制栏保持隐藏，判定输入与误触都不会把它叫出来，只留屏幕左侧的解锁按钮。
+  const stageToolbar = viewer.querySelector<HTMLElement>('#stage-toolbar')!
+  const transport = viewer.querySelector<HTMLElement>('#transport')!
+  const status = viewer.querySelector<HTMLElement>('#message')
+  // 锁定按钮常驻屏幕左侧中部：控制栏显示时也在这，隐藏后它是解锁入口。
+  const lockButton = root.querySelector<HTMLButtonElement>('[data-chrome-lock]')!
+  const chromeBars = [stageToolbar, transport]
+  let chromeIdleTimer = 0
+  let chromeLocked = false
+  // 控制栏是 pointer-events:none 的浮层，:hover 只在压住控件时命中；这里记下鼠标最后的位置，
+  // 空闲计时到点时再按当时的控制栏盒判断是否还停在条上（滑入滑出的 transform 那时已经结束）。
+  let pointerAt: { x: number; y: number } | null = null
+  const isFullscreen = () => document.fullscreenElement === viewer
+  const chromeHovered = () => {
+    if (lockButton.matches(':hover')) return true
+    const at = pointerAt
+    if (!at) return false
+    return chromeBars.some(bar => {
+      const rect = bar.getBoundingClientRect()
+      return at.x >= rect.left && at.x <= rect.right && at.y >= rect.top && at.y <= rect.bottom
+    })
+  }
+  // 只保护键盘焦点：鼠标点过全屏按钮后焦点仍留在走带条上，不能因此永不隐藏。
+  const chromeFocused = () => {
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement) || focusFromPointer()) return false
+    return active === lockButton || chromeBars.some(bar => bar.contains(active))
+  }
+  const chromePopoverOpen = () => Boolean(viewer.querySelector('[popover]:popover-open'))
+  function setChromeIdle(idle: boolean) {
+    viewer.classList.toggle(CHROME_IDLE_CLASS, idle)
+    for (const bar of chromeBars) bar.toggleAttribute('inert', idle)
+  }
+  function scheduleChromeIdle() {
+    clearTimeout(chromeIdleTimer)
+    if (!isFullscreen() || chromeLocked) return
+    chromeIdleTimer = window.setTimeout(() => {
+      if (!isFullscreen() || chromeLocked) return
+      if (chromeHovered() || chromeFocused() || chromePopoverOpen()) {
+        scheduleChromeIdle()
+        return
+      }
+      setChromeIdle(true)
+    }, CHROME_IDLE_DELAY)
+  }
+  /** 按当前全屏与锁定状态决定控制栏是显示还是进入空闲计时。 */
+  function applyChrome() {
+    clearTimeout(chromeIdleTimer)
+    if (!isFullscreen()) {
+      setChromeIdle(false)
+      return
+    }
+    if (chromeLocked) {
+      setChromeIdle(true)
+      return
+    }
+    setChromeIdle(false)
+    scheduleChromeIdle()
+  }
+  function revealChrome() {
+    if (!isFullscreen() || chromeLocked) return
+    setChromeIdle(false)
+    scheduleChromeIdle()
+  }
+  function setChromeLocked(locked: boolean) {
+    chromeLocked = locked
+    viewer.classList.toggle(CHROME_LOCK_CLASS, locked)
+    lockButton.setAttribute('aria-pressed', String(locked))
+    lockButton.setAttribute('aria-label', locked ? '解除锁定' : '锁定控制栏')
+    lockButton.title = locked ? '解除锁定，恢复控制栏' : '锁定控制栏：隐藏控制栏，避免误触唤出'
+    setIcon(lockButton, locked ? 'lock-open' : 'lock')
+    applyChrome()
+  }
+  const onLockClick = () => setChromeLocked(!chromeLocked)
+  // 只有 LLLL 有游玩模式：按键 / 触摸在那里是判定输入，进入时自动锁定，避免判定输入反复叫出浮层。
+  const playModeButton = root.querySelector<HTMLButtonElement>('#play-mode')
+  const playModeActive = () => playModeButton?.getAttribute('aria-pressed') === 'true'
+  const onChromeKeydown = (event: KeyboardEvent) => {
+    // Esc 是浏览器退出全屏的快捷键，不用先亮出控制栏。
+    if (event.key !== 'Escape') revealChrome()
+  }
+  lockButton.addEventListener('click', onLockClick)
+  const onViewerPointerMove = (event: PointerEvent) => {
+    // 悬停只对鼠标成立：触摸抬指后不该把控制栏永久钉住。
+    pointerAt = event.pointerType === 'mouse' ? { x: event.clientX, y: event.clientY } : null
+    revealChrome()
+  }
+  const onViewerPointerLeave = () => { pointerAt = null }
+  viewer.addEventListener('pointermove', onViewerPointerMove)
+  viewer.addEventListener('pointerleave', onViewerPointerLeave)
+  viewer.addEventListener('pointerdown', revealChrome)
+  viewer.addEventListener('focusin', revealChrome)
+  document.addEventListener('keydown', onChromeKeydown)
+  // 状态提示出现时把控制栏叫回来，避免错误信息在隐藏状态下看不到。
+  let statusObserver: MutationObserver | null = null
+  if (status) {
+    statusObserver = new MutationObserver(() => { if (status.textContent) revealChrome() })
+    statusObserver.observe(status, { childList: true, characterData: true, subtree: true })
+  }
+  // 状态行浮在走带条上方，走带条高度随窄屏布局变化，这里同步给 CSS 定位。
+  const syncTransportHeight = () => viewer.style.setProperty('--transport-h', `${transport.offsetHeight}px`)
+  const transportObserver = new ResizeObserver(syncTransportHeight)
+  transportObserver.observe(transport)
+  syncTransportHeight()
+  // 游玩模式一开就锁定控制栏；退出后恢复普通自动隐藏。
+  let playModeObserver: MutationObserver | null = null
+  if (playModeButton) {
+    playModeObserver = new MutationObserver(() => setChromeLocked(playModeActive()))
+    playModeObserver.observe(playModeButton, { attributes: true, attributeFilter: ['aria-pressed'] })
+  }
+  setChromeLocked(playModeActive())
   const syncFullscreen = () => {
+    // 进入 / 退出全屏时走带条的内边距与高度都会变，先同步一次再排控制栏，不依赖 ResizeObserver 的回调时序。
+    syncTransportHeight()
     const active = Boolean(document.fullscreenElement)
     setIconButton(fullscreen, active ? 'minimize' : 'maximize', active ? '退出全屏' : '全屏预览')
     fullscreen.title = active ? '退出全屏' : '全屏预览'
+    // 退出全屏恢复常亮；游玩模式保持自动锁定，重新进入全屏时直接回到干净的游玩画面。
+    setChromeLocked(playModeActive())
   }
   document.addEventListener('fullscreenchange', syncFullscreen)
   syncFullscreen()
@@ -134,8 +264,20 @@ export function bindViewChrome(root: HTMLElement) {
   leaveFocus()
   setRecord(previousRecordOpen)
   setInspector(!inspector.hidden)
-  root.querySelector<HTMLElement>('.viewer')!.onpointerdown = event => {
+  viewer.onpointerdown = event => {
     if (!inspector.hidden && (event.target as HTMLElement).closest('.stage-shell')) setInspector(false)
   }
-  return () => document.removeEventListener('fullscreenchange', syncFullscreen)
+  return () => {
+    document.removeEventListener('fullscreenchange', syncFullscreen)
+    document.removeEventListener('keydown', onChromeKeydown)
+    lockButton.removeEventListener('click', onLockClick)
+    viewer.removeEventListener('pointermove', onViewerPointerMove)
+    viewer.removeEventListener('pointerleave', onViewerPointerLeave)
+    viewer.removeEventListener('pointerdown', revealChrome)
+    viewer.removeEventListener('focusin', revealChrome)
+    clearTimeout(chromeIdleTimer)
+    transportObserver.disconnect()
+    statusObserver?.disconnect()
+    playModeObserver?.disconnect()
+  }
 }
