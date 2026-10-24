@@ -1,5 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { openChartFixture } from './chartFixture';
+
+/** 开发服务器以 /@fs/ 提供工作区包源码；与应用导入的是同一模块实例。 */
+const fsUrl = (relative: string) => `/@fs/${fileURLToPath(new URL(relative, import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
+const CHART_MODULE = fsUrl('../../../../packages/chart/src/chart.ts');
 
 test('LLLL 舞台通过同一 3D 渲染器切换相机角度', async ({ page }) => {
   await page.goto('/?view=llll');
@@ -269,8 +274,8 @@ test('2D Fever：LineMove 长条贴在轨道边线上，向轨道外扩散', asy
   await expect(page.locator('#chart-canvas')).toHaveAttribute('data-camera-mode', '2d');
 
   // 直接驱动渲染器：Fever 从 40s 起，取 0.8s 周期内的两个时刻。
-  const readQuads = (time: number) => page.evaluate(async (t) => {
-    const { parseChart } = await import('/@fs/D:/Repos/sukushow/packages/chart/src/chart.ts');
+  const readQuads = (time: number) => page.evaluate(async ({ t, modulePath }) => {
+    const { parseChart } = await import(modulePath);
     const renderer = (window as any).__LPW__.renderer;
     renderer.setCameraMode('2d');
     renderer.setHitEffectMode('off');
@@ -293,7 +298,7 @@ test('2D Fever：LineMove 长条贴在轨道边线上，向轨道外扩散', asy
       });
     }
     return { quads, railX: renderer.debugFlatLayout().railX };
-  }, time);
+  }, { t: time, modulePath: CHART_MODULE });
 
   // 起点取 Fever 刚起的一瞬：此时 LineMask 揭示窗口还很小，长条被裁成很窄的一段。
   const startProbe = await readQuads(40.01);
@@ -338,8 +343,8 @@ test('2D Fever：LineCoreMove 彗星沿轨道边入场、彩虹边线由判定�
   await expect(page.locator('#chart-canvas')).toHaveAttribute('data-camera-mode', '2d');
 
   // Fever 从 40s 起；逐帧推进到目标时刻再取样（粒子是逐步发射的）。
-  const probe = (time: number) => page.evaluate(async (t) => {
-    const { parseChart } = await import('/@fs/D:/Repos/sukushow/packages/chart/src/chart.ts');
+  const probe = (time: number) => page.evaluate(async ({ t, modulePath }) => {
+    const { parseChart } = await import(modulePath);
     const renderer = (window as any).__LPW__.renderer;
     renderer.setCameraMode('2d');
     renderer.setHitEffectMode('off');
@@ -376,7 +381,7 @@ test('2D Fever：LineCoreMove 彗星沿轨道边入场、彩虹边线由判定�
       });
     }
     return { rail, quads, coreLeft: sparks('feverCoreLeft'), coreRight: sparks('feverCoreRight'), lineLeft: sparks('feverLineLeft'), lineRight: sparks('feverLineRight') };
-  }, time);
+  }, { t: time, modulePath: CHART_MODULE });
 
   const early = await probe(40.05);
   const warm = await probe(40.15);

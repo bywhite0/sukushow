@@ -10,6 +10,7 @@ test('PJSK Fever 原包动画、配置切换及回退 seek', async ({ page }) =>
   });
   await page.goto('/?view=pjsk&song=103103&difficulty=MASTER');
   await page.waitForFunction(() => Boolean((window as any).__LLL_PJSK__?.getChart?.()), null, { timeout: 90_000 });
+  await page.locator('[data-inspector-toggle]').click();
   await page.locator('#tab-display').click();
   await page.evaluate(() => {
     const p = (window as any).__LLL_PJSK__.player;

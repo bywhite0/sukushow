@@ -3,7 +3,8 @@ import { resultInfo } from './lpwHook';
 
 test('曲终时刻之后显示 AllPerfect 横幅，拖回之前隐藏', async ({ page }) => {
   await page.goto('/?song=103119&difficulty=MASTER');
-  await expect(page.locator('#chart-name')).toContainText('MASTER', { timeout: 20000 });
+  // 曲名与难度分列两个元素：`#chart-name` 只有曲名，难度在 `#chart-difficulty`。
+  await expect(page.locator('#chart-difficulty')).toHaveText('MASTER', { timeout: 20000 });
   const root = page.locator('#stage-canvas');
   await expect(root).toHaveAttribute('data-result', '');
   const info = await page.evaluate(async () => {

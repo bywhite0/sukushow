@@ -1,13 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 
 /** 判定弧半径（世界单位）：180° 弧长 = 可玩轨道跨度 9 ⇒ R = 9/π。 */
 const ARC_RADIUS_WORLD = 9 / Math.PI;
 /** 取景基准：判定弧半径 = 设置% × min(舞台宽, 16:9 × 舞台高)。 */
 const ARC_ASPECT = 16 / 9;
-/** 浏览器里直接 import 仓库源码（与 cameraMode.spec.ts 的用法一致）。 */
-const CHART_MODULE = '/@fs/D:/Repos/sukushow/packages/chart/src/chart.ts';
-const ARC_MODULE = '/@fs/D:/Repos/sukushow/packages/llll-preview/src/arcView.ts';
-const SLICE_MODULE = '/@fs/D:/Repos/sukushow/packages/llll-preview/src/slice.ts';
+/** 开发服务器以 /@fs/ 提供工作区包源码；与应用导入的是同一模块实例。 */
+const fsUrl = (relative: string) => `/@fs/${fileURLToPath(new URL(relative, import.meta.url)).replace(/\\/g, '/').replace(/^\/+/, '')}`;
+const CHART_MODULE = fsUrl('../../../../packages/chart/src/chart.ts');
+const ARC_MODULE = fsUrl('../../../../packages/llll-preview/src/arcView.ts');
+const SLICE_MODULE = fsUrl('../../../../packages/llll-preview/src/slice.ts');
 
 /**
  * `debugArcLayout().radiusPx` 的期望值：设置% × min(宽, 16:9·高)，

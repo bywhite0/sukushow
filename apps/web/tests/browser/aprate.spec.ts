@@ -30,7 +30,7 @@ interface Capture {
 
 async function loadAndSeek(page: import('@playwright/test').Page, errors: string[]): Promise<void> {
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?chart=/unused.json');
   await expect(page.locator('#chart-file')).toBeAttached();
   await page.locator('#chart-file').setInputFiles({ name: 'aprate.json', mimeType: 'application/json', buffer: chart });
   await expect(page.locator('#chart-name')).toHaveText('aprate.json');
