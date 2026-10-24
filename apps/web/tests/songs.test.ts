@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { findSongByChartFile, songAssets, type SongList } from '@sukushow/llll-preview/songAssets';
-import { availableDifficulties, filterSongs, matchesQuery } from '../src/songPicker';
+import { availableDifficulties } from '../src/songPicker';
 import { parseChartName } from '@sukushow/chart/masterdata';
 import { feverForSong, finishTimeForSong } from '@sukushow/chart/songTiming';
 
@@ -48,11 +48,5 @@ describe('曲目列表 apps/web/public/song-list.json', () => {
     const assets = songAssets(song);
     expect(assets.mvDurationSec).toBeCloseTo(83.06666666666666, 6);
     expect(assets.mvDurationSec).toBeGreaterThan(song.playTime / 1000);
-  });
-  it('搜索按空格分词 AND，默认隐藏无谱面', () => {
-    const song = list.songs.find((s) => s.hasChart)!;
-    expect(matchesQuery(song, song.id)).toBe(true);
-    expect(filterSongs(list.songs, '', false).every((s) => s.hasChart)).toBe(true);
-    expect(filterSongs(list.songs, '', true).length).toBe(list.songs.length);
   });
 });

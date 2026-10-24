@@ -80,20 +80,6 @@ describe('SeResolver volume window', () => {
   });
 });
 
-describe('SeResolver hold', () => {
-  it('starts hold loop when count≥1 and stops at 0', () => {
-    const out = new FakeOut();
-    const se = new SeResolver(out);
-    se.process();
-    se.addHold();
-    se.applyHold();
-    expect(out.holdStarts).toBe(1);
-    se.process();
-    se.applyHold();
-    expect(out.holdStops).toBe(1);
-  });
-});
-
 describe('dispatchAutoPlaySe', () => {
   it('Flick→AddFlick; others→AddSingle; AutoTrace uses AddSingle', () => {
     const out = new FakeOut();

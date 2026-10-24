@@ -28,7 +28,6 @@ export const RESOLUTION_PRESETS: readonly ResolutionPreset[] = [
 ]
 
 export const FRAME_RATES = [30, 60] as const
-export type FrameRate = (typeof FRAME_RATES)[number]
 
 /** 码率档位（Mbps）。 */
 export const BITRATE_CHOICES_MBPS = [12, 20, 45] as const

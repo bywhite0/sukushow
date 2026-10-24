@@ -30,6 +30,10 @@ describe('Flags 位域', () => {
     expect(() => chart([{ Uid: 1, just: '1', holds: [], Flags: flags(0, 60, 62) }])).toThrow('轨道范围无效');
   });
 
+  it('类型超出 0–3 被拒绝', () => {
+    expect(() => chart([{ Uid: 1, just: '1', holds: [], Flags: flags(4, 10, 12) }])).toThrow('类型');
+  });
+
   it('Hold 尾端点倒序被拒绝', () => {
     expect(() => chart([{ Uid: 1, just: '1', holds: ['2'], Flags: flags(1, 20, 30, 30, 20) }])).toThrow('轨道范围无效');
   });
@@ -132,9 +136,22 @@ describe('串链', () => {
 
 describe('同时押分组', () => {
   it('判定时刻差小于窗口者同组', () => {
+    // 原版 IsSameTime 容差 0.004 s。
+    expect(SIMULTANEOUS_WINDOW).toBe(0.004);
     const c = chart([
       { Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) },
       { Uid: 2, just: String(1.0 + SIMULTANEOUS_WINDOW / 2), holds: [], Flags: flags(0, 20, 22) },
+    ]);
+    expect(c.lines).toHaveLength(1);
+    expect(c.lines[0].points).toHaveLength(2);
+  });
+
+  it('只与组内首点比较，不做传递合并', () => {
+    // 2.000 / 2.003 / 2.006：首尾相差 6 ms，但后点不与前一点比较，第三点另成一组。
+    const c = chart([
+      { Uid: 1, just: '2', holds: [], Flags: flags(0, 10, 12) },
+      { Uid: 2, just: '2.003', holds: [], Flags: flags(0, 20, 22) },
+      { Uid: 3, just: '2.006', holds: [], Flags: flags(0, 30, 32) },
     ]);
     expect(c.lines).toHaveLength(1);
     expect(c.lines[0].points).toHaveLength(2);
@@ -159,6 +176,19 @@ describe('同时押分组', () => {
       { Uid: 2, just: '1.0', holds: [], Flags: flags(0, 20, 22) },
     ]);
     expect(c.lines).toHaveLength(0);
+  });
+
+  it('链首起点与链尾终点进同时押组', () => {
+    const c = chart([
+      { Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20, 10, 20) },
+      { Uid: 2, just: '2.0', holds: ['3.0'], Flags: flags(1, 10, 20, 10, 20) },
+      { Uid: 3, just: '1.0', holds: [], Flags: flags(0, 30, 32) },
+      { Uid: 4, just: '3.0', holds: [], Flags: flags(0, 40, 42) },
+    ]);
+    const at = (t: number) => c.lines.find(l => Math.abs(l.time - t) < 1e-6);
+    expect(at(1.0)?.points.length).toBe(2);
+    expect(at(3.0)?.points.length).toBe(2);
+    expect(at(3.0)?.points.some(p => p.tail)).toBe(true);
   });
 });
 
@@ -191,6 +221,11 @@ describe('BPM 与拍号', () => {
 
   it('BPM 非法被拒绝', () => {
     expect(() => chart([{ Uid: 1, just: '1', holds: [], Flags: flags(0, 1, 2) }], [{ Time: 0, Bpm: 0 }])).toThrow('BPM 无效');
+  });
+
+  it('允许 BPM 段从负时间开始', () => {
+    const c = chart([{ Uid: 1, just: '1', holds: [], Flags: flags(0, 1, 2) }], [{ Time: -0.01, Bpm: 118 }]);
+    expect(c.bpms[0].time).toBe(-0.01);
   });
 
   it('BPM 段按时间排序', () => {

@@ -64,7 +64,6 @@ export function apRateFlashAlpha(age: number, duration = 0.75): number {
   return Math.max(0, evalStreamedPoly(age, 4.74074125289917, -5.333333969116211, 0, 1));
 }
 
-export const AP_RATE_FLASH_RGB = { r: 1, g: 0.2275, b: 0.6 } as const;
 export const COMBO_FLASH_DURATION = 0.7833333611488342;
 export const AP_RATE_FLASH_DURATION = 0.75;
 
@@ -101,8 +100,6 @@ export function apContinueEffectVisible(combo: number, isApContinue: boolean): b
   return combo >= 10 && isApContinue;
 }
 
-/** 描边颜色 = `ColorModule` 渐变 rgb（两层同色）；贴图 `ui_sc2_ingame_num_combo_Effect` 本身纯白。 */
-export const COMBO_EFFECT_RGB = { r: 0.04245281219482422, g: 0.5869302749633789, b: 1 } as const;
 /** `_02`（下层）寿命 0.8s、`looping`；`_01`（上层）0.25s、单次。 */
 export const COMBO_EFFECT_LOWER_LIFE = 0.8;
 export const COMBO_EFFECT_UPPER_LIFE = 0.25;
@@ -294,13 +291,7 @@ export function comboEffectUpperOutlineScale(slot: number, age: number): number 
  * 层级（`sortingOrder` 越小越靠后）：**上底光 1 → 数字 3/4 → 描边 9 → 下底光 10**。
  * ------------------------------------------------------------------------- */
 
-/** 底光颜色 rgb（两层同色）。 */
-export const COMBO_GLOW_RGB = { r: 0.4575, g: 0.7675, b: 1 } as const;
-export const COMBO_GLOW_UPPER_W = 200;
-export const COMBO_GLOW_UPPER_H = 250;
 export const COMBO_GLOW_UPPER_ALPHA = 0.27450981736183167;
-export const COMBO_GLOW_LOWER_W = 230;
-export const COMBO_GLOW_LOWER_H = 280;
 export const COMBO_GLOW_LOWER_ALPHA = 0.5882353186607361;
 export const COMBO_GLOW_LIFE = 0.8;
 
@@ -348,7 +339,6 @@ export const SCORE_ADD_TWEEN = 0.2;
 export const SCORE_ADD_LIFE = 0.7;
 /** Prefab rest anchored X (level56); tween end is 304. */
 export const SCORE_ADD_REST_X = 305.8;
-export const SCORE_ADD_REST_Y = -52;
 
 /** Anchored X: -48*u*(u-2)+256 (u in [0,1]). */
 export function scoreAddTweenX(age: number): number {

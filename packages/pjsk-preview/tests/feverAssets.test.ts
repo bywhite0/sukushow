@@ -10,18 +10,10 @@ describe('PJSK Fever 原包资源', () => {
     }
   })
 
-  it('manifest 包含完整的 Fever 原包贴图集合', () => {
+  it('manifest 包含完整的 Fever 原包贴图与文字 sprite', () => {
     const paths = manifestPaths()
 
-    for (const file of FEVER_TEXTURE_FILES) {
-      expect(paths.has(`/assets/mmw/${file}`), file).toBe(true)
-    }
-  })
-
-  it('manifest 包含 Fever 与 SuperFever 的原包文字 sprite', () => {
-    const paths = manifestPaths()
-
-    for (const file of FEVER_SPRITE_FILES) {
+    for (const file of [...FEVER_TEXTURE_FILES, ...FEVER_SPRITE_FILES]) {
       expect(paths.has(`/assets/mmw/${file}`), file).toBe(true)
     }
   })

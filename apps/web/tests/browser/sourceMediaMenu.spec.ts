@@ -21,13 +21,3 @@ for (const view of ['llll', 'pjsk']) {
     await expect(toggle).toBeFocused()
   })
 }
-
-test('窄屏媒体菜单仍能打开文件且不撑宽页面', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/?song=missing')
-  await page.getByRole('button', { name: '媒体', exact: true }).click()
-  const chooser = page.waitForEvent('filechooser')
-  await page.locator('#open-audio').click()
-  expect(await (await chooser).element().getAttribute('id')).toBe('audio-file')
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-})

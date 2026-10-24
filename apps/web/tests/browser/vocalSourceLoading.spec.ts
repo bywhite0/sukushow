@@ -21,22 +21,17 @@ for (const view of ['llll', 'pjsk']) {
     await expect.poll(() => requested.some(path => path.includes('/jacket/103112.')), { timeout: 60000 }).toBe(true)
     expect(requested).not.toContain('/assets/mv/105101/index.m3u8')
   })
-  for (const [songId, sourceId] of [
-    ['103112', '105101'],
-    ['103109', '104106'],
-    ['405143', '405138'],
-  ]) {
-  test(`${view} Another Vocal ${songId} 请求来源谱面而非目标版本不存在的谱面`, async ({ page }) => {
+  // 版本组到来源谱面的映射由 tests/songVersions.test.ts 穷举，这里只验证真实请求落到来源谱面。
+  test(`${view} Another Vocal 103112 请求来源谱面而非目标版本不存在的谱面`, async ({ page }) => {
     test.setTimeout(90000)
     const charts: string[] = []
     await page.route('**/assets/chart/**', async route => {
       charts.push(new URL(route.request().url()).pathname)
       await route.fulfill({ status: 404, body: 'test chart missing' })
     })
-    await page.goto(`/?view=${view}&song=${songId}&difficulty=HARD`)
-    await expect.poll(() => charts, { timeout: 60000 }).toContain(`/assets/chart/rhythmgame_chart_${sourceId}_02.bytes`)
-    expect(charts.every(path => path.includes(`${sourceId}_02`))).toBe(true)
-    await expect(page.locator('.picker')).toHaveAttribute('data-song-id', songId)
+    await page.goto(`/?view=${view}&song=103112&difficulty=HARD`)
+    await expect.poll(() => charts, { timeout: 60000 }).toContain('/assets/chart/rhythmgame_chart_105101_02.bytes')
+    expect(charts.every(path => path.includes('105101_02'))).toBe(true)
+    await expect(page.locator('.picker')).toHaveAttribute('data-song-id', '103112')
   })
-  }
 }

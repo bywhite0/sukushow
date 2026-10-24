@@ -225,15 +225,6 @@ describe('exportVideo frame source contract', () => {
     expect(calls.at(-1)).toEqual(['end'])
   })
 
-  it('accepts a source that ignores the extra begin and collectAudio arguments', async () => {
-    const begin = vi.fn((_width: number, _height: number) => {})
-    const end = vi.fn()
-    const source: ExportFrameSource = { canvas: {} as HTMLCanvasElement, begin, renderAt: () => {}, collectAudio: () => silentAudio(), end }
-    await exportVideo(source, request)
-    expect(begin).toHaveBeenCalledTimes(1)
-    expect(end).toHaveBeenCalledTimes(1)
-  })
-
   it('restores the source when begin throws', async () => {
     const end = vi.fn()
     const { source } = recordingSource({

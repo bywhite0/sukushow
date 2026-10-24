@@ -3,10 +3,9 @@ import { parseChart } from '@sukushow/chart/chart';
 import { defaultLayout, edgeX, noteSpan, timeY } from '../src/layout';
 import {
   ARROW_WIDTH, FLICK_SIGN_OFFSET_Y, HOLD_CENTER, HOLD_CENTER_ALPHA, HOLD_SIDE, HOLD_SIDE_ALPHA, LANE_WORLD, SPRITE_SCALE_X,
-  bandHalves, chainBandHalves, cssRgba, flickOverlays, laneX, noteDepthWorld, noteSpriteSize, noteWidthWorld,
+  bandHalves, cssRgba, flickOverlays, laneX, noteDepthWorld, noteWidthWorld,
   pxPerWorld, sliceCaps,
 } from '../src/geometry';
-import { deflateRawSync } from 'node:zlib';
 
 const flags = (type: number, l: number, r: number, l2 = l, r2 = r) =>
   (type & 15) | ((r & 63) << 4) | ((r2 & 63) << 10) | ((l & 63) << 16) | ((l2 & 63) << 22);
@@ -42,13 +41,6 @@ describe('原版尺寸换算', () => {
 
   it('像素比例 = 格宽 / 0.15', () => {
     expect(pxPerWorld(lay({ lanePx: 14 }))).toBeCloseTo(14 / 0.15, 9);
-  });
-
-  it('贴图尺寸按 scale.x = 0.75 缩放', () => {
-    const l = lay({ lanePx: 14 });
-    const s = noteSpriteSize(1, 0, l);
-    expect(s.w).toBeCloseTo(0.15 * SPRITE_SCALE_X * pxPerWorld(l), 6);
-    expect(s.h).toBeCloseTo(0.45 * SPRITE_SCALE_X * pxPerWorld(l), 6);
   });
 });
 
@@ -196,32 +188,6 @@ describe('Hold 宽带三列', () => {
     }
   });
 
-  it('链按源数组顺序逐节点产出半边', () => {
-    // 串链谓词：首段 (l2,r2) 必须等于次段 (l,r)，故次段沿用 [10,20]。
-    const c = chart([
-      { Uid: 1, just: '1.0', holds: ['1.5'], Flags: flags(1, 10, 20) },
-      { Uid: 2, just: '1.5', holds: ['2.0'], Flags: flags(1, 10, 20) },
-    ]);
-    const l = lay({ lanePx: 10 });
-    expect(c.roots).toHaveLength(1);
-    const h = chainBandHalves(c.roots[0], l);
-    expect(h).toHaveLength(4);
-    // 第一节点尾排右列 = 轨道 20；第二节点（同轨）头排左列 = 轨道 11。
-    expect(h[1].corners[2][0]).toBeCloseTo(laneX(20, l), 9);
-    expect(h[2].corners[0][0]).toBeCloseTo(laneX(11, l), 9);
-    // 第二节点尾排落在 2.0 s（时间向上，故用 duration − t）。
-    expect(h[3].corners[2][1]).toBeCloseTo(l.padY + (l.duration - 2.0) * l.pxPerSec, 9);
-  });
-
-  it('零时长节点不产出', () => {
-    const c = chart([{ Uid: 1, just: '1.0', holds: ['1.0'], Flags: flags(1, 10, 20) }]);
-    expect(chainBandHalves(c.roots[0], lay())).toHaveLength(0);
-  });
-
-  it('deflate 输入同样适用（解析路径一致）', () => {
-    const json = JSON.stringify({ Notes: [{ Uid: 1, just: '1.0', holds: ['2.0'], Flags: flags(1, 10, 20) }], Bpms: [] });
-    expect(deflateRawSync(Buffer.from(json)).length).toBeGreaterThan(0);
-  });
 });
 
 describe('Flick 附加元素', () => {
@@ -320,12 +286,6 @@ describe('Flick 附加元素', () => {
     // 抬高量随 pxPerWorld 缩放，不随 pxPerSec 变化。
     const wide = flickOverlays(n, lay({ lanePx: 20, pxPerSec: 900 }), metas);
     expect(wide[3].cy).toBeCloseTo(timeY(1.0, lay({ lanePx: 20, pxPerSec: 900 })) - FLICK_SIGN_OFFSET_Y * pxPerWorld(lay({ lanePx: 20 })), 9);
-  });
-
-  it('非 Flick 类型不产出附加元素（调用方按 type===2 分流）', () => {
-    const single = chart([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 21) }]).notes[0];
-    // 几何函数本身与类型无关，此处只固定「同参数下几何一致」这一事实。
-    expect(flickOverlays(single, lay(), metas)).toHaveLength(4);
   });
 });
 

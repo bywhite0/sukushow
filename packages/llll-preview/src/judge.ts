@@ -119,7 +119,6 @@ export interface NoteViewState {
 
 /** 单指判定窗口：`JudgementSingleResolver`（4.12.0）。 */
 export const SINGLE_PERFECT_PLUS = 0.025;
-export const SINGLE_MIN_DIFF = 0.04;
 export const SINGLE_MAX_DIFF = 0.125;
 /** `JudgementHoldResolver`：没有 Perfect 档，PP 窗口更宽。 */
 export const HOLD_MIN_DIFF = 0.04;

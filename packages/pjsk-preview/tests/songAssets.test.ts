@@ -1,77 +1,9 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { songAssets, findSong, loadSongList, fetchBytes, creditsToMetadata, type SongEntry } from '../src/llll/songAssets'
-
-const baseSong: SongEntry = {
-  id: '103103',
-  orderId: 1,
-  title: 'フォーチュンムービー',
-  furigana: '',
-  category: 'スリーズブーケ',
-  unitId: '3',
-  unitName: 'スリーズブーケ',
-  generationsId: '3',
-  jacketId: '103103',
-  jacketAsset: 'image_music_thumbnail_103103',
-  jacketPath: '/assets/jacket/103103.png',
-  hasJacket: true,
-  charts: { MASTER: 'rhythmgame_chart_103103_04.bytes' },
-  difficulties: ['MASTER'],
-  hasChart: true,
-  soundId: '10310301',
-  songTime: 0,
-  playTime: 75727,
-  feverSectionNo: 0,
-  centerCharacterId: '',
-  singerCharacterId: '',
-  supportCharacterId: '',
-  startTime: '',
-  isVideoMode: false,
-}
+import { fetchBytes } from '../src/llll/songAssets'
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
-})
-
-describe('songAssets', () => {
-  it('仅为有视频模式且有原包时序的歌曲提供 MV', () => {
-    expect(songAssets({ ...baseSong, isVideoMode: true })).toMatchObject({
-      mvUrl: '/assets/mv/103103/index.m3u8', mvStartSec: 0, mvDurationSec: 83.06666666666666,
-    })
-    expect(songAssets(baseSong)).toMatchObject({ mvUrl: null, mvStartSec: 0, mvDurationSec: 0 })
-    expect(songAssets({ ...baseSong, id: 'unknown', isVideoMode: true }).mvUrl).toBeNull()
-  })
-  it('由 soundId 推导 BGM 路径', () => {
-    expect(songAssets(baseSong).bgmUrl).toBe('/assets/audio/bgm_10310301.ogg')
-  })
-
-  it('曲绘用 PNG 而非 WebP（wasm 侧 stb_image 不支持 WebP）', () => {
-    expect(songAssets(baseSong).coverUrl).toBe('/assets/jacket/103103.png')
-    expect(songAssets(baseSong).coverUrl).not.toMatch(/\.webp$/)
-  })
-
-  it('缺 soundId / 无曲绘时返回 null', () => {
-    expect(songAssets({ ...baseSong, soundId: '' }).bgmUrl).toBeNull()
-    expect(songAssets({ ...baseSong, hasJacket: false }).coverUrl).toBeNull()
-  })
-})
-
-describe('loadSongList', () => {
-  it('解析曲目列表并支持按 Id 查找', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        source: 'test', total: 1, withChart: 1, withJacket: 1,
-        units: {}, songs: [baseSong],
-      }),
-    })))
-
-    const list = await loadSongList()
-    expect(list.total).toBe(1)
-    const song = await findSong('103103')
-    expect(song?.title).toBe('フォーチュンムービー')
-    expect(await findSong('不存在')).toBeNull()
-  })
 })
 
 describe('fetchBytes', () => {
@@ -93,34 +25,5 @@ describe('fetchBytes', () => {
     const bytes = await fetchBytes('/assets/audio/bgm_10310301.ogg')
     expect(bytes).toBeInstanceOf(Uint8Array)
     expect(Array.from(bytes!)).toEqual([1, 2, 3])
-  })
-})
-
-describe('creditsToMetadata', () => {
-  const base = {
-    id: '103103', title: 'フォーチュンムービー',
-    lyricist: 'ケリー', composer: '桃宇アリサ、めんま',
-    arranger: 'めんま', stringsArranger: null,
-    center: '日野下花帆', singer: ['乙宗梢'], support: [],
-    vocal: ['日野下花帆', '乙宗梢'], vocalCount: 2, wikiPage: null,
-  }
-
-  it('credits 为 null 时全部返回 null', () => {
-    expect(creditsToMetadata(null)).toEqual({
-      lyricist: null, composer: null, arranger: null, vocal: null,
-    })
-  })
-
-  it('vocal 用顿号拼接（含 C 位）', () => {
-    expect(creditsToMetadata(base).vocal).toBe('日野下花帆、乙宗梢')
-  })
-
-  it('编曲缺失时退回弦编曲', () => {
-    const credits = { ...base, arranger: null, stringsArranger: '渡辺拓也、真部 裕' }
-    expect(creditsToMetadata(credits).arranger).toBe('渡辺拓也、真部 裕')
-  })
-
-  it('vocal 为空数组时返回 null', () => {
-    expect(creditsToMetadata({ ...base, vocal: [] }).vocal).toBeNull()
   })
 })

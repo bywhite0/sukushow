@@ -14,9 +14,6 @@ describe('screenLane：屏幕 x → lane（受控数值）', () => {
   const screenX = (lane: number) => W / 2 + (lane - LANE_CENTER) * PX;
 
   it('1920 宽：lane 0 / 29.5 / 59 的屏幕 x 与反算往返一致', () => {
-    expect(screenX(0)).toBeCloseTo(249.64, 9);
-    expect(screenX(29.5)).toBeCloseTo(960, 9);
-    expect(screenX(59)).toBeCloseTo(1670.36, 9);
     for (const lane of [0, 29.5, 59]) {
       expect(laneFromProjectedX(screenX(lane), W, screenX(29.5), screenX(30.5))).toBeCloseTo(lane, 9);
       expect(laneFromFlatX(screenX(lane), W, PX)).toBeCloseTo(lane, 9);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { feverChargeStart, feverFlashStart, FeverChargeTimeline, chargeNotesInWindow } from '../src/lib/feverCharge'
+import { feverChargeStart, FeverChargeTimeline, chargeNotesInWindow } from '../src/lib/feverCharge'
 
 describe('充能窗口', () => {
   it('只计算开始事件到 Fever 起点之间的音符，排除歌曲前半段', () => {
@@ -41,14 +41,6 @@ describe('FeverChance 充能起点', () => {
   it('取充能开始的首个音符，而不是 70% 阈值音符', () => {
     expect(feverChargeStart([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])).toBe(1)
     expect(feverChargeStart([1, 2, 3])).toBe(1)
-  })
-  it('闪光从严格超过 Fever 阈值的音符开始，与 Chance 起点独立', () => {
-    const times = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    expect(feverFlashStart(times)).toBe(8)
-    expect(feverChargeStart(times)).toBe(1)
-    expect(feverFlashStart([1, 2, 3])).toBe(3)
-    expect(feverFlashStart([])).toBe(null)
-    expect(feverFlashStart([-2])).toBe(-2)
   })
   it('空谱面没有充能窗口', () => {
     expect(feverChargeStart([])).toBe(-1)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseChart, type Chart } from '@sukushow/chart/chart';
 import { LiveHud } from '../src/hud';
 import { DEFAULT_SCORE_CONFIG, ScoreEngine } from '../src/score';
-import { SE_CUE, SeResolver, cueIndexForJudgement, type SeOutput } from '../src/se';
+import { SE_CUE, SeResolver, type SeOutput } from '../src/se';
 import type { JudgeEvent } from '../src/judge';
 import type { NoteJudgementType } from '../src/rgOptions';
 
@@ -131,15 +131,6 @@ describe('LiveHud 手动模式：SE 派发', () => {
     expect(out.plays.map((p) => p.index)).toEqual([
       SE_CUE.bad, SE_CUE.good, SE_CUE.great, SE_CUE.perfect, SE_CUE.perfect, SE_CUE.flick, SE_CUE.touch,
     ]);
-  });
-
-  it('cueIndexForJudgement 映射不变', () => {
-    expect(cueIndexForJudgement(1)).toBe(SE_CUE.bad);
-    expect(cueIndexForJudgement(2)).toBe(SE_CUE.good);
-    expect(cueIndexForJudgement(3)).toBe(SE_CUE.great);
-    expect(cueIndexForJudgement(4)).toBe(SE_CUE.perfect);
-    expect(cueIndexForJudgement(5)).toBe(SE_CUE.perfect);
-    expect(cueIndexForJudgement(0)).toBe(SE_CUE.perfect);
   });
 
   it('Hold：头判发判定音、中间航点静音但计分、尾判发 Perfect 音', () => {

@@ -56,12 +56,6 @@ function revokeAll(): void {
   urlCache.clear()
 }
 
-/** 本地库里是否存在这个公开路径对应的文件。 */
-export function hasLocal(path: string | null): boolean {
-  if (!path || !library) return false
-  return candidatesForPath(path).some((name) => library!.has(name))
-}
-
 /** 找出路径对应的本地文件；没有则返回 null。 */
 async function findFile(path: string): Promise<File | null> {
   if (!library) return null
@@ -208,9 +202,4 @@ export async function localChart(filename: string): Promise<File | null> {
 
 function formatMb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-/** 释放全部 blob URL（页面卸载时调用）。 */
-export function disposeLocalMedia(): void {
-  revokeAll()
 }

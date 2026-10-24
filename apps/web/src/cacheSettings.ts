@@ -185,11 +185,6 @@ export async function clearCaches(
   return results.filter(Boolean).length
 }
 
-/** 只清理渲染资源缓存，保留应用外壳的离线能力。 */
-export function clearRendererCache(storage: CacheStorageLike): Promise<number> {
-  return clearCaches(storage, ['renderer'])
-}
-
 export function clearAllCaches(storage: CacheStorageLike): Promise<number> {
   return clearCaches(storage)
 }

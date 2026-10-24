@@ -51,10 +51,6 @@ export function cueIndexForJudgement(type: NoteJudgementType): number {
   return u < 3 ? type + 5 : SE_CUE.perfect;
 }
 
-export function cueFileName(index: number): string | undefined {
-  return CUE_FILE[index];
-}
-
 /** |Δ| < 0.004 — ChartNoteLineComparer.IsSameTime. */
 export const LINE_HASH_SAME_TIME = 0.004;
 

@@ -94,11 +94,6 @@ export function dotOutlineRects(f: StartFrame): DotRect[] {
   return [intersect(right, DOT_MASK_RIGHT), intersect(btm, DOT_MASK_BTM)].filter((r): r is DotRect => r !== null);
 }
 
-export function dotOutlinePath(f: StartFrame): string {
-  const n = (v: number) => +v.toFixed(3);
-  return dotOutlineRects(f).map(([x0, y0, x1, y1]) => `M${n(x0)} ${n(y0)}H${n(x1)}V${n(y1)}H${n(x0)}Z`).join('');
-}
-
 /** 过场画到的视口（与 HUD 相同）。 */
 export type StartView = { cssW: number; cssH: number; dpr: number };
 

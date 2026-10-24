@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { parseChart } from '@sukushow/chart/chart';
 import { flatParticlePoint, HitFx } from '../src/fx';
 import type { FxFile } from '../src/rgAssets';
-import { pushBillboard } from '../src/slice';
 
 const resource = JSON.parse(readFileSync(new URL('../../../apps/web/public/rg/fx/fx.json', import.meta.url), 'utf8')) as FxFile;
 /** 只保留指定 prefab 的 HitFx：贴图用空 Texture 占位，测试只统计顶点数。 */
@@ -24,19 +23,6 @@ const flags = (type: number, l: number, r: number) => (type & 15) | ((r & 63) <<
 const singleNote = parseChart({
   Notes: [{ Uid: 1, just: '1', holds: [], Flags: flags(0, 29, 30) }],
   Bpms: [{ Time: 0, Bpm: 120 }],
-});
-
-describe('fx billboard spin', () => {
-  it('rotates corners in the billboard plane', () => {
-    const pos = new Float32Array(18);
-    const uv = new Float32Array(12);
-    const col = new Float32Array(24);
-    const n = pushBillboard(pos, uv, col, 0, 6, 0, 0, 0, 2, 2, [1, 1, 1, 1], 1, 1, Math.PI / 2);
-    expect(n).toBe(6);
-    // 90° spin: former right edge maps toward billboard "up" (no pure +X extent).
-    const xs = [pos[0], pos[3], pos[6], pos[9]];
-    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(1.01);
-  });
 });
 
 /** 2D 俯视下 hitFX / fever 粒子共用同一条绘制路径（HitFx.setFlat），位移也要一起重映射。 */

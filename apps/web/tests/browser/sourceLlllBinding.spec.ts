@@ -43,21 +43,3 @@ test('绑定自制谱时隐藏官方难度但保留 Another Vocal', async ({ pag
   await expect(page.locator('#song-difficulty')).toBeHidden()
   await expect(page.locator('#song-versions')).toBeVisible()
 })
-
-test('LLLL 清除本地音频会清空播放器缓冲并保留谱面', async ({ page }) => {
-  await page.goto('/?chart=/unused.json')
-  await expect(page.locator('#chart-name')).toBeVisible()
-  await page.locator('#chart-file').setInputFiles({
-    name: 'audio-test.json', mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify({ Notes: [{ Uid: 1, just: '1', holds: [], Flags: 160 }], Bpms: [{ Time: 0, Bpm: 120 }] })),
-  })
-  const wav = oneSecondWav()
-  await page.locator('#audio-file').setInputFiles({ name: 'one-second.wav', mimeType: 'audio/wav', buffer: wav })
-  const duration = () => page.evaluate(() => (window as unknown as { __LPW__: { player: { audioDuration: number | null } } }).__LPW__.player.audioDuration)
-  await expect.poll(duration).toBe(1)
-  await page.getByRole('button', { name: '媒体', exact: true }).click()
-  await page.locator('[data-media-kind="audio"]').getByRole('button', { name: '清除', exact: true }).click()
-  await expect.poll(duration).toBeNull()
-  await expect(page.locator('#chart-name')).toHaveText('audio-test.json')
-  await expect(page.locator('#play')).toBeEnabled()
-})

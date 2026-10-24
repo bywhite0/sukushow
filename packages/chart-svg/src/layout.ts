@@ -73,11 +73,6 @@ export function axisDuration(chart: Chart, finishTime: number | null): number {
   return chart.notes.reduce((t, n) => Math.max(t, n.end), finishTime);
 }
 
-/** 成图总高（像素）。 */
-export function contentHeight(chart: Chart, lay: Layout): number {
-  return lay.padY * 2 + chart.duration * lay.pxPerSec;
-}
-
 /** 一个音符的横向范围（画布像素），已含镜像。 */
 export function noteSpan(note: Note, lay: Layout, tail: boolean): [number, number] {
   const l = tail ? note.l2 : note.l, r = tail ? note.r2 : note.r;

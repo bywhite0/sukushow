@@ -12,7 +12,7 @@ import {
   particleAt,
   spawnEmitter,
 } from '../src/comboResult';
-import { AP_BANNER_CURVES, AP_BANNER_EMITTERS, AP_BANNER_NODES, CLEAR_BANNER_EMITTERS, COMBO_RESULT_BANNERS, COMBO_RESULT_BG, COMBO_RESULT_TEXTURES } from '../src/comboResultClip';
+import { AP_BANNER_EMITTERS, AP_BANNER_NODES, CLEAR_BANNER_EMITTERS, COMBO_RESULT_BANNERS, COMBO_RESULT_BG, COMBO_RESULT_TEXTURES } from '../src/comboResultClip';
 
 const node = (p: string) => AP_BANNER_NODES.find((n) => n.path === `Root-AllPerfect/${p}`)!;
 const em = (p: string) => AP_BANNER_EMITTERS.find((e) => e.path.endsWith(`/${p}`))!;
@@ -36,10 +36,6 @@ describe('曲终横幅 AllPerfect', () => {
     expect(nodeStateAt(node('AllPerfect_Title'), 0.5).a).toBeCloseTo(1, 3);
     expect(nodeStateAt(node('Image'), 0).sx).toBeCloseTo(0.5, 4);
     expect(nodeStateAt(node('Image'), 2).sx).toBeCloseTo(2.5, 4);
-  });
-
-  it('rgb 曲线都是常量（着色可以预先算好）', () => {
-    for (const c of AP_BANNER_CURVES) if (['r', 'g', 'b'].includes(c.prop)) expect(c.keys).toHaveLength(1);
   });
 
   it('发射器开播时刻跟随 active 曲线：Effect01 及子系统 1/60 s，标题光 0.2167 s', () => {

@@ -147,12 +147,6 @@ export function noteDepthWorld(type: number): number {
   return type === 3 ? 0.35 : 0.45;
 }
 
-/** 贴图在平面视图里的目标尺寸（像素）。 */
-export function noteSpriteSize(widthUnits: number, type: number, lay: Layout): { w: number; h: number } {
-  const k = pxPerWorld(lay);
-  return { w: noteWidthWorld(widthUnits) * SPRITE_SCALE_X * k, h: noteDepthWorld(type) * SPRITE_SCALE_X * k };
-}
-
 export interface SliceCaps {
   left: number;
   right: number;
@@ -276,17 +270,6 @@ function gradientAxis(c: [number, number][]): { gradFrom: [number, number]; grad
  */
 export function laneX(pos: number, lay: Layout): number {
   return lay.padX + lay.sideWidth + (lay.mirror ? LANES_REF - pos : pos) * lay.lanePx;
-}
-
-/** 链上各节点的宽带半边，顺序 = 源数组顺序。 */
-export function chainBandHalves(root: Note, lay: Layout, active = false): BandHalf[] {
-  const out: BandHalf[] = [];
-  let node: Note | undefined = root;
-  while (node) {
-    if (node.end > node.time) out.push(...bandHalves(node, lay, active));
-    node = node.next;
-  }
-  return out;
 }
 
 /** 把带 alpha 的 RGB 写成 SVG 的 rgba()。 */

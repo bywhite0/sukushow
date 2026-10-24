@@ -331,10 +331,3 @@ export function chartToMusicScore(chart: Chart, options: ConvertOptions = {}): M
     FullComboDataHash: null,
   }
 }
-
-/** 判定是不是 llll 原生谱面（`{Notes, Bpms}`），用于导入时自动识别格式。 */
-export function isLlllNativeChart(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
-  return Array.isArray(record.Notes) && Array.isArray(record.Bpms)
-}

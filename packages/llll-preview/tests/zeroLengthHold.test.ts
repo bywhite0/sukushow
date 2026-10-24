@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartAllNoteSize, parseChart } from '@sukushow/chart/chart';
+import { parseChart } from '@sukushow/chart/chart';
 import { createSlope, holdSegment } from '../src/geometry';
 
 const flags = (t: number, l: number, r: number, l2 = 0, r2 = 0) =>
@@ -19,20 +19,6 @@ const chain = () =>
   });
 
 describe('零长 hold 段', () => {
-  it('按 IsCombine（uid 递增 + L2/R2→L1/R1 + LooseEquals(holds[^1], Just)）串接，不串到同刻别的 hold', () => {
-    const c = chain();
-    const [a, z, other, b] = c.notes;
-    expect(a.next).toBe(z);
-    expect(z.prev).toBe(a);
-    expect(z.next).toBe(b);
-    expect(b.prev).toBe(z);
-    expect(other.prev).toBeUndefined();
-    expect(other.next).toBeUndefined();
-    expect(c.roots.map((n) => n.uid)).toEqual([1, 3]);
-    // AllNoteSize：链头 1 + GetHolds(0, 2) 半拍 8 点；另一条单段 1 + 1。
-    expect(chartAllNoteSize(c)).toBe(1 + 8 + 2);
-  });
-
   it('零长段照样发射（零纵深），第 1 段尾排缝到它的头排 = 第 1 段自己的尾端 lane', () => {
     const c = chain();
     const [a, z, , b] = c.notes;

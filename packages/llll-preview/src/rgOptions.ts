@@ -51,10 +51,6 @@ export function noteSpeedToFallSpeed(noteSpeed: number): number {
   return noteSpeed * 0.1;
 }
 
-export function fallSpeedToNoteSpeed(speed: number): number {
-  return Math.round(speed * 10);
-}
-
 /** LaneWidth float = option / 100; mesh base unit 0.15 × that scale. */
 export function laneWidthScale(laneWidth: number): number {
   return laneWidth / 100;

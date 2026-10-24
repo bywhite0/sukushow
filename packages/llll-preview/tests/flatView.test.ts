@@ -282,6 +282,19 @@ describe('billboard 基向量', () => {
     expect(Math.max(...xs) + Math.min(...xs)).toBeCloseTo(0, 6);
   });
 
+  it('平面内旋转（Unity startRotation）：非正方形贴图转 90° 后宽高互换', () => {
+    setBillboardPitch(PITCH);
+    const pos = new Float32Array(18), uv = new Float32Array(12), col = new Float32Array(24);
+    // 正方形（w = h）下 90° 旋转与不旋转的 x 跨度相同，测不出旋转；这里用 2 × 0.5 的长条。
+    const n = pushBillboard(pos, uv, col, 0, 6, 0, Y, 0, 2, 0.5, [1, 1, 1, 1], 1, 1, Math.PI / 2);
+    expect(n).toBe(6);
+    const xs = [0, 1, 2, 3].map(i => pos[i * 3]);
+    const ys = [0, 1, 2, 3].map(i => pos[i * 3 + 1]);
+    // 未旋转时宽沿 x（2）、高沿相机上方（0.5）；转 90° 后两者互换。
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.5, 6);
+    expect((Math.max(...ys) - Math.min(...ys)) / Math.cos(PITCH)).toBeCloseTo(2, 6);
+  });
+
   it('切换回 3D 后基向量复原', () => {
     setBillboardPitch(FLAT_PITCH);
     setBillboardPitch(PITCH);

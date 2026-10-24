@@ -37,7 +37,6 @@ export { COMBO_RESULT_CLIP_DURATION };
 
 /** GetResultIndex：0 AllPerfect、1 FullCombo、2 Clear、3 Finish。 */
 export type ResultKind = 0 | 1 | 2 | 3;
-export const RESULT_KINDS: readonly ResultKind[] = [0, 1, 2, 3];
 
 export const BANNER_TEX_BASE = '/rg/banner/';
 /** 粒子单位：1 unit = 100 设计像素（与 HUD 同一 1920×1080 参考分辨率）。 */

@@ -9,7 +9,6 @@ import {
   cacheGroupOf,
   clearAllCaches,
   clearCaches,
-  clearRendererCache,
   estimateCacheStorage,
   loadOfflineCacheEnabled,
   loadSongCacheEnabled,
@@ -137,17 +136,9 @@ describe('clearCaches', () => {
   it('只删除指定分组，并返回删除的缓存数量', async () => {
     const storage = fakeCacheStorage({
       'workbox-precache-v2-https://sukushow.test/': {},
-      [RENDERER_CACHE_NAME]: {},
       ...Object.fromEntries(SONG_CACHE_NAMES.map((name) => [name, {}])),
       'workbox-runtime-https://sukushow.test/': {},
     })
-    await expect(clearRendererCache(storage)).resolves.toBe(1)
-    expect([...storage.data.keys()]).toEqual([
-      'workbox-precache-v2-https://sukushow.test/',
-      ...SONG_CACHE_NAMES,
-      'workbox-runtime-https://sukushow.test/',
-    ])
-
     // 只清理歌曲资源里的音频与谱面，MV 与曲绘保留。
     await expect(clearCaches(storage, ['audio', 'chart'])).resolves.toBe(2)
     expect([...storage.data.keys()]).toEqual([

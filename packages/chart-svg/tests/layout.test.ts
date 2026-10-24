@@ -165,6 +165,32 @@ describe('Hold 链', () => {
     });
     expect(chainEnd(c.roots[0])).toBeCloseTo(2.5);
   });
+
+  it('零长瞬移段：前段停在自身尾端 lane，后段从瞬移后的 lane 起画', () => {
+    // 405131 EXPERT #117/#118/#120 同型：斜段 → 零长瞬移段 → 斜段；另有一条同刻起始的独立 Hold。
+    const c = parseChart({
+      Notes: [
+        { Uid: 1, just: '0', holds: ['1'], Flags: flags(1, 0, 14, 15, 29) },
+        { Uid: 2, just: '1', holds: ['1'], Flags: flags(1, 15, 29, 45, 59) }, // 零长
+        { Uid: 3, just: '1', holds: ['1.5'], Flags: flags(1, 0, 14, 0, 14) },
+        { Uid: 4, just: '1', holds: ['2'], Flags: flags(1, 45, 59, 30, 44) },
+      ],
+      Bpms: [{ Time: 0, Bpm: 120 }],
+    });
+    const l = { ...lay(), duration: 10 };
+    const [a, , , b] = c.notes;
+    const q = chainQuads(c.roots[0], l);
+    expect(q).toHaveLength(2);
+    const [tl, tr] = noteSpan(a, l, true);
+    expect(q[0].p[3][0]).toBeCloseTo(tl, 6);
+    expect(q[0].p[2][0]).toBeCloseTo(tr, 6);
+    const [hl, hr] = noteSpan(b, l, false);
+    expect(q[1].p[0][0]).toBeCloseTo(hl, 6);
+    expect(q[1].p[1][0]).toBeCloseTo(hr, 6);
+    // 瞬移前后两排同一时刻、横向不同：前一段没有被拉向 45-59。
+    expect(q[0].p[3][1]).toBeCloseTo(q[1].p[0][1], 6);
+    expect(Math.abs(q[1].p[0][0] - q[0].p[3][0])).toBeGreaterThan(l.lanePx);
+  });
 });
 
 describe('小节线', () => {
@@ -194,6 +220,16 @@ describe('小节线', () => {
   it('3/4 拍号缩短小节', () => {
     const ms = measures(one([{ Time: 0, Bpm: 120 }], [{ Numerator: 3, Denominator: 4, Time: 0 }]));
     expect(ms[1].time).toBeCloseTo(1.5);
+  });
+
+  it('拍号中途变化后小节长度随之改变', () => {
+    const c = one([{ Time: 0, Bpm: 120 }], [
+      { Numerator: 4, Denominator: 4, Time: 0 },
+      { Numerator: 3, Denominator: 4, Time: 4 },
+    ]);
+    c.duration = 12;
+    // 0–4 秒：4/4 每小节 2 秒 ⇒ 0、2；4 秒起 3/4 ⇒ 每小节 1.5 秒 ⇒ 4、5.5、7、8.5、10、11.5。
+    expect(measures(c).map(m => m.time)).toEqual([0, 2, 4, 5.5, 7, 8.5, 10, 11.5]);
   });
 
   it('无 BPM 段时不出线', () => {

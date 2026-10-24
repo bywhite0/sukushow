@@ -129,12 +129,6 @@ export function scoreRankDisplay(
   return scoreRankLetter(rank);
 }
 
-/** Piecewise gauge fill 0..1 from score + rank thresholds [S,A,B,C]. */
-/** Fill fractions at C/B/A/S on the 330px slider (RankLabels keep dump xs ≈2px off). */
-export const GAUGE_FILL_AT_RANK: readonly [number, number, number, number] = [
-  0.409, 0.587, 0.773, 0.912,
-];
-
 export function scoreGaugeFill(
   score: number,
   rankValues: readonly [number, number, number, number] = DEFAULT_SCORE_RANK_VALUES,
@@ -203,8 +197,6 @@ export function technicalPercent(push: number): number {
 }
 
 
-/** ApResolver.Scaler */
-export const AP_SCALER = 10_000;
 /** ApResolver.StandardValue — basePlus = STANDARD / AllNoteSize */
 export const AP_STANDARD_VALUE = 600_000;
 

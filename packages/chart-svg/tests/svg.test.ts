@@ -196,12 +196,6 @@ describe('SVG 结构', () => {
     expect(extra).toBeGreaterThan(builtin);
   });
 
-  it('背景色可改', () => {
-    const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
-    const { svg } = renderSvg(chart, lib(), opts({ extraCss: '.bg{fill:#222}' }));
-    expect(svg).toContain('.bg{fill:#222}');
-  });
-
   it('小节号标注在轨道栏左侧', () => {
     const chart = chartOf([{ Uid: 1, just: '1.0', holds: [], Flags: flags(0, 10, 12) }]);
     const { svg } = renderSvg(chart, lib(), opts({ showBarNumbers: true }));

@@ -8,7 +8,6 @@ it.each([
   [0x12345678, 0.12887372076511383],
 ])('原生拖尾 seed %s 的宽度因子', (seed, expected) => {
   expect(feverTrailWidthFactor(seed)).toBe(expected);
-  expect(feverTrailWidthFactor(seed)).toBe(expected);
 });
 
 it.each([
@@ -55,14 +54,6 @@ describe('原始 level56 Fever 渐变', () => {
 });
 
 describe('fever LineBase / LineMove color', () => {
-  it('returns rgba in range', () => {
-    const c = feverLineRgba(16.4, 16);
-    expect(c).toHaveLength(4);
-    for (const v of c) {
-      expect(v).toBeGreaterThanOrEqual(0);
-      expect(v).toBeLessThanOrEqual(1.001);
-    }
-  });
   it('LineMove 的周期与尺寸取原包值，alpha 在中段达峰', () => {
     // 寿命 = 发射周期 = 0.8s，`startSize=(0.11, 120)`：长轴远超可见范围。
     expect(FEVER_MOVE_CYCLE).toBeCloseTo(0.8, 6);

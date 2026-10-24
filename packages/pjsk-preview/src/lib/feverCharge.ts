@@ -32,8 +32,3 @@ export class FeverChargeTimeline {
 export function feverChargeStart(times: readonly number[]): number {
   return times.length ? times[0] : -1
 }
-
-/** 闪光在严格超过 Fever 阈值时触发；不能复用 Chance 的 >= 起点。 */
-export function feverFlashStart(times: readonly number[]): number | null {
-  return times.length ? times[Math.floor(times.length * 0.7)] : null
-}
