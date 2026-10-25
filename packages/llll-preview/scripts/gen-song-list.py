@@ -142,6 +142,7 @@ def main():
             'title': clean_text(music.get('Title', '')),
             'furigana': clean_text(music.get('TitleFurigana', '')),
             'category': clean_text(music.get('Description', '')),
+            'songType': int(music.get('SongType') or 0),
             'unitId': music.get('UnitId', ''),
             'unitName': clean_text(units.get(music.get('UnitId', ''), '')),
             'generationsId': music.get('GenerationsId', ''),

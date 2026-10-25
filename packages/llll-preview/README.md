@@ -121,6 +121,25 @@ pnpm preview
 - **跳转**：手动模式下任何跳转（回拖、前跳、重开）都是从该时刻重开一局，不重放玩家输入；重开由视图显式调用 `hud.resetManual` 并重置判定引擎，HUD 不按时间差推断跳转，卡顿或后台恢复造成的时间大步前进照常推进、跳过的音符按漏判结算；判定偏移在侧栏「游玩判定偏移」调整并持久化，平移的是整条判定时钟（触摸时刻与超时结算一起，`playJudgeTime`），游玩中修改等于从当前时刻重开。
 - **未实现**：角色技能与语音；Mental 上限固定为预览默认值（原版取牌组 TotalMental）。
 
+## 结算界面（RhythmGameResultScene）
+
+游玩模式在曲终横幅（4 s clip）播完后进入结算：`LiVE★CLEAR` 标题逐字入场 → 标题内容滑入 → 分数 / 技术分 / 六行判定 / 最大 combo / FAST·SLOW·FLICK 依次计数 → 曲终旗标（AP / FC）与清曲灯动画 → 「再玩一次」/「退出游玩」按钮。
+
+- 数据来自 4.12.0 level57 授权导出：`src/resultScreenClip.ts`（198 节点 / 3 段 clip / 42 个粒子发射器）由 `scripts/gen-result-screen-data.py` 生成；渲染器 `src/resultScreen.ts` 画在 `stageCompositor` 的最上层，与舞台共用同一张合成画布。
+- 只有游玩模式会进入结算；AutoPlay 预览到曲终仍只显示曲终横幅。过场沿用原版 FadeType.Capture：截屏冻帧盖屏、0.3 s 淡出后才起标题演出。
+- 跳过：标题演出结束后点击画面直达终态（原版 `OnCompleted` 口径：不播旗标 / 灯音效、不激活粒子），点击有 0.3 s 节流。
+- 音频：揭幕时起结算 BGM（原始循环点 3.45675…72.74225 s），标题 / AP·FC / 清曲灯分别播对应 SE；各段正数计数播放 75 ms 循环音。跳过停计数声、保留音乐和既有单发尾音，关闭结算停止全部输出。音量跟随「音乐」与「SE」设置。
+- 音频资源用 `python packages/llll-preview/scripts/export-result-audio.py --plain <资源目录> --ui <ui.acb>` 从原始包导出（依赖 vgmstream-cli、ffmpeg）；音乐位于不入库的 `apps/web/public/assets/audio/`，短音效位于 `apps/web/public/se/`。运行时缺失或解码失败的单条结算音频只跳过对应输出，不阻塞预览。
+- 标题曲线与 4.12.0 原始 clip 逐系数复核，保留 2.4167 s 时长与整体弹跳幅度；粒子从 active 关键帧起算，保留 burst 轮次、尺寸切线、双色渐变与形状参数，并按原始 renderer 排序分在主 UI 前后。随机序列、正交投影、限速和 shader 为浏览器近似。
+- 「レート」是单曲 Rate（本地成绩库里谱面归属曲目该难度的最佳技术分 + masterdata Level / MaxCombo，Another Vocal 共用谱面归属曲目行，按原版 `GetRateByScore` 计算）；「プレイヤーレート」才是全部单曲 Rate 的前 30 之和（`CalculatePlayerRate`）。两者由 `src/rate.ts` + `apps/web/src/views/llll/resultRecords.ts` 本地复现，清空浏览器存储即回到全新账号状态。
+- 全局设置的「成绩」页展示曲库原名、曲绘、记录时间、分数、技术分百分比、Rate、六类判定与最大 Combo，展开可查看每局历史和低档判定的 FAST / LATE / FLICK 明细。Another Vocal 共用谱面历史；Rate 按最佳通关技术分计算，同分取最近一局。支持删除单局、删除该谱面全部历史与清空全部，删除后重算 Rate。偏差统计独立于 HUD 显示开关，FLICK 只统计未完成划动的判定。
+- 成绩页支持 JSON 导入与导出，备份包含全部历史及判定明细；导入按记录 ID 合并并跳过重复，自动重算 Rate。坏文件、ID 冲突或存储失败时显示错误并保留本地数据。
+- 背景：原版是出战卡组中心卡卡面；预览使用深色渐变背景。
+- 预览拿不到的数据整块隐藏、不伪造：清曲灯 after（原版来自服务端 ClearStatus，预览按本机成绩推断）、曲目类型图标（按 `Musics.yaml` 的 SongType 取 `icon_song_type_{SongType}`，未知时按 1 占位）。原版 NextButton 是内容页翻页（恒 3 页），预览只有 UserRecord 页，因此映射为「再玩一次」并另加「退出游玩」。
+- 未 clear（mental 归零）：结算技术分按原版口径显示 `000.0000%`；本地历史保存实际技术分、分数与判定并标记未通关，该局不提升 Rate / PlayerRate。
+- 文本布局取场景的 TMP 对齐、字距 / 行距、18…72 自动字号范围，以及字体 FaceInfo；Combo 数字按原生贴图与场景缩放 0.8 绘制，通常 72×96、数字 1 为 56×96，无附加阴影。样式近似：标题 / Combo 光晕按贴图 alpha 绘制，SDF 粗细用同色描边近似，段位字母用 EB 800 + 软阴影近似。详见 [实现依据与限制](../../docs/evidence.md)。
+- 编排与计数测试在 `tests/resultScreen.test.ts`，标题关键帧与粒子数值测试在 `tests/resultScreenParticles.test.ts`，浏览器集成测试在 `apps/web/tests/browser/resultScreen.spec.ts`。
+
 ## 依据与限制
 
 参见 [实现依据与限制](../../docs/evidence.md)。行为以客户端二进制与场景序列化为准；重建工程仅辅助定位逻辑。不转换为 SUS，也不经过 WASM 渲染。
@@ -137,6 +156,7 @@ pnpm preview
 - `src/geometry.ts`：空间数学；`src/flatView.ts`：2D 俯视取景与线性下落曲线；`src/arcView.ts`：SIF 半圆取景与径向下落曲线。
 - `src/slice.ts`、`src/shaders.ts`、`src/rgAssets.ts`、`src/fx.ts`：9-slice、着色器、资源加载、hit FX。
 - `src/hud.ts`：SafeArea 覆盖层；`src/judge.ts`：手动判定状态机；`src/screenLane.ts`：屏幕坐标 → 轨道 lane 反投影。
+- `src/resultScreen.ts`：结算界面状态机与 canvas 绘制；`src/resultScreenClip.ts`：level57 授权导出数据（生成文件）。
 - `src/transport.ts`、`src/audio.ts`、`src/se.ts`：播放时基、本地音乐与局内音效。
 - `src/score.ts`、`src/fever.ts`、`src/hudFxMath.ts`：计分、Fever 边线颜色与 HUD 动画曲线。
 - `src/renderer.ts`：WebGL 批量几何。

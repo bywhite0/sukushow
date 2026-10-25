@@ -14,6 +14,7 @@ import { image, preloadImages } from './canvasKit';
 import type { LiveHud } from './hud';
 import type { StartAnimation } from './startAnim';
 import type { ComboResult } from './comboResult';
+import type { ResultScreen } from './resultScreen';
 
 export const LIVE_BG_URL = '/in_game_difficulty_bg_101.png';
 export const LIVE_BG_DOT_URL = '/sc2_ingame_bg_pattern_dot.png';
@@ -36,6 +37,7 @@ export type StageLayers = {
   hud: Pick<LiveHud, 'draw'> | null;
   startAnim: Pick<StartAnimation, 'draw'> | null;
   comboResult: Pick<ComboResult, 'draw'> | null;
+  resultScreen?: Pick<ResultScreen, 'draw'> | null;
 };
 
 export class StageCompositor {
@@ -105,6 +107,7 @@ export class StageCompositor {
     layers.hud?.draw(ctx, view);
     layers.startAnim?.draw(ctx, view);
     layers.comboResult?.draw(ctx, view);
+    layers.resultScreen?.draw(ctx, view);
   }
 
   private drawLiveBg(ctx: CanvasRenderingContext2D, view: StageView, bg: HTMLImageElement | null, dot: HTMLImageElement | null): void {

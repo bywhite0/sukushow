@@ -303,3 +303,40 @@ describe('LiveHud 手动模式：ComboFlags（曲终横幅档位）', () => {
     expect(hud.liveComboFlags).toBe(3);
   });
 });
+
+describe('LiveHud 结算数据：Conditions', () => {
+  it('历史逐档偏差不受显示开关影响，FLICK 与时间偏差互斥', () => {
+    const { hud } = setup();
+    hud.setFastSlowThreshold(0);
+    hud.applyJudgement(event({ type: 4, condition: 1 }));
+    hud.applyJudgement(event({ type: 4, condition: 2 }));
+    hud.applyJudgement(event({ type: 3, condition: 1 }));
+    hud.applyJudgement(event({ type: 2, condition: 3, noteType: 2, flick: true }));
+    hud.applyJudgement(event({ type: 1, condition: 2 }));
+    hud.applyJudgement(event({ type: 5, condition: 1 }));
+    hud.applyJudgement(event({ type: 0, condition: 0 }));
+    hud.applyJudgement(event({ kind: 'empty', type: 3, condition: 1 }));
+    hud.applyJudgement(event({ type: 3, condition: 1, hold: true, head: false, holdIndex: 1 }));
+    expect(hud.liveJudgementConditions).toEqual([[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 0, 0], [1, 1, 0], [0, 0, 0]]);
+    expect(hud.liveConditions).toEqual([0, 0, 0]);
+    const snapshot = hud.liveJudgementConditions;
+    hud.resetManual(0);
+    expect(hud.liveJudgementConditions).toEqual(Array.from({ length: 6 }, () => [0, 0, 0]));
+    expect(snapshot[4]).toEqual([1, 1, 0]);
+  });
+
+  it('三桶互斥：Fast/Slow 按档位计入，FLICK 只计兜底 Good', () => {
+    const { hud } = setup();
+    hud.setFastSlowThreshold(2); // UnderPerfect：Perfect 及以下才标 FAST/SLOW
+    hud.applyJudgement(event({ type: 4, condition: 1, time: 0.1 }));
+    hud.applyJudgement(event({ type: 4, condition: 2, time: 0.2 }));
+    // Flick 起手成功但划动未完成 → 兜底 Good + Condition=Flick。
+    hud.applyJudgement(event({ type: 2, condition: 3, flick: true, noteType: 2, time: 0.3 }));
+    expect(hud.liveConditions).toEqual([1, 1, 1]);
+    // Perfect+ 超出 UnderPerfect 档位，不标 Fast/Slow。
+    hud.applyJudgement(event({ type: 5, condition: 1, time: 0.4 }));
+    expect(hud.liveConditions).toEqual([1, 1, 1]);
+    hud.resetManual(0);
+    expect(hud.liveConditions).toEqual([0, 0, 0]);
+  });
+});

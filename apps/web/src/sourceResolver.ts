@@ -139,6 +139,8 @@ export async function resolveSource(state: SourceState, dependencies: SourceDepe
     revision: state.revision, identity: state.identity, songId: state.songId,
     chart, chartSongId, custom: state.chart.kind === 'custom', metadata,
     level: state.chart.kind === 'official' ? chartSong?.levels?.[state.chart.difficulty] ?? null : null,
+    maxCombo: state.chart.kind === 'official' ? chartSong?.maxCombos?.[state.chart.difficulty] ?? null : null,
+    songType: chartSong?.songType ?? song?.songType ?? null,
     download: { downloadedBytes: [...downloaded.values()].reduce((sum, bytes) => sum + bytes, 0),
       totalBytes: sizes ? totalBytes
         : [...downloaded.values()].reduce((sum, bytes) => sum + bytes, 0),

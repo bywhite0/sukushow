@@ -1,17 +1,19 @@
 /**
- * Copy local RhythmGame sprites, 9-slice borders, and FX textures into apps/web/public/rg/.
+ * 把本地 RhythmGame 贴图、九宫格边框数据、特效贴图与结算界面美术资源拷进 apps/web/public/rg/。
  *
- * Run from the repo root with source roots (no machine-local defaults):
+ * 在仓库根目录运行，源目录由参数给出（脚本内不写本机路径）：
  *   node packages/llll-preview/scripts/copy-rg-assets.mjs --unity <RhythmGameAssetsDir> --meta <sprite_meta.json>
- *   # or RG_UNITY_ROOT / RG_SPRITE_META
- * Idempotent. Missing PNGs are skipped and listed; nothing is synthesized.
+ *   # 也可用环境变量 RG_UNITY_ROOT / RG_SPRITE_META
+ * 幂等：已存在的贴图（sprites / banner / fx/tex）一律跳过并报告，只补缺失文件；重复运行不改动已入库字节。
+ * 缺 PNG 只记录跳过，不做任何合成。
  *
- * Contract:
+ * 输出契约：
  *   apps/web/public/rg/sprites/<name>.png
  *   apps/web/public/rg/fx/fx.json
  *   apps/web/public/rg/fx/tex/<texture>.png
  *   apps/web/public/rg/sprite_meta.json   { [name]: { name, border, rect, ppu } }
  *   apps/web/public/rg/fonts/<file>.otf
+ *   apps/web/public/rg/banner/<texture>.png
  */
 import { access, copyFile, mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -27,7 +29,7 @@ const outMeta = join(outRoot, 'sprite_meta.json');
 const outBanner = join(outRoot, 'banner');
 const outFonts = join(outRoot, 'fonts');
 
-/** @returns {{ unityRoot: string, spriteMetaSrc: string }} */
+/** 解析源目录：命令行参数优先，其次环境变量。 */
 function resolveSources(argv = process.argv, env = process.env) {
   let unityRoot = env.RG_UNITY_ROOT?.trim() || '';
   let spriteMetaSrc = env.RG_SPRITE_META?.trim() || '';
@@ -57,7 +59,7 @@ const FX_TEX_EXTRA = [
 const numbered = (prefix, from, to) =>
   Array.from({ length: to - from + 1 }, (_, i) => `${prefix}${from + i}`);
 
-/** Sprites the preview HUD / note field actually loads. Mental bar chrome is procedural in the Unity HUD (no GameUI PNG). */
+/** 预览 HUD / 音符区实际加载的贴图（Mental 条在 Unity HUD 里是程序化胶囊，没有 GameUI PNG）。 */
 const SPRITES = [
   'ui_sc2_ingame_notes_tap',
   'ui_sc2_ingame_notes_hold',
@@ -114,6 +116,57 @@ const BANNER_TEX = [
   'ui_sc2_ingame_end_star01',
   'ui_sc2_ingame_end_star02',
 ];
+
+/**
+ * 结算界面（RhythmGameResultScene）用到的 UI 贴图：src/resultScreenClip.ts 的 RESULT_SPRITES 全量，
+ * 外加渲染器按运行时状态换用的清曲灯 ui_sc2_ic_note_none / _02（数据里只出现 _01 / _03）与
+ * 曲目类型图标 icon_song_type_0…3（SongType 取自 Musics masterdata）。目标路径与 HUD 贴图同目录：apps/web/public/rg/sprites/。
+ */
+const RESULT_SPRITES = [
+  'ui_sc2_button_rank',
+  'ui_sc2_button_rank_deco_01',
+  'ui_sc2_button_rank_deco_02',
+  'ui_sc2_button_rank_shine',
+  'ui_sc2_ic_note_01',
+  'ui_sc2_ic_note_02',
+  'ui_sc2_ic_note_03',
+  'ui_sc2_ic_note_none',
+  'ui_sc2_ingame_hantei_bad',
+  'ui_sc2_ingame_hantei_good',
+  'ui_sc2_ingame_hantei_great',
+  'ui_sc2_ingame_hantei_miss',
+  'ui_sc2_ingame_hantei_perfect',
+  'ui_sc2_ingame_hantei_perfect_plus',
+  'ui_sc2_result_arrow',
+  'ui_sc2_result_base_01',
+  'ui_sc2_result_base_03',
+  'ui_sc2_result_title_a',
+  'ui_sc2_result_title_c',
+  'ui_sc2_result_title_e',
+  'ui_sc2_result_title_i',
+  'ui_sc2_result_title_l',
+  'ui_sc2_result_title_r',
+  'ui_sc2_result_title_star',
+  'ui_sc2_result_title_v',
+  'ui_sukusute_icon_smile',
+  'icon_song_type_0',
+  'icon_song_type_1',
+  'icon_song_type_2',
+  'icon_song_type_3',
+];
+
+/** 结算界面粒子贴图（4.12.0 BannerTex）；与曲终横幅纹理同目录 apps/web/public/rg/banner/。 */
+const RESULT_BANNER_TEX = [
+  'sc2_Result_effect_glow_01',
+  'sc2_Result_effect_star_00_texture',
+  'rhythmgame_scorerankicon',
+];
+
+/** sprites 拷贝清单：HUD 与结算界面合并去重（同名只拷一次）。 */
+const spritePlan = [...new Set([...SPRITES, ...RESULT_SPRITES])];
+
+/** banner 拷贝清单：曲终横幅与结算粒子贴图合并去重。 */
+const bannerPlan = [...new Set([...BANNER_TEX, ...RESULT_BANNER_TEX])];
 
 const rel = (abs) => abs.slice(repoRoot.length + 1).replaceAll('\\', '/');
 
@@ -199,7 +252,7 @@ function texName(raw) {
 async function main() {
   const { unityRoot, spriteMetaSrc } = resolveSources();
   if (!unityRoot || !spriteMetaSrc) {
-    console.error('Missing source roots. Pass --unity <RhythmGameAssetsDir> --meta <sprite_meta.json>, or set RG_UNITY_ROOT and RG_SPRITE_META.');
+    console.error('缺少源目录：请传 --unity <RhythmGameAssetsDir> --meta <sprite_meta.json>，或设置 RG_UNITY_ROOT / RG_SPRITE_META。');
     process.exitCode = 1;
     return;
   }
@@ -216,15 +269,21 @@ async function main() {
   await mkdir(outFxTex, { recursive: true });
   await mkdir(outFonts, { recursive: true });
 
-  for (const name of SPRITES) {
-    const src = await findPng(spriteDirs, name);
+  const kept = [];
+  for (const name of spritePlan) {
     const dest = join(outSprites, `${name}.png`);
+    // 已入库的贴图不覆盖（仓库文件可能来自另一版导出）；只补缺失文件。
+    if (await exists(dest)) {
+      kept.push(rel(dest));
+      continue;
+    }
+    const src = await findPng(spriteDirs, name);
     if (!src) {
-      missing.push(`sprite ${name}.png (not in GameUI)`);
+      missing.push(`sprite ${name}.png（GameUI / SelectUI 里没有）`);
       continue;
     }
     if (!(await isPng(src))) {
-      missing.push(`sprite ${name}.png (present but not a PNG: ${src})`);
+      missing.push(`sprite ${name}.png（存在但不是 PNG：${src}）`);
       continue;
     }
     await copyFile(src, dest);
@@ -235,7 +294,7 @@ async function main() {
     const src = join(fontRoot, file);
     const dest = join(outFonts, file);
     if (!(await exists(src))) {
-      missing.push(`font ${file} (not in RhythmGame/Fonts)`);
+      missing.push(`font ${file}（RhythmGame/Fonts 里没有）`);
       continue;
     }
     await copyFile(src, dest);
@@ -267,14 +326,18 @@ async function main() {
 
   const fxDirs = await fxSearchDirs(unityRoot);
   for (const name of textures) {
-    const src = await findPng(fxDirs, name);
     const dest = join(outFxTex, `${name}.png`);
+    if (await exists(dest)) {
+      kept.push(rel(dest));
+      continue;
+    }
+    const src = await findPng(fxDirs, name);
     if (!src) {
-      missing.push(`fx tex ${name}.png (mats.tex; searched GameUI, RhythmFx, FxTex)`);
+      missing.push(`fx tex ${name}.png（mats.tex 引用；已搜索 GameUI、RhythmFx、FxTex）`);
       continue;
     }
     if (!(await isPng(src))) {
-      missing.push(`fx tex ${name}.png (present but not a PNG: ${src})`);
+      missing.push(`fx tex ${name}.png（存在但不是 PNG：${src}）`);
       continue;
     }
     await copyFile(src, dest);
@@ -283,11 +346,19 @@ async function main() {
 
   await mkdir(outBanner, { recursive: true });
   const bannerDirs = [join(unityRoot, 'Art', 'Resources', 'BannerTex')];
-  for (const name of BANNER_TEX) {
-    const src = await findPng(bannerDirs, name);
+  for (const name of bannerPlan) {
     const dest = join(outBanner, `${name}.png`);
+    if (await exists(dest)) {
+      kept.push(rel(dest));
+      continue;
+    }
+    const src = await findPng(bannerDirs, name);
+    if (!src) {
+      missing.push(`banner tex ${name}.png（BannerTex 里没有）`);
+      continue;
+    }
     if (!(await isPng(src))) {
-      missing.push(`banner tex ${name}.png (not in BannerTex: ${src})`);
+      missing.push(`banner tex ${name}.png（存在但不是 PNG：${src}）`);
       continue;
     }
     await copyFile(src, dest);
@@ -296,14 +367,16 @@ async function main() {
 
   let metaCount = 0;
   if (!(await exists(spriteMetaSrc))) {
-    missing.push(`sprite_meta.json (${spriteMetaSrc})`);
+    missing.push(`sprite_meta.json（${spriteMetaSrc} 不存在）`);
   } else {
     const source = JSON.parse(await readFile(spriteMetaSrc, 'utf8'));
-    const slim = {};
+    // 先保留既有输出条目，再从源 meta 覆盖 / 追加：清单增删不会挤掉历史 sprite 的边框数据。
+    // 结算界面贴图都是纯贴图、不需要九宫格数据，只按 HUD 清单写 meta。
+    const slim = (await exists(outMeta)) ? JSON.parse(await readFile(outMeta, 'utf8')) : {};
     for (const name of SPRITES) {
       const entry = source[name];
       if (!entry || !Array.isArray(entry.border) || !Array.isArray(entry.rect)) {
-        missing.push(`sprite border ${name} (not in sprite_meta.json)`);
+        missing.push(`sprite border ${name}（sprite_meta.json 里没有）`);
         continue;
       }
       slim[name] = {
@@ -312,28 +385,33 @@ async function main() {
         rect: entry.rect,
         ppu: entry.ppu,
       };
-      metaCount += 1;
     }
+    metaCount = Object.keys(slim).length;
     await writeFile(outMeta, `${JSON.stringify(slim, null, 2)}\n`);
     copied.push(rel(outMeta));
   }
 
-  console.log(`copied ${copied.length}`);
-  console.log(`missing ${missing.length}`);
-  console.log('paths:');
+  console.log(`已拷贝 ${copied.length}`);
+  console.log(`kept ${kept.length}（结算界面贴图已存在，未覆盖）`);
+  console.log(`缺失 ${missing.length}`);
+  console.log('已拷贝：');
   for (const path of copied) console.log(`  ${path}`);
-  console.log('missing sources:');
-  if (missing.length === 0) console.log('  (none)');
+  console.log('已存在（未覆盖）：');
+  if (kept.length === 0) console.log('  （无）');
+  else for (const path of kept) console.log(`  ${path}`);
+  console.log('缺失来源：');
+  if (missing.length === 0) console.log('  （无）');
   else for (const item of missing) console.log(`  ${item}`);
-  console.log('contract:');
+  console.log('契约：');
   console.log('  public/rg/sprites/<name>.png');
   console.log('  public/rg/fx/fx.json');
   console.log('  public/rg/fx/tex/<texture>.png');
   console.log('  public/rg/sprite_meta.json');
   console.log('  public/rg/fonts/<file>.otf');
-  console.log(`sprite_meta entries ${metaCount}`);
-  console.log(`fx search dirs ${fxDirs.length}: ${fxDirs.join(' | ') || '(none)'}`);
-  console.log('mental: no GameUI PNG (Unity mental bar is a procedural capsule); not invented');
+  console.log('  public/rg/banner/<texture>.png');
+  console.log(`sprite_meta 条目 ${metaCount}`);
+  console.log(`fx 搜索目录 ${fxDirs.length}：${fxDirs.join(' | ') || '（无）'}`);
+  console.log('mental：Unity HUD 的 Mental 条是程序化胶囊，没有 GameUI PNG，不臆造。');
 }
 
 main().catch((error) => {

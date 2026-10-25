@@ -22,6 +22,8 @@ export type SongEntry = {
   title: string
   furigana: string
   category: string
+  /** Musics masterdata 的 SongType（结算的曲目类型图标 icon_song_type_{SongType}）。 */
+  songType?: number
   unitId: string
   unitName: string
   generationsId: string

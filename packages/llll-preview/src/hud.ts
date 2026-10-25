@@ -71,6 +71,7 @@ import {
   tintedMask,
 } from './canvasKit';
 import { lcg, mixSeed } from './rng';
+import { drawRankBadge } from './rankBadge';
 import { isFeverAt, type FeverWindow } from '@sukushow/chart/fever';
 import { noteJudgementTimes } from '@sukushow/chart/chart';
 import {
@@ -82,6 +83,7 @@ import {
   reduceMental,
   scoreRankDisplay,
   technicalPercent,
+  technicalRaw,
   type ScoreEngineConfig,
 } from './score';
 import {
@@ -316,6 +318,10 @@ export class LiveHud {
   private manualPlay = false;
   /** 本帧按住中的 Hold 数（视图每帧 `setHoldingHolds`；手动模式的持续音按它 AddHold）。 */
   private holdingHolds = 0;
+  /** FAST / SLOW / FLICK 计数（结算界面 Conditions 数组；手动模式逐音符累计）。 */
+  private readonly conditionCounts: [number, number, number] = [0, 0, 0];
+  /** 历史成绩的逐档 FAST / LATE / FLICK，独立于 HUD 显示开关。行序 Miss..PerfectPlus。 */
+  private readonly judgementConditions: number[][] = Array.from({ length: 6 }, () => [0, 0, 0]);
   /**
    * Mental（`IMentalResolver`）：开局满血，判定按 `ReduceBad/Miss/HoldMid/TraceMiss` 扣，
    * 扣到 0 不失败——只是此后判定不再加分（`ScoreResolver.Add` 在 `Value < 1` 时跳过加分块），
@@ -460,6 +466,10 @@ export class LiveHud {
     this.resetLive(time);
     this.scoreEngine.setFever(isFeverAt(time, this.feverWindow));
     this.holdingHolds = 0;
+    this.conditionCounts[0] = 0;
+    this.conditionCounts[1] = 0;
+    this.conditionCounts[2] = 0;
+    for (const counts of this.judgementConditions) counts.fill(0);
     this.se?.clear();
   }
 
@@ -496,6 +506,22 @@ export class LiveHud {
     if (shouldShowJudgement(event.type, this.judgementOutput)) {
       this.applyJudgeSprite(event.type);
       this.judgeAt = event.time;
+    }
+    // Conditions：每个音符根判一次（Hold 中间采样不重复计入）。三个桶互斥，且 Condition 由判定侧
+    // 给出：Fast=1 / Slow=2 / Flick=3。Flick 只出现在「起手成功但划动未完成」的兜底 Good 上
+    // （`ManualFlickNotePolicy.ProcessView` @0x4AF1D50 调 `Score.Add(Good, Flick, …)`），
+    // 不是 Flick 音符总数；成功划动仍按 Fast/Slow。`ScoreResolver.Add`（@0x49A1334–0x49A135C）
+    // 再按 FastSlowThreshold 清掉超出档位的 Condition。
+    if (!event.hold || event.head) {
+      // 低档判定才有偏差细分；漏判与 Perfect+ 不归入 FAST / LATE。
+      if (event.type >= 1 && event.type <= 4 && event.condition >= 1 && event.condition <= 3) {
+        this.judgementConditions[event.type]![event.condition - 1]! += 1;
+      }
+      if (shouldShowFastSlow(event.type, this.fastSlowThreshold)) {
+        if (event.condition === 1) this.conditionCounts[0] += 1;
+        else if (event.condition === 2) this.conditionCounts[1] += 1;
+        else if (event.condition === 3) this.conditionCounts[2] += 1;
+      }
     }
     if (shouldShowFastSlow(event.type, this.fastSlowThreshold)) {
       this.applyConditionSprite(event.condition);
@@ -1164,6 +1190,47 @@ export class LiveHud {
     return this.scoreEngine.userCombo === total ? 2 : 0;
   }
 
+  // ── 结算界面（RhythmGameResultScene）用的手动模式累计值 ────────────────
+  /** 本局分数（ScoreResolver.GetScore）。 */
+  get liveScore(): number {
+    return this.scoreEngine.score;
+  }
+
+  /** 本局技术分原始加权和（TechnicalScoreResolver.CalculateTechnicalScore）。 */
+  get liveTechnicalRaw(): number {
+    return technicalRaw(this.scoreEngine.judgements);
+  }
+
+  /** 本局最大 combo（ResultSceneResolver 的 UserCombo）。 */
+  get liveUserCombo(): number {
+    return this.scoreEngine.userCombo;
+  }
+
+  /** 判定计数（索引 = NoteJudgementType：0 Miss … 5 PerfectPlus）。 */
+  get liveJudgements(): readonly number[] {
+    return this.scoreEngine.judgements;
+  }
+
+  /** FAST / SLOW / FLICK 计数（Conditions 数组；预览口径见 applyJudgement）。 */
+  get liveConditions(): readonly [number, number, number] {
+    return [this.conditionCounts[0], this.conditionCounts[1], this.conditionCounts[2]];
+  }
+
+  /** 历史成绩逐档 FAST / LATE / FLICK；返回副本，避免成绩库持有本局可变计数。 */
+  get liveJudgementConditions(): readonly (readonly number[])[] {
+    return this.judgementConditions.map(counts => [...counts]);
+  }
+
+  /** 技术分归一分母：预览取 chartAllNoteSize（与 HUD 技术分显示同源）。 */
+  get liveNoteCount(): number {
+    return this.scoreEngine.allNoteSize;
+  }
+
+  /** 本局段位（RhythmGameAchievementStatus：0 None / 1 C … 4 S）。 */
+  get liveScoreRank(): number {
+    return this.scoreEngine.rank;
+  }
+
   get feverVisible(): boolean {
     return this.enableFeverDisplay && this.feverActive;
   }
@@ -1397,8 +1464,7 @@ export class LiveHud {
   private drawRank(ctx: Ctx): void {
     const r = placeRect(512, 160, 0.5, 0.5, 0.5, 0.5, -170, -13, 110, 121);
     drawSprite(ctx, spriteUrl('ui_sc2_ingame_rank_base'), r.x, r.y, r.w, r.h);
-    const mask = image(spriteUrl('ui_sc2_button_rank'));
-    if (!mask) return;
+    if (!image(spriteUrl('ui_sc2_button_rank'))) return;
     const ix = r.x - 23, iy = r.y - 30; // 156×181 居中于 110×121
     ctx.save();
     scaleAbout(ctx, ix + 78, iy + 90.5, 0.55);
@@ -1417,69 +1483,12 @@ export class LiveHud {
       cc.setTransform(m.a, m.b, m.c, m.d, m.e - bx, m.f - by);
       cc.imageSmoothingEnabled = true;
       cc.imageSmoothingQuality = ctx.imageSmoothingQuality;
-      this.paintRankIcon(cc, mask, ix, iy);
+      drawRankBadge(cc, this.rank, ix, iy);
       this.rankCache = { key, canvas, x: bx, y: by };
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.rankCache.canvas, this.rankCache.x, this.rankCache.y);
     ctx.restore();
-  }
-
-  private paintRankIcon(ctx: Ctx, mask: HTMLImageElement, ix: number, iy: number): void {
-    const masked = (x: number, y: number, w: number, h: number, draw: (g: Ctx) => void) =>
-      (g: Ctx) => drawGroup(g, { bounds: { x, y, w, h }, mask: (m) => m.drawImage(mask, x, y, w, h) }, draw);
-    const fillBox = (x: number, y: number, w: number, h: number, bg: string | CanvasGradient) => (g: Ctx) => {
-      g.fillStyle = bg;
-      g.fillRect(x, y, w, h);
-      g.globalCompositeOperation = 'multiply';
-      g.drawImage(mask, x, y, w, h);
-      g.globalCompositeOperation = 'source-over';
-    };
-    masked(ix, iy, 156, 181, (g) => {
-      // rim：底色 + 贴图 multiply（img opacity .8）
-      masked(ix, iy, 156, 181, (h) => {
-        h.fillStyle = 'rgb(155,145,174)';
-        h.fillRect(ix, iy, 156, 181);
-        h.globalAlpha = 0.8;
-        h.globalCompositeOperation = 'multiply';
-        h.drawImage(mask, ix, iy, 156, 181);
-        h.globalAlpha = 1;
-        h.globalCompositeOperation = 'source-over';
-      })(g);
-      // White：inset 3（150×175），贴图自身作遮罩
-      const wx = ix + 3, wy = iy + 3;
-      masked(wx, wy, 150, 175, (h) => {
-        h.drawImage(mask, wx, wy, 150, 175);
-        const cx = wx + 3, cy = wy + 3;
-        masked(cx, cy, 144, 169, fillBox(cx, cy, 144, 169, 'rgb(176,172,184)'))(h);
-        if (this.rank !== 'none') {
-          masked(cx, cy, 144, 169, (c) => {
-            let bg: string | CanvasGradient;
-            if (this.rank === 'S') {
-              const grad = c.createLinearGradient(cx, 0, cx + 144, 0);
-              grad.addColorStop(0, 'rgb(177,147,203)');
-              grad.addColorStop(1, 'rgb(96,228,222)');
-              bg = grad;
-            } else {
-              bg = ({ D: 'rgb(133,150,208)', C: 'rgb(54,215,225)', B: 'rgb(30,196,167)', A: 'rgb(253,91,145)' } as const)[this.rank as 'D'];
-            }
-            fillBox(cx, cy, 144, 169, bg)(c);
-            const sh = placeRect(144, 169, 1, 0, 1, 0, 1, 1, 145, 126);
-            const shine = image(spriteUrl('ui_sc2_button_rank_shine'));
-            if (shine) { c.globalAlpha = 0.2; c.drawImage(shine, cx + sh.x, cy + sh.y, sh.w, sh.h); }
-            c.globalAlpha = 0.8;
-            const d1 = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, -21.5, 51, 103, 69);
-            const d2 = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, 52, -36, 41, 57);
-            drawSprite(c, spriteUrl('ui_sc2_button_rank_deco_01'), cx + d1.x, cy + d1.y, d1.w, d1.h, 'fill');
-            drawSprite(c, spriteUrl('ui_sc2_button_rank_deco_02'), cx + d2.x, cy + d2.y, d2.w, d2.h, 'fill');
-            c.globalAlpha = 1;
-            const nm = placeRect(144, 169, 0.5, 0.5, 0.5, 0.5, 0, 2, 120, 120);
-            drawText(c, this.rank, { size: 80, weight: 800, color: '#fff', shadow: { dy: 2, color: 'rgba(0,0,0,.302)' } },
-              cx + nm.x, cy + nm.y, nm.w, nm.h);
-          })(h);
-        }
-      })(g);
-    })(ctx);
   }
 
   private drawJudge(ctx: Ctx): void {

@@ -40,3 +40,5 @@
 .play-key[aria-pressed="true"]{border-color:var(--shell-accent);background:var(--shell-accent);color:var(--shell-ink)}
 .play-keys-reset{margin:-12px 0 22px}
 @media (max-width:560px){.stage-mode-switch{top:var(--space-2);right:var(--space-2)}}
+/* 结算界面占满舞台时隐藏 3D / 2D / SIF 切换（原版结算场景没有这组按钮）。 */
+.view-llll .stage[data-result-screen="1"] .stage-mode-switch{display:none}

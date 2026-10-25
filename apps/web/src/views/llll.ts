@@ -15,6 +15,10 @@ import { installExportDialog, probeAllConfigs } from './exportDialog';
 import { LIVE_BG_DOT_URL, LIVE_BG_URL, StageCompositor, type StageView } from '@sukushow/llll-preview/stageCompositor';
 import { EXPORT_OPENING, StartAnimation, START_BASE01_URL, START_CLIP_DURATION } from '@sukushow/llll-preview/startAnim';
 import { ComboResult, BANNER_TEX_BASE, COMBO_RESULT_CLIP_DURATION, type ComboResultLoadProgress, type ResultKind } from '@sukushow/llll-preview/comboResult';
+import { ResultScreen, type ResultScreenAction, type ResultScreenLoadProgress, type ResultSnapshot } from '@sukushow/llll-preview/resultScreen';
+import { ResultAudio, RESULT_AUDIO_URLS, type ResultAudioLoadProgress } from '@sukushow/llll-preview/resultAudio';
+import { technicalGoal } from '@sukushow/llll-preview/resultScreenFormat';
+import { applyPlayResult, loadResultRecords, saveResultRecords } from './llll/resultRecords';
 import { RG_RESOURCE_URLS, type RgLoadProgress } from '@sukushow/llll-preview/rgAssets';
 import { SE_RESOURCE_URLS, type SeLoadProgress } from '@sukushow/llll-preview/se';
 import { COMBO_RESULT_TEXTURES } from '@sukushow/llll-preview/comboResultClip';
@@ -283,8 +287,9 @@ const initialResourceUrls=[...new Set([
  START_BASE01_URL,LIVE_BG_URL,LIVE_BG_DOT_URL,
  ...hudTextureUrls,
  ...COMBO_RESULT_TEXTURES.map((name)=>`${BANNER_TEX_BASE}${name}.png`),
+ ...ResultScreen.textureUrls(),
  '/rg/fonts/FOT-RODINPRO-B.otf','/rg/fonts/FOT-RODINPRO-EB.otf',
- ...SE_RESOURCE_URLS,...RG_RESOURCE_URLS,
+ ...SE_RESOURCE_URLS,...Object.values(RESULT_AUDIO_URLS),...RG_RESOURCE_URLS,
 ])];
 const initialResourceTask=loading.begin('正在准备 LLLL 预览',initialResourceUrls.length);
 const initialResourceSizes=new Map<string,number>();
@@ -316,9 +321,16 @@ const initialResourceSizesReady=measureResourceSizes(initialResourceUrls).then((
  return sizes;
 });
 let renderer:PreviewRenderer|undefined,player:AudioPlayer|undefined;let seOut:ReturnType<typeof createWebAudioSeOutput>|undefined;let se:SeResolver|undefined;
+let resultAudio:ResultAudio|undefined;
 /** 游玩模式：手动判定引擎 + 输入捕获。AutoPlay 路径不受影响（关闭时全部归还）。 */
 let judge:JudgeEngine|null=null,playInput:PlayInput|null=null,playMode=false;
-try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
+/** 本轮游玩是否已经进入过结算（曲终横幅结束后第一次越过终点时置位）。 */
+let resultOpened=false;
+/** 当前官方谱面的本地成绩身份与 masterdata：谱面归属曲目 ID + 难度 + MusicScores 的 Level / MaxCombo；自制谱为 null。 */
+let officialRecord:{chartSongId:string;difficulty:string;level:number;maxCombo:number}|null=null;
+/** 当前谱面所属曲目的 SongType（Musics masterdata）；结算的曲目类型图标用，未知时 null。 */
+let currentSongType:number|null=null;
+try{renderer=new PreviewRenderer(el<HTMLCanvasElement>('chart-canvas'),(progress: RgLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`场景资源 ${resourceName(progress.url)}`));player=new AudioPlayer();seOut=createWebAudioSeOutput(player.context);se=new SeResolver(seOut);resultAudio=new ResultAudio(player.context);resultAudio.setMusicVolume(Number(input('volume').value));resultAudio.setSeVolume(Number(input('vol-se').value));seOut.setTapVolume(Number(input('vol-tap').value));seOut.setSeVolume(Number(input('vol-se').value));player.setVolume(Number(input('volume').value));player.setRate(Number(el<HTMLSelectElement>('rate').value));player.setOffset(Number(input('offset').value)/1000);}catch(error){message(`无法初始化预览：${String(error)}。请启用 WebGL 和音频支持后刷新。`,true);el<HTMLButtonElement>('play').disabled=true;}
 const format=(v:number)=>{const s=Math.abs(v)<5e-4?0:Math.abs(v);return `${v<0&&s>0?'-':''}${String(Math.floor(s/60)).padStart(2,'0')}:${(s%60).toFixed(3).padStart(6,'0')}`;};
 /** 手动判定引擎：空点音效只在屏幕上半区触发（原版 `y < Screen.height*0.5`）。 */
 const createJudge=(target:Chart)=>new JudgeEngine(target,{emptyTouch:(touch)=>touch.y!==undefined&&touch.y<stage.clientHeight*0.5,keyboardAir:playKeysEditor.value.air!==null,protect:input('play-protect').checked,protectRange:protectRangeSeconds()});
@@ -338,6 +350,7 @@ function clearChart(){
  const canvas=el<HTMLCanvasElement>('stage-canvas');
  canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
  delete canvas.dataset.mv;delete canvas.dataset.intro;delete canvas.dataset.result;
+ resultScreen.close();resultOpened=false;officialRecord=null;currentSongType=null;
  lastLiveFrame=null;
 }
 
@@ -345,6 +358,7 @@ function metadata(){input('timeline').min=String(Math.floor((player?.transport.s
 
 const startAnim=new StartAnimation();
 const comboResult=new ComboResult();
+const resultScreen=new ResultScreen(resultAudio);
 /** 舞台合成画布：背景 / 3D / HUD / 过场 / 曲终横幅按原层序画进同一张 2D 画布（实时预览与导出共用）。 */
 const compositor=new StageCompositor(el<HTMLCanvasElement>('stage-canvas'));
 type LlllStageMode='3d'|'2d'|'sif';
@@ -385,14 +399,14 @@ function kickStartSe(){
  if(tr.start<0?tr.time<0:off<=0.05)se.playStart(Math.max(0,off));
 }
 function seekTo(t:number){
- if(!player||!chart||exporting)return;
+ if(!player||!chart||exporting||resultScreen.visible)return;
  player.seek(t);se?.clear();se?.stopAll();
  // 游玩模式跳转 = 从该时刻重开一局（不重放玩家输入）。
  restartPlay(t);
  if(player.transport.playing)kickStartSe();
 }
 async function toggle(){
- if(!player||!chart||exporting)return;
+ if(!player||!chart||exporting||resultScreen.visible)return;
  try{
   if(player.transport.playing){
    // 过场中按键 = 跳过开场，直接到 0 秒开播（开场 SE 不打断）。
@@ -409,11 +423,18 @@ input('timeline').oninput=()=>seekTo(Number(input('timeline').value));
 el<HTMLSelectElement>('rate').onchange=()=>{player?.setRate(Number(el<HTMLSelectElement>('rate').value));persistSettings();};
 input('speed').oninput=()=>{speed=Number(input('speed').value);el('speed-value').textContent=speed.toFixed(1);persistSettings();};
 input('mirror').onchange=()=>{mirror=input('mirror').checked;persistSettings();};input('lines').onchange=()=>{lines=input('lines').checked;persistSettings();};
-input('volume').oninput=()=>{player?.setVolume(Number(input('volume').value));persistSettings();};
+input('volume').oninput=()=>{const volume=Number(input('volume').value);player?.setVolume(volume);resultAudio?.setMusicVolume(volume);persistSettings();};
 input('offset').onchange=()=>{if(!input('offset').checkValidity()||!input('offset').value){message('音频偏移需在 −10000 至 10000 毫秒之间。',true);return;}songSelection.updateMetadata({offsetMs:Number(input('offset').value)});persistSettings();};
 el('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.querySelector<HTMLElement>('.viewer')?.requestFullscreen();}catch{message('当前浏览器不允许全屏，可使用浏览器的全屏菜单。',true);}};
 // 游玩模式下绑定为游玩键位的键（含 Air 默认的空格）让给游玩输入，不触发播放 / 跳转快捷键。
-const onKeydown=(e:KeyboardEvent)=>{if(exporting)return;if(playMode&&playInput?.bindsKey(e.code))return;if(e.code==='Space'){if(controlOwnsSpace(e.target))return;e.preventDefault();releaseSpaceFocus();void toggle();return;}if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
+const onKeydown=(e:KeyboardEvent)=>{
+ if(exporting)return;
+ if(resultScreen.visible){
+  const action=resultScreen.key(e.code);
+  if(action){e.preventDefault();if(action!=='skip')handleResultAction(action);}
+  return;
+ }
+ if(playMode&&playInput?.bindsKey(e.code))return;if(e.code==='Space'){if(controlOwnsSpace(e.target))return;e.preventDefault();releaseSpaceFocus();void toggle();return;}if((e.target as HTMLElement).closest('input,select,button,textarea,a'))return;if(e.code==='ArrowRight'||e.code==='ArrowLeft'){e.preventDefault();if(player)seekTo(player.transport.time+(e.code==='ArrowRight'?5:-5));}};
 document.addEventListener('keydown',onKeydown);
 const hud=new LiveHud();
 void (async()=>{
@@ -428,6 +449,8 @@ void (async()=>{
 		  loadHudFonts().then(()=>reportGroupReady(['/rg/fonts/FOT-RODINPRO-B.otf','/rg/fonts/FOT-RODINPRO-EB.otf'],'字体')),
 	   ...hudTextureUrls.map((url)=>preloadImages([url],reportImage('HUD 贴图'))),
 	   comboResult.load((progress:ComboResultLoadProgress)=>reportInitialResource(progress.url,progress.phase,undefined,`结果动画 ${resourceName(progress.url)}`)),
+	   resultScreen.load((progress:ResultScreenLoadProgress)=>reportInitialResource(progress.url,progress.phase,undefined,`结算资源 ${resourceName(progress.url)}`)),
+	   resultAudio?.load((progress:ResultAudioLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`结算音频 ${resourceName(progress.url)}`)),
 	   (renderer?.whenReady()??Promise.resolve()).then(()=>reportGroupReady(RG_RESOURCE_URLS,'场景资源')),
 	   (seOut?.ensureLoaded((progress:SeLoadProgress)=>reportInitialResource(progress.url,progress.phase,progress.downloadedBytes,`SE ${resourceName(progress.url)}`))??Promise.resolve()),
 	   preloadImages([LIVE_BG_URL,LIVE_BG_DOT_URL],reportImage('舞台背景')),
@@ -567,7 +590,7 @@ el<HTMLSelectElement>('opt-fps').onchange=()=>persistSettings();
 applyVisualOptions();
 
 input('vol-tap').oninput=()=>{seOut?.setTapVolume(Number(input('vol-tap').value));persistSettings();};
-input('vol-se').oninput=()=>{seOut?.setSeVolume(Number(input('vol-se').value));persistSettings();};
+input('vol-se').oninput=()=>{const volume=Number(input('vol-se').value);seOut?.setSeVolume(volume);resultAudio?.setSeVolume(volume);persistSettings();};
 input('vol-voice').oninput=()=>persistSettings();
 
 const applyRank=()=>{const v=el<HTMLSelectElement>('rank-preview').value;hud.setRankManual((v==='D'||v==='C'||v==='B'||v==='A'||v==='S'?v:'none') as 'none'|'D'|'C'|'B'|'A'|'S');persistSettings();};
@@ -597,6 +620,8 @@ function judgeClock(t:number){return playJudgeTime(t,playInput?.getOffsetMs()??0
  */
 function restartPlay(t:number){
  if(!playMode)return;
+ if(resultScreen.visible)return;
+ resultOpened=false;
  hud.resetManual(t);
  judge?.reset(judgeClock(t));
 }
@@ -660,6 +685,7 @@ function setPlayMode(on:boolean){
   playInput?.detach();playInput=null;judge=null;
   renderer?.setNoteStates(null);
   comboResult.setKind(readSettings().comboResult);
+  resultScreen.close();delete stage.dataset.resultScreen;resultOpened=false;
  }
 }
 root.querySelector<HTMLButtonElement>('#play-mode')!.onclick=()=>setPlayMode(!playMode);
@@ -705,7 +731,7 @@ function liveView():StageView{
 }
 /** 3D 画布 render() 之后立即合成（缓冲只在本帧内有效）。 */
 function composeStage(view:StageView,t:number,video:HTMLVideoElement|null=musicVideo.frame(t)){
- compositor.draw(view,{gl:el<HTMLCanvasElement>('chart-canvas'),video,videoBackground:musicVideo.useVideoBackground,hud,startAnim,comboResult});
+ compositor.draw(view,{gl:el<HTMLCanvasElement>('chart-canvas'),video,videoBackground:musicVideo.useVideoBackground,hud,startAnim,comboResult,resultScreen});
  const c=el('stage-canvas');
  const active=musicVideo.useVideoBackground?currentMvId:'';if(c.dataset.mv!==active)c.dataset.mv=active;
  const intro=startAnim.state??'';if(c.dataset.intro!==intro)c.dataset.intro=intro;
@@ -723,6 +749,89 @@ function syncComboResult(t:number,playing:boolean){
  comboResult.render(t-finishTime);
  comboLastT=t;
 }
+/* ── 结算界面（游玩模式）：曲终横幅播完后进入 RhythmGameResultScene ──
+ * 4.12.0 的 ResultSceneResolver 只等 bgm.IsPlayEnd()（@0x499F3A0，不引用 comboResult）；
+ * 预览的产品流程是「曲终横幅 4 s clip 播完 → 进结算」，等价于原版主循环先播完曲终横幅再请求下一场景。
+ * 过场 FadeType.Capture：先截屏冻帧盖屏、0.3 s 淡出后 View.PlayAsync 才起标题演出。
+ * 浏览器把冻帧作为一个离屏画布交给 ResultScreen；标题 / 计数 / 跳过都在它内部按同一时刻推进。 */
+const DIFFICULTY_ID:Record<string,number>={NORMAL:1,HARD:2,EXPERT:3,MASTER:4};
+function buildResultSnapshot():ResultSnapshot|null{
+ if(!chart)return null;
+ const difficulty=(startInfo.difficulty??'').toUpperCase();
+ // 原版 `RhythmGameResultSceneParam.TechnicalScore = mental > 0 ? technical.GetTechnicalScore() : 0`：
+ // mental 归零时结算技术分显示 0；历史保存实际技术分，Rate 只取通关局。
+ const cleared=hud.liveMental>0;
+ const technicalRaw=cleared?hud.liveTechnicalRaw:0;
+ let rates:ReturnType<typeof applyPlayResult>|null=null;
+ try{
+  if(officialRecord){
+   const store=loadResultRecords();
+   rates=applyPlayResult(store,{...officialRecord,technical:hud.liveTechnicalRaw,technicalPercent:technicalGoal(hud.liveTechnicalRaw,hud.liveNoteCount)/10000,score:hud.liveScore,judgements:[...hud.liveJudgements],judgementConditions:hud.liveJudgementConditions,userCombo:hud.liveUserCombo,cleared});
+   saveResultRecords(store);
+  }
+ }catch{rates=null;}
+ return{
+  score:hud.liveScore,
+  technicalRaw,
+  userCombo:hud.liveUserCombo,
+  judgements:[...hud.liveJudgements],
+  conditions:[...hud.liveConditions] as [number,number,number],
+  comboFlags:hud.liveComboFlags,
+  remainMental:hud.liveMental,
+  scoreRank:hud.liveScoreRank,
+  musicTitle:startInfo.title,
+  difficulty,
+  difficultyId:DIFFICULTY_ID[difficulty]??4,
+  difficultyLevel:startInfo.level??0,
+  totalNoteCount:hud.liveNoteCount,
+  // 原版 EnableFastSlow 关闭时移除 FastSlowContent 且不填 Conditions；预览沿用侧栏「FAST/SLOW 显示」开关。
+  enableFastSlow:hud.getFastSlowThreshold()!==0,
+  oldClearLamps:[0,0,0,0],
+  jacketUrl:startInfo.jacketUrl,
+  songType:currentSongType??undefined,
+  ...(rates?{rate:rates.rate,rateIncrease:rates.rateIncrease,playerRate:rates.playerRate,playerRateIncrease:rates.playerRateIncrease}:{}),
+ };
+}
+/** 截屏冻帧：与旧 DOM 双画布的 Capture 过场等价（节点 mTimeTopIn=0，切换瞬间抓取）。 */
+function captureStageFrame():HTMLCanvasElement|null{
+ const canvas=el<HTMLCanvasElement>('stage-canvas');
+ if(!canvas.width||!canvas.height)return null;
+ const frozen=document.createElement('canvas');
+ frozen.width=canvas.width;frozen.height=canvas.height;
+ frozen.getContext('2d')?.drawImage(canvas,0,0);
+ return frozen;
+}
+/** 结算开始：暂停走带与输入，冻住最后一帧游戏画面，交给 ResultScreen 播放。 */
+function openResultScreen(){
+ if(!chart||!player)return;
+ const snapshot=buildResultSnapshot();
+ if(!snapshot)return;
+ resultOpened=true;
+ player.pause();se?.stopAll();
+ playInput?.detach();playInput=null;
+ comboResult.hide();
+ stage.dataset.resultScreen='1';delete stage.dataset.result;
+ resultScreen.open(snapshot,captureStageFrame());
+}
+/** 横幅播完（或走带停在终点）后进入结算；只触发一次。 */
+function maybeOpenResult(){
+ if(!playMode||resultOpened||!chart||!player||finishTime===null)return;
+ if(player.transport.time>=finishTime+COMBO_RESULT_CLIP_DURATION-0.05)openResultScreen();
+}
+/** 结算按钮：重玩 = 退出再进入游玩模式（等同重新开一局），退出 = 回到 AutoPlay 预览。 */
+function handleResultAction(action:ResultScreenAction){
+ resultScreen.close();
+ delete stage.dataset.resultScreen;
+ resultOpened=false;
+ if(action==='retry'){
+  if(playMode){setPlayMode(false);setPlayMode(true);}
+ }else if(playMode){
+  setPlayMode(false);
+ }
+}
+function drawResultFrame(view:StageView){
+ compositor.draw(view,{gl:null,hud:null,startAnim:null,comboResult:null,resultScreen});
+}
 function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;start:number},view:StageView){
  const next={time:t,chart,playing,revision:visualRevision,image:loadedImageRevision(),hudTexture:hud.textureRevision,resultTexture:comboResult.texturesReady,width:view.cssW,height:view.cssH,dpr:view.dpr,mode:renderer!.getCameraMode()};
  const previous=lastLiveFrame;
@@ -730,12 +839,32 @@ function renderLiveChart(chart:Chart,t:number,playing:boolean,tr:{rate:number;st
  if(!playing&&!changed)return;
  musicVideo.sync(t,playing,tr.rate);if(playing)processPlay(t);else playInput?.drain();hud.sync(chart,t,playing);syncComboResult(t,playing);renderer!.setPlaying(playing);renderer!.setFeverState(hud.feverVisible,hud.feverWindowStart);renderer!.render(chart,t,speed,mirror,lines);input('timeline').value=String(t);track.paint();el('time').textContent=`${format(t)} / ${format(chart.duration)}`;startAnim.show(tr.start<0&&t<0?(!playing&&t<=tr.start+1e-6?'idle':t-tr.start):null);composeStage(view,t);const skip=playing&&t<0;setIconButton(el('play'),skip?'skip-forward':playing?'pause':'play',skip?'跳过开场':playing?'暂停':'播放');lastLiveFrame=next;
 }
+let resultLastFrame=0;
 function animate(){
  const current=chart;
  if(!current){frame=requestAnimationFrame(animate);return;}
- if(player&&renderer){const tr=player.transport,was=tr.playing,t=tr.time;if(was&&!tr.playing){player.pause();se?.pause();}renderLiveChart(current,t,tr.playing,tr,liveView());}
+ if(resultScreen.visible){
+  const now=performance.now();
+  const dt=resultLastFrame?Math.min(0.1,(now-resultLastFrame)/1000):0;
+  resultLastFrame=now;
+  resultScreen.tick(dt);
+  drawResultFrame(liveView());
+  frame=requestAnimationFrame(animate);
+  return;
+ }
+ resultLastFrame=0;
+ if(player&&renderer){const tr=player.transport,was=tr.playing,t=tr.time;if(was&&!tr.playing){player.pause();se?.pause();}renderLiveChart(current,t,tr.playing,tr,liveView());maybeOpenResult();}
  frame=requestAnimationFrame(animate);
 }animate();
+const stageCanvas=el<HTMLCanvasElement>('stage-canvas');
+/** 结算界面点击：主按钮 / 退出按钮 / 空白跳过（原版 blocker）。 */
+stageCanvas.addEventListener('pointerdown',(event)=>{
+ if(!resultScreen.visible)return;
+ const rect=stageCanvas.getBoundingClientRect();
+ const action=resultScreen.click(event.clientX-rect.left,event.clientY-rect.top);
+ if(action==='skip'){event.preventDefault();return;}
+ if(action){event.preventDefault();handleResultAction(action);}
+});
 
 /* ── 视频导出：同一条 canvas 合成路径，按虚拟时钟逐帧渲染 ── */
 /** 逻辑步频：实时预览每个动画帧推进一次 HUD 判定与 SeResolver（3 帧窗口）；导出按 60 Hz 细分（推断：原包 MainLogic 以 60 fps 运行）。 */
@@ -883,15 +1012,16 @@ el<HTMLButtonElement>('export-svg').onclick=()=>void exportChartSvg();
 
 /** 测试 / 调试钩子（只读取状态；导出探测 / 自动化验证用）。 */
 (window as unknown as {__LPW__:unknown}).__LPW__={
- hud,startAnim,comboResult,compositor,musicVideo,exportDialog,
+ hud,startAnim,comboResult,compositor,musicVideo,exportDialog,resultScreen,
  get renderer(){return renderer;},get player(){return player;},
  get judge(){return judge;},get playMode(){return playMode;},get chart(){return chart;},
+ get resultOpened(){return resultOpened;},
  probeExportConfigs:probeAllConfigs,
  get finishTime(){return finishTime;},
 };
 let disposed=false;
 let unsubscribeSongSelection=()=>{};
-const dispose=()=>{if(disposed)return;disposed=true;generation++;playInput?.detach();playInput=null;judge=null;unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;el('export-svg').onclick=null;releaseSvgUrls();cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
+const dispose=()=>{if(disposed)return;disposed=true;generation++;playInput?.detach();playInput=null;judge=null;resultScreen.close();unsubscribeSongSelection();unbindChrome();el('fullscreen').onclick=null;el('export-svg').onclick=null;releaseSvgUrls();cancelAnimationFrame(frame);musicVideo.dispose();renderer?.dispose();resultAudio?.dispose();player?.dispose();seOut?.dispose();hud.dispose();startAnim.dispose();comboResult.dispose();document.removeEventListener('keydown',onKeydown);window.removeEventListener('pagehide',dispose);if((window as unknown as {__LPW__?:unknown}).__LPW__)delete (window as unknown as {__LPW__?:unknown}).__LPW__;};
 window.addEventListener('pagehide',dispose,{once:true});
 
 const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0],ResolvedSource>({
@@ -948,6 +1078,11 @@ const sharedBinding=createSourceBinding<Parameters<typeof resolveSharedSource>[0
    if(!current())return;
    currentMvId=assets.mvUrl?(source.songId??'local'):'';
    setChart(next);
+   // 结算 Rate 的输入：本地成绩库键与 masterdata（MusicScores 的 Level / MaxCombo，来自曲库元数据）。
+   officialRecord=source.custom||source.chartSongId===null||source.level===null||source.maxCombo===null||!source.metadata.difficulty
+    ?null
+   :{chartSongId:source.chartSongId,difficulty:source.metadata.difficulty,level:source.level,maxCombo:source.maxCombo};
+   currentSongType=source.songType;
    baseDuration=Math.max(next.duration,assets.mvUrl?assets.mvStartSec+assets.mvDurationSec:0);
    automaticFever=source.metadata.fever;
    resultBaseFinishTime=source.metadata.finishTime;

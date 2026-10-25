@@ -32,7 +32,7 @@
 
 ## 附带的游戏相关素材
 
-- `apps/web/public/rg/`、`apps/web/public/se/` 与 `apps/web/public/*.png` 底图包含从 LLLL 客户端资源复制或导出的 UI 贴图、特效纹理、元数据、字体文件与局内音效；`se/*.wav` 由 rhythm.acb 经 vgmstream 解码导出。`packages/chart-svg/public/rg/` 是其中 2D 贴图的副本。
+- `apps/web/public/rg/`、`apps/web/public/se/` 与 `apps/web/public/*.png` 底图包含从 LLLL 客户端资源复制或导出的 UI 贴图、特效纹理、元数据、字体文件与局内 / 结算音效；`se/*.wav` 由 rhythm.acb 与 ui.acb 经 vgmstream 解码导出。`packages/chart-svg/public/rg/` 是其中 2D 贴图的副本。结算 BGM 从原始 AWB 解码并转为 Ogg Vorbis，保存在不入库的 `apps/web/public/assets/audio/`。
 - `packages/pjsk-preview/public/assets/mmw/` 由上游从 MikuMikuWorld、OpenSekai 与 pjsekai-overlay 等资源整理而来，含 PJSK 相关的贴图、音效、语音与字体；其中 `overlay/fever-native/` 的 5 张 Fever 贴图取自 PJSK 客户端。
 
 以上素材**仅供本预览器本地运行与研究**：
